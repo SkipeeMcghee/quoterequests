@@ -11,11 +11,11 @@
       <p>Track every inquiry from first contact to final outcome without leaving the server-rendered workflow.</p>
     </div>
     <div class="dashboard-metrics">
-      <article>
+      <article class="metric-card">
         <strong>{{ quote_requests|length }}</strong>
         <span>Total requests</span>
       </article>
-      <article>
+      <article class="metric-card">
         <strong>{{ quote_requests | selectattr('status', 'equalto', 'New') | list | length }}</strong>
         <span>Need first response</span>
       </article>
@@ -23,6 +23,12 @@
   </section>
 
   <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Request queue</h2>
+        <p class="subtle-text">Newest submissions appear first so the team can respond quickly.</p>
+      </div>
+    </div>
     <div class="table-scroll">
       <table>
         <thead>
@@ -39,7 +45,7 @@
           {% for item in quote_requests %}
             <tr>
               <td>
-                <strong>{{ item.full_name }}</strong>
+                <strong class="row-title">{{ item.full_name }}</strong>
                 <div class="subtle-text">{{ item.address }}</div>
               </td>
               <td>{{ item.service_type }}</td>

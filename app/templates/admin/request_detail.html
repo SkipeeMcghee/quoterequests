@@ -19,7 +19,9 @@
   <section class="summary-grid">
     <div class="detail-grid">
       <article class="detail-card">
-        <h2>Request details</h2>
+        <div class="section-bar compact-bar">
+          <h2>Request details</h2>
+        </div>
         <dl class="detail-list">
           <div>
             <dt>Phone</dt>
@@ -45,7 +47,10 @@
       </article>
 
       <article class="detail-card" id="photos">
-        <h2>Uploaded photos</h2>
+        <div class="section-bar compact-bar">
+          <h2>Uploaded photos</h2>
+          <p class="subtle-text">Images open in a new tab.</p>
+        </div>
         <div class="photo-grid">
           {% for photo in quote_request.photos %}
             <a class="photo-card" href="{{ url_for('static', filename=photo.file_path) }}" target="_blank" rel="noreferrer">
@@ -60,10 +65,12 @@
 
     <div class="detail-grid">
       <article class="summary-card" id="status">
-        <h2>Update status</h2>
+        <div class="section-bar compact-bar">
+          <h2>Update status</h2>
+        </div>
         <form method="post" action="{{ url_for('admin.update_status', request_id=quote_request.id) }}" class="stacked-form">
           {{ status_form.hidden_tag() }}
-          <label>
+          <label class="form-field">
             <span>Current stage</span>
             {{ status_form.status(class_="select") }}
           </label>
@@ -72,10 +79,12 @@
       </article>
 
       <article class="summary-card" id="notes">
-        <h2>Internal notes</h2>
+        <div class="section-bar compact-bar">
+          <h2>Internal notes</h2>
+        </div>
         <form method="post" action="{{ url_for('admin.create_note', request_id=quote_request.id) }}" class="stacked-form">
           {{ note_form.hidden_tag() }}
-          <label>
+          <label class="form-field">
             <span>Add note</span>
             {{ note_form.note_text(class_="textarea") }}
             {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}

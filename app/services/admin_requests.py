@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from werkzeug.exceptions import NotFound
+from werkzeug.exceptions import BadRequest, NotFound
 
 from app.extensions import db
-from app.models import QuoteRequest, RequestNote, User
+from app.models import QUOTE_REQUEST_STATUSES, QuoteRequest, RequestNote, User
 
 
 def list_quote_requests() -> list[QuoteRequest]:
@@ -26,6 +26,9 @@ def get_quote_request(request_id: int) -> QuoteRequest:
 
 
 def update_request_status(request_id: int, status: str) -> QuoteRequest:
+    if status not in QUOTE_REQUEST_STATUSES:
+        raise BadRequest("Choose a valid status.")
+
     quote_request = get_quote_request(request_id)
     quote_request.status = status
     db.session.commit()
@@ -33,8 +36,12 @@ def update_request_status(request_id: int, status: str) -> QuoteRequest:
 
 
 def add_request_note(request_id: int, note_text: str, user: User) -> RequestNote:
+    cleaned_note = note_text.strip()
+    if not cleaned_note:
+        raise BadRequest("Enter a note before saving.")
+
     quote_request = get_quote_request(request_id)
-    note = RequestNote(note_text=note_text.strip(), author=user)
+    note = RequestNote(note_text=cleaned_note, author=user)
     quote_request.notes.append(note)
     db.session.commit()
     return note

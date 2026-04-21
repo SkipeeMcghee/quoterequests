@@ -12,7 +12,9 @@ from app.cli import register_cli
 
 def create_app(config_name: str | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=True)
-    app.config.from_object(config_by_name[config_name or "default"])
+    config_object = config_by_name[config_name or "default"]
+    app.config.from_object(config_object)
+    config_object.validate()
 
     _ensure_runtime_directories(app)
 

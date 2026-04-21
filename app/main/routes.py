@@ -1,4 +1,5 @@
-from flask import redirect, render_template, url_for
+from flask import flash, redirect, render_template, url_for
+from werkzeug.exceptions import BadRequest
 
 from app.forms.quote_request import QuoteRequestForm
 from app.main import bp
@@ -14,8 +15,13 @@ def index():
 def quote_request():
     form = QuoteRequestForm()
     if form.validate_on_submit():
-        create_quote_request(form, form.photos.data)
-        return redirect(url_for("main.thank_you"))
+        try:
+            create_quote_request(form, form.photos.data)
+        except BadRequest as exc:
+            form.photos.errors.append(exc.description)
+            flash(exc.description, "error")
+        else:
+            return redirect(url_for("main.thank_you"))
 
     return render_template("main/quote_request.html", form=form)
 

@@ -1,4 +1,6 @@
-from flask import flash, redirect, render_template, url_for
+from urllib.parse import urlparse
+
+from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
 from app.auth import bp
@@ -8,8 +10,10 @@ from app.services.auth import authenticate_user
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
+    next_url = _get_safe_next_url()
+
     if current_user.is_authenticated:
-        return redirect(url_for("admin.dashboard"))
+        return redirect(next_url or url_for("admin.dashboard"))
 
     form = LoginForm()
     if form.validate_on_submit():
@@ -19,7 +23,7 @@ def login():
         else:
             login_user(user, remember=form.remember_me.data)
             flash("You are now signed in.", "success")
-            return redirect(url_for("admin.dashboard"))
+            return redirect(next_url or url_for("admin.dashboard"))
 
     return render_template("auth/login.html", form=form)
 
@@ -30,3 +34,15 @@ def logout():
     logout_user()
     flash("Signed out.", "success")
     return redirect(url_for("auth.login"))
+
+
+def _get_safe_next_url() -> str | None:
+    next_url = request.args.get("next") or request.form.get("next")
+    if not next_url:
+        return None
+
+    parsed = urlparse(next_url)
+    if parsed.scheme or parsed.netloc:
+        return None
+
+    return next_url
