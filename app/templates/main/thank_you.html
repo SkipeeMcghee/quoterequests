@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Thank You{% endblock %}
+
+{% block content %}
+<main class="shell narrow-shell">
+  <section class="section-intro">
+    <p class="eyebrow">Request received</p>
+    <h1>Thank you for reaching out.</h1>
+    <p>Your quote request is in the queue. Someone from the team will follow up using your preferred contact details.</p>
+  </section>
+
+  <div class="detail-actions">
+    <a class="button" href="{{ url_for('main.quote_request') }}">Submit another request</a>
+    <a class="button-secondary" href="{{ url_for('auth.login') }}">Admin login</a>
+  </div>
+</main>
+{% endblock %}

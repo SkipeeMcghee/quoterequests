@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      <h1>Quote requests</h1>
+      <p>Track every inquiry from first contact to final outcome without leaving the server-rendered workflow.</p>
+    </div>
+    <div class="dashboard-metrics">
+      <article>
+        <strong>{{ quote_requests|length }}</strong>
+        <span>Total requests</span>
+      </article>
+      <article>
+        <strong>{{ quote_requests | selectattr('status', 'equalto', 'New') | list | length }}</strong>
+        <span>Need first response</span>
+      </article>
+    </div>
+  </section>
+
+  <section class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Service</th>
+            <th>Contact</th>
+            <th>Status</th>
+            <th>Submitted</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in quote_requests %}
+            <tr>
+              <td>
+                <strong>{{ item.full_name }}</strong>
+                <div class="subtle-text">{{ item.address }}</div>
+              </td>
+              <td>{{ item.service_type }}</td>
+              <td>
+                <div>{{ item.email }}</div>
+                <div class="subtle-text">{{ item.phone }}</div>
+              </td>
+              <td><span class="status-badge status-{{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</span></td>
+              <td>{{ item.created_at.strftime('%b %d, %Y %I:%M %p') }}</td>
+              <td><a class="text-link" href="{{ url_for('admin.request_detail', request_id=item.id) }}">Open</a></td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="empty-state">No quote requests yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

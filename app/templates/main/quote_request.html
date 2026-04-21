@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Request a Quote{% endblock %}
+
+{% block content %}
+<main class="shell">
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Reusable service-business intake</p>
+      <h1>Request a quote without the CRM overhead.</h1>
+      <p>Capture the details your team needs, accept project photos, and route every request into a clean admin workflow built for server-rendered Flask apps.</p>
+
+      <div class="hero-points">
+        <article>
+          <strong>Structured intake</strong>
+          <div class="subtle-text">Collect contact details, scope notes, and preferred follow-up in one form.</div>
+        </article>
+        <article>
+          <strong>Photo uploads</strong>
+          <div class="subtle-text">Attach images so the team can qualify requests faster before a site visit.</div>
+        </article>
+        <article>
+          <strong>Admin-ready flow</strong>
+          <div class="subtle-text">Every submission lands in a dashboard with statuses, notes, and email hooks.</div>
+        </article>
+      </div>
+    </div>
+
+    <div class="hero-panel">
+      <form method="post" enctype="multipart/form-data" class="quote-form">
+        {{ form.hidden_tag() }}
+        <div class="form-grid">
+          <label>
+            <span>Full name</span>
+            {{ form.full_name(class_="input") }}
+            {% for error in form.full_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label>
+            <span>Phone</span>
+            {{ form.phone(class_="input") }}
+            {% for error in form.phone.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label>
+            <span>Email</span>
+            {{ form.email(class_="input") }}
+            {% for error in form.email.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label>
+            <span>Service type</span>
+            {{ form.service_type(class_="input") }}
+            {% for error in form.service_type.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label class="field-span-2">
+            <span>Address</span>
+            {{ form.address(class_="input") }}
+            {% for error in form.address.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label class="field-span-2">
+            <span>Project description</span>
+            {{ form.description(class_="textarea") }}
+            {% for error in form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label>
+            <span>Preferred contact method</span>
+            {{ form.preferred_contact_method(class_="select") }}
+            {% for error in form.preferred_contact_method.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label>
+            <span>Preferred contact time</span>
+            {{ form.preferred_contact_time(class_="input") }}
+            {% for error in form.preferred_contact_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label class="field-span-2">
+            <span>Project photos</span>
+            {{ form.photos(class_="file-input", multiple=true) }}
+            {% for error in form.photos.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+        </div>
+
+        <div class="form-actions">
+          {{ form.submit(class_="button") }}
+          <span class="subtle-text">We’ll use your preferred contact details when we follow up.</span>
+        </div>
+      </form>
+    </div>
+  </section>
+</main>
+{% endblock %}

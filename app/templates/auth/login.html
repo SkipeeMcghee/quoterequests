@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Login{% endblock %}
+
+{% block content %}
+<main class="shell narrow-shell auth-shell">
+  <section class="section-intro">
+    <p class="eyebrow">Protected access</p>
+    <h1>Admin login</h1>
+    <p>Review incoming requests, track status, and keep internal notes in one place.</p>
+  </section>
+
+  <form method="post" class="stacked-form">
+    {{ form.hidden_tag() }}
+    <label>
+      <span>Email</span>
+      {{ form.email(class_="input") }}
+      {% for error in form.email.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+    </label>
+
+    <label>
+      <span>Password</span>
+      {{ form.password(class_="input") }}
+      {% for error in form.password.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+    </label>
+
+    <label class="checkbox-row">
+      {{ form.remember_me() }}
+      <span>Keep me signed in on this device</span>
+    </label>
+
+    {{ form.submit(class_="button") }}
+  </form>
+</main>
+{% endblock %}

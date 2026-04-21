@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}Request #{{ quote_request.id }}{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="split-intro section-intro">
+    <div>
+      <p class="eyebrow">Request #{{ quote_request.id }}</p>
+      <h1>{{ quote_request.full_name }}</h1>
+      <p>{{ quote_request.service_type }} at {{ quote_request.address }}</p>
+    </div>
+    <div class="detail-actions">
+      <span class="status-badge status-{{ quote_request.status|lower|replace(' ', '-') }}">{{ quote_request.status }}</span>
+      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <div class="detail-grid">
+      <article class="detail-card">
+        <h2>Request details</h2>
+        <dl class="detail-list">
+          <div>
+            <dt>Phone</dt>
+            <dd>{{ quote_request.phone }}</dd>
+          </div>
+          <div>
+            <dt>Email</dt>
+            <dd>{{ quote_request.email }}</dd>
+          </div>
+          <div>
+            <dt>Preferred contact</dt>
+            <dd>{{ quote_request.preferred_contact_method }}</dd>
+          </div>
+          <div>
+            <dt>Preferred time</dt>
+            <dd>{{ quote_request.preferred_contact_time or 'Not specified' }}</dd>
+          </div>
+          <div class="field-span-2">
+            <dt>Description</dt>
+            <dd>{{ quote_request.description }}</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="detail-card" id="photos">
+        <h2>Uploaded photos</h2>
+        <div class="photo-grid">
+          {% for photo in quote_request.photos %}
+            <a class="photo-card" href="{{ url_for('static', filename=photo.file_path) }}" target="_blank" rel="noreferrer">
+              <img src="{{ url_for('static', filename=photo.file_path) }}" alt="Quote request photo {{ loop.index }}">
+            </a>
+          {% else %}
+            <div class="empty-state">No photos were uploaded for this request.</div>
+          {% endfor %}
+        </div>
+      </article>
+    </div>
+
+    <div class="detail-grid">
+      <article class="summary-card" id="status">
+        <h2>Update status</h2>
+        <form method="post" action="{{ url_for('admin.update_status', request_id=quote_request.id) }}" class="stacked-form">
+          {{ status_form.hidden_tag() }}
+          <label>
+            <span>Current stage</span>
+            {{ status_form.status(class_="select") }}
+          </label>
+          {{ status_form.submit(class_="button") }}
+        </form>
+      </article>
+
+      <article class="summary-card" id="notes">
+        <h2>Internal notes</h2>
+        <form method="post" action="{{ url_for('admin.create_note', request_id=quote_request.id) }}" class="stacked-form">
+          {{ note_form.hidden_tag() }}
+          <label>
+            <span>Add note</span>
+            {{ note_form.note_text(class_="textarea") }}
+            {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          {{ note_form.submit(class_="button") }}
+        </form>
+
+        <div class="notes-list">
+          {% for note in quote_request.notes %}
+            <article>
+              <strong>{{ note.author.email }}</strong>
+              <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+              <p>{{ note.note_text }}</p>
+            </article>
+          {% else %}
+            <div class="empty-state">No internal notes yet.</div>
+          {% endfor %}
+        </div>
+      </article>
+    </div>
+  </section>
+</main>
+{% endblock %}
