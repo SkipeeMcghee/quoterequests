@@ -3,3 +3,35 @@
 WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
  * Running on http://127.0.0.1:5000
 Press CTRL+C to quit
+127.0.0.1 - - [23/Apr/2026 16:17:53] "GET /quote-request HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:17:53] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:18:01] "GET /admin/ HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:18:01] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:18:03] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:18:03] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:18:09] "GET /quote-request HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:18:09] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:18:12] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:18:12] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:18:12] "GET /schedule-work HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:18:13] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:18:17] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:18:17] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:20:30] "GET /quote-request HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:20:30] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:20:31] "GET /admin/ HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:20:31] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:20:32] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:20:32] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:20:38] "GET /schedule-work HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:20:38] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:20:53] "POST /schedule-work HTTP/1.1" 302 -
+127.0.0.1 - - [23/Apr/2026 16:20:53] "GET /thank-you HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:20:53] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:20:54] "GET /auth/login HTTP/1.1" 302 -
+127.0.0.1 - - [23/Apr/2026 16:20:54] "GET /admin/ HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:20:54] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:20:57] "GET /admin/requests/3 HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:20:57] "GET /static/css/app.css HTTP/1.1" 304 -
+127.0.0.1 - - [23/Apr/2026 16:21:00] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [23/Apr/2026 16:21:00] "GET /static/css/app.css HTTP/1.1" 304 -
