@@ -9,7 +9,7 @@
   <body>
     <div class="page-shell">
       <header class="site-header">
-        <a class="brand" href="{{ url_for('main.quote_request') }}">{{ config.COMPANY_NAME }}</a>
+        <a class="brand" href="{{ url_for('main.index') }}">{{ config.COMPANY_NAME }}</a>
         <nav class="site-nav">
           <a href="{{ url_for('main.quote_request') }}">Quote Request</a>
           {% if current_user.is_authenticated %}

@@ -8,7 +8,7 @@
     <div>
       <p class="eyebrow">Request #{{ quote_request.id }}</p>
       <h1>{{ quote_request.full_name }}</h1>
-      <p>{{ quote_request.service_type }} at {{ quote_request.address }}</p>
+      <p>{{ quote_request.service_list_display }} in {{ quote_request.city }}</p>
     </div>
     <div class="detail-actions">
       <span class="status-badge status-{{ quote_request.status|lower|replace(' ', '-') }}">{{ quote_request.status }}</span>
@@ -24,30 +24,38 @@
         </div>
         <dl class="detail-list">
           <div>
-            <dt>Phone</dt>
-            <dd>{{ quote_request.phone }}</dd>
+            <dt>Contact</dt>
+            <dd>
+              <div class="contact-block">
+                {% if quote_request.email %}
+                  <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ quote_request.email }}</span></div>
+                {% endif %}
+                {% if quote_request.phone %}
+                  <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ quote_request.phone }}</span></div>
+                {% endif %}
+                {% if not quote_request.email and not quote_request.phone %}
+                  <span class="subtle-text">No contact information provided</span>
+                {% endif %}
+              </div>
+            </dd>
           </div>
           <div>
-            <dt>Email</dt>
-            <dd>{{ quote_request.email }}</dd>
+            <dt>City</dt>
+            <dd>{{ quote_request.city }}</dd>
           </div>
           <div>
-            <dt>Preferred contact</dt>
-            <dd>{{ quote_request.preferred_contact_method }}</dd>
-          </div>
-          <div>
-            <dt>Preferred time</dt>
-            <dd>{{ quote_request.preferred_contact_time or 'Not specified' }}</dd>
-          </div>
-          <div class="field-span-2">
-            <dt>Description</dt>
-            <dd>{{ quote_request.description }}</dd>
-          </div>
-        </dl>
-      </article>
-
-      <article class="detail-card" id="photos">
-        <div class="section-bar compact-bar">
+            <dt>Services</dt>
+            <dd>
+              {% if quote_request.service_list_display %}
+                <div class="tag-list">
+                  {% for service in quote_request.service_list_display.split(', ') %}
+                    <span class="tag-pill">{{ service }}</span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <span class="subtle-text">No services selected</span>
+              {% endif %}
+            </dd>
           <h2>Uploaded photos</h2>
           <p class="subtle-text">Images open in a new tab.</p>
         </div>
@@ -64,21 +72,151 @@
     </div>
 
     <div class="detail-grid">
-      <article class="summary-card" id="status">
-        <div class="section-bar compact-bar">
-          <h2>Update status</h2>
-        </div>
-        <form method="post" action="{{ url_for('admin.update_status', request_id=quote_request.id) }}" class="stacked-form">
-          {{ status_form.hidden_tag() }}
-          <label class="form-field">
-            <span>Current stage</span>
-            {{ status_form.status(class_="select") }}
-          </label>
-          {{ status_form.submit(class_="button") }}
-        </form>
-      </article>
+      {% if enable_scheduling %}
+        <article class="summary-card" id="scheduling">
+          <div class="section-bar compact-bar">
+            <h2>Scheduling</h2>
+          </div>
 
-      <article class="summary-card" id="notes">
+          {% if quote_request.current_appointment %}
+            {% set appointment = quote_request.current_appointment %}
+            <dl class="detail-list">
+              <div>
+                <dt>Status</dt>
+                <dd>{{ appointment.status }}</dd>
+              </div>
+              <div>
+                <dt>Requested</dt>
+                <dd>
+                  {{ appointment.requested_date.strftime('%b %d, %Y') if appointment.requested_date else 'Not set' }}
+                  {% if appointment.requested_time_window %}
+                    · {{ appointment.requested_time_window }}
+                  {% endif %}
+                </dd>
+              </div>
+              <div>
+                <dt>Confirmed</dt>
+                <dd>
+                  {{ appointment.confirmed_date.strftime('%b %d, %Y') if appointment.confirmed_date else 'Not set' }}
+                  {% if appointment.confirmed_time_window %}
+                    · {{ appointment.confirmed_time_window }}
+                  {% endif %}
+                </dd>
+              </div>
+              <div>
+                <dt>Customer notes</dt>
+                <dd>{{ appointment.customer_notes or 'None' }}</dd>
+              </div>
+              <div>
+                <dt>Internal notes</dt>
+                <dd>{{ appointment.internal_notes or 'None' }}</dd>
+              </div>
+            </dl>
+
+            <form method="post" action="{{ url_for('admin.update_appointment_status_route', appointment_id=appointment.id) }}" class="stacked-form">
+              {{ appointment_status_form.hidden_tag() }}
+              <label class="form-field">
+                <span>Appointment state</span>
+                {{ appointment_status_form.status(class_="select") }}
+              </label>
+              {{ appointment_status_form.submit(class_="button") }}
+            </form>
+
+            <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
+              {{ appointment_form.hidden_tag() }}
+              <div class="form-grid">
+                <label class="form-field">
+                  <span>Requested date</span>
+                  {{ appointment_form.requested_date(class_="input") }}
+                </label>
+                <label class="form-field">
+                  <span>Requested time window</span>
+                  {{ appointment_form.requested_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
+                </label>
+                <label class="form-field">
+                  <span>Confirmed date</span>
+                  {{ appointment_form.confirmed_date(class_="input") }}
+                </label>
+                <label class="form-field">
+                  <span>Confirmed time window</span>
+                  {{ appointment_form.confirmed_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
+                </label>
+                <label class="form-field field-span-2">
+                  <span>Customer notes</span>
+                  {{ appointment_form.customer_notes(class_="textarea") }}
+                </label>
+                <label class="form-field field-span-2">
+                  <span>Internal notes</span>
+                  {{ appointment_form.internal_notes(class_="textarea") }}
+                </label>
+              </div>
+              {{ appointment_form.submit(class_="button") }}
+            </form>
+
+            <form method="post" action="{{ url_for('admin.reschedule_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
+              {{ reschedule_form.hidden_tag() }}
+              <div class="form-grid">
+                <label class="form-field">
+                  <span>Reschedule date</span>
+                  {{ reschedule_form.requested_date(class_="input") }}
+                </label>
+                <label class="form-field">
+                  <span>Time window</span>
+                  {{ reschedule_form.requested_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
+                </label>
+                <label class="form-field field-span-2">
+                  <span>Internal notes</span>
+                  {{ reschedule_form.internal_notes(class_="textarea") }}
+                </label>
+              </div>
+              {{ reschedule_form.submit(class_="button") }}
+            </form>
+
+            {% if quote_request.appointments|length > 1 %}
+              <div class="appointment-history">
+                <h3>Appointment history</h3>
+                {% for old_appointment in quote_request.appointments[1:] %}
+                  <article class="history-item">
+                    <div class="history-header">
+                      <strong>{{ old_appointment.status }}</strong>
+                      <span class="subtle-text">{{ old_appointment.requested_date.strftime('%b %d, %Y') if old_appointment.requested_date else 'No date' }}{% if old_appointment.requested_time_window %} · {{ old_appointment.requested_time_window }}{% endif %}</span>
+                    </div>
+                    <div class="history-body">
+                      <p>{{ old_appointment.customer_notes or 'No customer notes' }}</p>
+                      <p class="subtle-text">Rescheduled from appointment #{{ old_appointment.previous_appointment_id or 'N/A' }}</p>
+                    </div>
+                  </article>
+                {% endfor %}
+              </div>
+            {% endif %}
+          {% else %}
+            <form method="post" action="{{ url_for('admin.create_appointment_route', request_id=quote_request.id) }}" class="stacked-form">
+              {{ appointment_form.hidden_tag() }}
+              <div class="form-grid">
+                <label class="form-field">
+                  <span>Requested date</span>
+                  {{ appointment_form.requested_date(class_="input") }}
+                </label>
+                <label class="form-field">
+                  <span>Requested time window</span>
+                  {{ appointment_form.requested_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
+                </label>
+                <label class="form-field field-span-2">
+                  <span>Customer notes</span>
+                  {{ appointment_form.customer_notes(class_="textarea") }}
+                </label>
+                <label class="form-field field-span-2">
+                  <span>Internal notes</span>
+                  {{ appointment_form.internal_notes(class_="textarea") }}
+                </label>
+              </div>
+              {{ appointment_form.submit(class_="button") }}
+            </form>
+          {% endif %}
+        </article>
+      {% endif %}
+
+      <article class="summary-card" id="status">
         <div class="section-bar compact-bar">
           <h2>Internal notes</h2>
         </div>

@@ -34,7 +34,7 @@
         <thead>
           <tr>
             <th>Customer</th>
-            <th>Service</th>
+            <th>Services</th>
             <th>Contact</th>
             <th>Status</th>
             <th>Submitted</th>
@@ -46,12 +46,31 @@
             <tr>
               <td>
                 <strong class="row-title">{{ item.full_name }}</strong>
-                <div class="subtle-text">{{ item.address }}</div>
+                <div class="subtle-text">{{ item.city }}</div>
               </td>
-              <td>{{ item.service_type }}</td>
               <td>
-                <div>{{ item.email }}</div>
-                <div class="subtle-text">{{ item.phone }}</div>
+                {% if item.service_list_display %}
+                  <div class="tag-list">
+                    {% for service in item.service_list_display.split(', ') %}
+                      <span class="tag-pill">{{ service }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="subtle-text">No services selected</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="contact-block">
+                  {% if item.email %}
+                    <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ item.email }}</span></div>
+                  {% endif %}
+                  {% if item.phone %}
+                    <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ item.phone }}</span></div>
+                  {% endif %}
+                  {% if not item.email and not item.phone %}
+                    <div class="subtle-text">No contact info</div>
+                  {% endif %}
+                </div>
               </td>
               <td><span class="status-badge status-{{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</span></td>
               <td>{{ item.created_at.strftime('%b %d, %Y %I:%M %p') }}</td>

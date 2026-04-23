@@ -1,13 +1,13 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 
-{% block title %}Request a Quote{% endblock %}
+{% block title %}Schedule Some Work{% endblock %}
 
 {% block content %}
 <main class="shell narrow-shell">
   <section class="section-intro">
-    <p class="eyebrow">Quote request</p>
-    <h1>Tell us about your project</h1>
-    <p>Complete the details below so our team can prepare an accurate estimate and contact you your way.</p>
+    <p class="eyebrow">Schedule some work</p>
+    <h1>Request a scheduled visit</h1>
+    <p>Provide your project details and preferred timing so our team can follow up with a visit or estimate.</p>
   </section>
 
   <div class="hero-panel">
@@ -30,6 +30,24 @@
           <span>Location</span>
           {{ form.city(class_="input", placeholder="City") }}
           {% for error in form.city.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+
+        <label class="form-field field-span-2">
+          <span>Preferred date</span>
+          {{ form.preferred_date(class_="input") }}
+          {% for error in form.preferred_date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+
+        <label class="form-field field-span-2">
+          <span>Preferred time window</span>
+          {{ form.preferred_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
+          {% for error in form.preferred_time_window.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+
+        <label class="form-field field-span-2">
+          <span>Scheduling notes</span>
+          {{ form.scheduling_notes(class_="textarea", placeholder="Optional access or timing preferences") }}
+          {% for error in form.scheduling_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
 
         <div class="form-field field-span-2">

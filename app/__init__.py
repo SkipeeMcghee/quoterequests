@@ -22,6 +22,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_models()
     register_blueprints(app)
     register_login_manager()
+    register_context_processors(app)
     register_cli(app)
 
     return app
@@ -50,6 +51,12 @@ def register_login_manager() -> None:
     @login_manager.user_loader
     def load_user(user_id: str) -> User | None:
         return db.session.get(User, int(user_id))
+
+
+def register_context_processors(app: Flask) -> None:
+    @app.context_processor
+    def inject_scheduling_flag() -> dict[str, bool]:
+        return {"enable_scheduling": app.config.get("ENABLE_SCHEDULING", False)}
 
 
 def _ensure_runtime_directories(app: Flask) -> None:

@@ -17,9 +17,48 @@ def test_quote_request_page_renders(client):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Request a quote without the CRM overhead." in body
+    assert "Tell us about your project" in body
     assert "Full name" in body
-    assert "Project description" in body
+    assert "Location" in body
+
+
+def test_quote_request_services_does_not_require_every_checkbox(client):
+    response = client.get("/quote-request")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "name=\"services\"" in body
+    assert "required type=\"checkbox\"" not in body
+
+
+def test_quote_request_does_not_show_scheduling_fields(client, app):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    response = client.get("/quote-request")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Preferred date" not in body
+    assert "Scheduling notes" not in body
+
+
+def test_schedule_work_button_visible_in_index_when_scheduling_enabled(client, app):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    response = client.get("/")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Schedule some work" in body
+    assert "/schedule-work" in body
+
+
+def test_schedule_work_page_renders_scheduling_fields(client, app):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    response = client.get("/schedule-work")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Preferred date" in body
+    assert "Scheduling notes" in body
 
 
 def test_quote_request_validation_errors_do_not_save_request(client, app):
@@ -27,13 +66,9 @@ def test_quote_request_validation_errors_do_not_save_request(client, app):
         "/quote-request",
         data={
             "full_name": "",
-            "phone": "",
-            "email": "not-an-email",
-            "service_type": "",
-            "address": "",
-            "description": "",
-            "preferred_contact_method": "",
-            "preferred_contact_time": "",
+            "contact_information": "",
+            "services": [],
+            "city": "",
         },
         follow_redirects=True,
     )
@@ -41,7 +76,6 @@ def test_quote_request_validation_errors_do_not_save_request(client, app):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "This field is required." in body
-    assert "Invalid email address." in body
 
     with app.app_context():
         assert QuoteRequest.query.count() == 0
@@ -52,13 +86,9 @@ def test_public_quote_request_submission_creates_request(client, app):
         "/quote-request",
         data={
             "full_name": "Jordan Harper",
-            "phone": "555-111-2222",
-            "email": "jordan@example.com",
-            "service_type": "Landscape Design",
-            "address": "123 Garden St",
-            "description": "Looking for a full backyard redesign.",
-            "preferred_contact_method": "Email",
-            "preferred_contact_time": "Afternoons",
+            "contact_information": "555-111-2222",
+            "services": ["Landscape Design"],
+            "city": "123 Garden St",
             "photos": [(BytesIO(JPEG_BYTES), "yard.jpg")],
         },
         content_type="multipart/form-data",
@@ -80,13 +110,9 @@ def test_image_upload_is_stored_and_path_is_saved(client, app):
         "/quote-request",
         data={
             "full_name": "Morgan Ellis",
-            "phone": "555-888-1111",
-            "email": "morgan@example.com",
-            "service_type": "Roof Repair",
-            "address": "45 Cedar Ave",
-            "description": "Leak around a skylight after heavy rain.",
-            "preferred_contact_method": "Phone",
-            "preferred_contact_time": "Evenings",
+            "contact_information": "555-888-1111",
+            "services": ["Roof Repair"],
+            "city": "45 Cedar Ave",
             "photos": [(BytesIO(JPEG_BYTES), "leak.jpg")],
         },
         content_type="multipart/form-data",
@@ -110,13 +136,9 @@ def test_invalid_upload_type_is_rejected(client, app):
         "/quote-request",
         data={
             "full_name": "Taylor Reed",
-            "phone": "555-000-1212",
-            "email": "taylor@example.com",
-            "service_type": "Window Cleaning",
-            "address": "88 Pine St",
-            "description": "Need exterior windows cleaned this month.",
-            "preferred_contact_method": "Email",
-            "preferred_contact_time": "Weekdays",
+            "contact_information": "555-000-1212",
+            "services": ["Window Cleaning"],
+            "city": "88 Pine St",
             "photos": [(BytesIO(b"not-an-image"), "notes.pdf")],
         },
         content_type="multipart/form-data",
@@ -136,13 +158,9 @@ def test_invalid_upload_content_is_rejected(client, app):
         "/quote-request",
         data={
             "full_name": "Signature Check",
-            "phone": "555-121-1212",
-            "email": "signature@example.com",
-            "service_type": "Inspection",
-            "address": "17 Walnut Ave",
-            "description": "Testing image signature validation.",
-            "preferred_contact_method": "Email",
-            "preferred_contact_time": "Anytime",
+            "contact_information": "555-121-1212",
+            "services": ["Inspection"],
+            "city": "17 Walnut Ave",
             "photos": [(BytesIO(b"not-a-real-jpeg"), "fake.jpg")],
         },
         content_type="multipart/form-data",
@@ -169,13 +187,9 @@ def test_quote_request_persists_even_if_email_hook_fails(client, app, monkeypatc
         "/quote-request",
         data={
             "full_name": "Email Hook Failure",
-            "phone": "555-434-3434",
-            "email": "hookfail@example.com",
-            "service_type": "Painting",
-            "address": "55 Cedar Way",
-            "description": "Submission should still persist.",
-            "preferred_contact_method": "Phone",
-            "preferred_contact_time": "Morning",
+            "contact_information": "555-434-3434",
+            "services": ["Painting"],
+            "city": "55 Cedar Way",
         },
         follow_redirects=False,
     )
@@ -201,13 +215,9 @@ def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_u
         "/quote-request",
         data={
             "full_name": "Avery Stone",
-            "phone": "555-343-2222",
-            "email": "avery@example.com",
-            "service_type": "Deck Staining",
-            "address": "18 Oak Lane",
-            "description": "Deck needs sanding and staining before summer.",
-            "preferred_contact_method": "Text",
-            "preferred_contact_time": "Late afternoon",
+            "contact_information": "555-343-2222",
+            "services": ["Deck Staining"],
+            "city": "18 Oak Lane",
             "photos": [(BytesIO(PNG_BYTES), "deck.png")],
         },
         content_type="multipart/form-data",
@@ -234,13 +244,9 @@ def test_dashboard_lists_quote_requests(client, admin_user):
         "/quote-request",
         data={
             "full_name": "Jamie Cole",
-            "phone": "555-111-0000",
-            "email": "jamie@example.com",
-            "service_type": "Flooring",
-            "address": "14 Birch Rd",
-            "description": "Need new flooring in two bedrooms.",
-            "preferred_contact_method": "Email",
-            "preferred_contact_time": "Afternoons",
+            "contact_information": "555-111-0000",
+            "services": ["Flooring"],
+            "city": "14 Birch Rd",
         },
         follow_redirects=False,
     )
@@ -265,13 +271,9 @@ def test_dashboard_shows_newest_requests_first(client, admin_user):
         "/quote-request",
         data={
             "full_name": "First Request",
-            "phone": "555-100-0001",
-            "email": "first@example.com",
-            "service_type": "Siding",
-            "address": "1 First St",
-            "description": "First request in the queue.",
-            "preferred_contact_method": "Phone",
-            "preferred_contact_time": "Morning",
+            "contact_information": "555-100-0001",
+            "services": ["Siding"],
+            "city": "1 First St",
         },
         follow_redirects=False,
     )
@@ -279,13 +281,9 @@ def test_dashboard_shows_newest_requests_first(client, admin_user):
         "/quote-request",
         data={
             "full_name": "Second Request",
-            "phone": "555-100-0002",
-            "email": "second@example.com",
-            "service_type": "Fence Repair",
-            "address": "2 Second St",
-            "description": "Second request in the queue.",
-            "preferred_contact_method": "Email",
-            "preferred_contact_time": "Evening",
+            "contact_information": "555-100-0002",
+            "services": ["Fence Repair"],
+            "city": "2 Second St",
         },
         follow_redirects=False,
     )
@@ -380,13 +378,9 @@ def test_admin_can_login_update_status_and_add_note(client, app, admin_user):
         "/quote-request",
         data={
             "full_name": "Casey Blake",
-            "phone": "555-444-9999",
-            "email": "casey@example.com",
-            "service_type": "Painting",
-            "address": "77 Market St",
-            "description": "Interior repaint for living room and kitchen.",
-            "preferred_contact_method": "Phone",
-            "preferred_contact_time": "Mornings",
+            "contact_information": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
         },
         follow_redirects=False,
     )
@@ -418,3 +412,100 @@ def test_admin_can_login_update_status_and_add_note(client, app, admin_user):
         quote_request = QuoteRequest.query.one()
         assert quote_request.status == "Quoted"
         assert quote_request.notes[0].note_text == "Reviewed photos and prepared pricing draft."
+
+
+def test_scheduling_fields_are_hidden_when_disabled(client, app, admin_user):
+    response = client.get("/quote-request")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Preferred date" not in body
+    assert "Scheduling notes" not in body
+
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Skyler Kent",
+            "contact_information": "555-222-3333",
+            "services": ["Inspection"],
+            "city": "99 Maple Blvd",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/requests/1")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Scheduling" not in body
+
+
+def test_quote_request_does_not_create_appointment_when_scheduling_disabled(client, app):
+    response = client.post(
+        "/quote-request",
+        data={
+            "full_name": "Nova Lane",
+            "contact_information": "nova@example.com",
+            "services": ["Roof Repair"],
+            "city": "141 Elm St",
+            "preferred_date": "2026-05-01",
+            "preferred_time_window": "10am - 2pm",
+            "scheduling_notes": "Please call before arrival.",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/thank-you")
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.full_name == "Nova Lane"
+        assert quote_request.appointments == []
+
+
+def test_quote_request_creates_appointment_when_scheduling_enabled(client, app):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    response = client.get("/quote-request")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Preferred date" not in body
+    assert "Scheduling notes" not in body
+
+    response = client.get("/schedule-work")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Preferred date" in body
+    assert "Scheduling notes" in body
+
+    response = client.post(
+        "/schedule-work",
+        data={
+            "full_name": "Ari Grant",
+            "contact_information": "ari@example.com",
+            "services": ["Deck Staining"],
+            "city": "202 Garden Path",
+            "preferred_date": "2026-06-10",
+            "preferred_time_window": "8am - 11am",
+            "scheduling_notes": "Please send a confirmation email.",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/thank-you")
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert len(quote_request.appointments) == 1
+        appointment = quote_request.appointments[0]
+        assert appointment.status == "Requested"
+        assert appointment.requested_date.isoformat() == "2026-06-10"
+        assert appointment.requested_time_window == "8am - 11am"
+        assert appointment.customer_notes == "Please send a confirmation email."

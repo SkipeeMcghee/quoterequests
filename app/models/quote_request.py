@@ -8,6 +8,45 @@ from app.extensions import db
 
 
 QUOTE_REQUEST_STATUSES = ("New", "Contacted", "Quoted", "Won", "Lost")
+APPOINTMENT_STATUSES = ("Requested", "Confirmed", "Rescheduled", "Completed", "Cancelled", "No Show")
+
+quote_request_service_options = db.Table(
+    "quote_request_service_options",
+    db.Column("quote_request_id", db.Integer, db.ForeignKey("quote_requests.id"), primary_key=True),
+    db.Column("service_option_id", db.Integer, db.ForeignKey("service_options.id"), primary_key=True),
+)
+
+
+class ServiceOption(db.Model):
+    __tablename__ = "service_options"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False, unique=True)
+
+    quote_requests = db.relationship(
+        "QuoteRequest",
+        secondary=quote_request_service_options,
+        back_populates="services",
+        order_by="QuoteRequest.id",
+    )
+
+    def __str__(self) -> str:
+        return self.name
+
+    @classmethod
+    def default_service_names(cls) -> list[str]:
+        return [
+            "Landscape Design",
+            "Roof Repair",
+            "Window Cleaning",
+            "Inspection",
+            "Painting",
+            "Deck Staining",
+            "Flooring",
+            "Siding",
+            "Fence Repair",
+            "General Maintenance",
+        ]
 
 
 class QuoteRequest(db.Model):
@@ -15,16 +54,24 @@ class QuoteRequest(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(255), nullable=False)
-    phone = db.Column(db.String(50), nullable=False)
-    email = db.Column(db.String(255), nullable=False, index=True)
-    service_type = db.Column(db.String(120), nullable=False)
-    address = db.Column(db.String(255), nullable=False)
-    description = db.Column(db.Text, nullable=False)
-    preferred_contact_method = db.Column(db.String(50), nullable=False)
-    preferred_contact_time = db.Column(db.String(120), nullable=True)
+    phone = db.Column(db.String(50), nullable=True)
+    email = db.Column(db.String(255), nullable=True, index=True)
+    city = db.Column(db.String(255), nullable=False)
     status = db.Column(db.String(32), nullable=False, default="New")
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
+    services = db.relationship(
+        "ServiceOption",
+        secondary=quote_request_service_options,
+        back_populates="quote_requests",
+        order_by="ServiceOption.name",
+    )
+    appointments = db.relationship(
+        "Appointment",
+        back_populates="quote_request",
+        order_by="Appointment.created_at.desc()",
+        cascade="all, delete-orphan",
+    )
     photos = db.relationship(
         "RequestPhoto",
         back_populates="quote_request",
@@ -38,6 +85,43 @@ class QuoteRequest(db.Model):
         order_by="RequestNote.created_at.desc()",
     )
 
+    @property
+    def service_list_display(self) -> str:
+        return ", ".join([service.name for service in self.services])
+
+    @property
+    def current_appointment(self) -> "Appointment | None":
+        return self.appointments[0] if self.appointments else None
+
+
+class Appointment(db.Model):
+    __tablename__ = "appointments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    quote_request_id = db.Column(db.Integer, db.ForeignKey("quote_requests.id"), nullable=False, index=True)
+    requested_date = db.Column(db.Date, nullable=True)
+    requested_time_window = db.Column(db.String(120), nullable=True)
+    confirmed_date = db.Column(db.Date, nullable=True)
+    confirmed_time_window = db.Column(db.String(120), nullable=True)
+    customer_notes = db.Column(db.Text, nullable=True)
+    internal_notes = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(32), nullable=False, default="Requested")
+    previous_appointment_id = db.Column(db.Integer, db.ForeignKey("appointments.id"), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    quote_request = db.relationship("QuoteRequest", back_populates="appointments")
+    previous_appointment = db.relationship(
+        "Appointment",
+        remote_side=[id],
+        backref="rescheduled_appointments",
+        foreign_keys=[previous_appointment_id],
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Appointment {self.id} for request {self.quote_request_id} "
+            f"status={self.status} requested={self.requested_date}>")
 
 class RequestPhoto(db.Model):
     __tablename__ = "request_photos"

@@ -20,6 +20,7 @@ class Config:
     MAX_CONTENT_LENGTH = 10 * 1024 * 1024
     UPLOAD_FOLDER = str(BASE_DIR / "app" / "static" / "uploads")
     ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+    ENABLE_SCHEDULING = os.getenv("ENABLE_SCHEDULING", "false").lower() in ("1", "true", "yes")
     ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "admin@example.com")
     DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@example.com")
     COMPANY_NAME = os.getenv("COMPANY_NAME", "Service Company")
@@ -35,6 +36,7 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
+    ENABLE_SCHEDULING = True
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL",
         "postgresql+psycopg://quote_requests:quote_requests@localhost:5432/quote_requests",

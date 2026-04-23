@@ -1,24 +1,43 @@
 from __future__ import annotations
 
 from flask import current_app
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.datastructures import FileStorage
 
 from app.extensions import db
 from app.forms.quote_request import QuoteRequestForm
-from app.models import QuoteRequest
+from app.models import Appointment, QuoteRequest, ServiceOption
 from app.services.email_hooks import send_admin_notification, send_customer_confirmation
 from app.services.uploads import cleanup_request_photo_dir, save_request_photos
 
 
 def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorage]) -> QuoteRequest:
-    quote_request = QuoteRequest(**_quote_request_payload(form))
+    payload, service_names = _quote_request_payload(form)
+    quote_request = QuoteRequest(**payload)
     db.session.add(quote_request)
 
     try:
         db.session.flush()
 
+        quote_request.services.extend(_resolve_service_options(service_names))
         for photo in save_request_photos(uploaded_files or [], quote_request.id):
             quote_request.photos.append(photo)
+
+        if current_app.config.get("ENABLE_SCHEDULING"):
+            preferred_date = form.preferred_date.data
+            preferred_window = (form.preferred_time_window.data or "").strip() or None
+            scheduling_notes = (form.scheduling_notes.data or "").strip() or None
+            if preferred_date or preferred_window or scheduling_notes:
+                appointment = Appointment(
+                    quote_request=quote_request,
+                    requested_date=preferred_date,
+                    requested_time_window=preferred_window,
+                    customer_notes=scheduling_notes,
+                    internal_notes=None,
+                    status="Requested",
+                )
+                db.session.add(appointment)
+                quote_request.appointments.append(appointment)
 
         db.session.commit()
     except Exception:
@@ -31,17 +50,54 @@ def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorag
     return quote_request
 
 
-def _quote_request_payload(form: QuoteRequestForm) -> dict[str, str | None]:
-    return {
-        "full_name": form.full_name.data.strip(),
-        "phone": form.phone.data.strip(),
-        "email": form.email.data.strip().lower(),
-        "service_type": form.service_type.data.strip(),
-        "address": form.address.data.strip(),
-        "description": form.description.data.strip(),
-        "preferred_contact_method": form.preferred_contact_method.data,
-        "preferred_contact_time": (form.preferred_contact_time.data or "").strip() or None,
-    }
+def _quote_request_payload(form: QuoteRequestForm) -> tuple[dict[str, str | None], list[str]]:
+    contact = (form.contact_information.data or "").strip()
+    phone = None
+    email = None
+    if contact:
+        if "@" in contact:
+            email = contact.lower()
+        else:
+            phone = contact
+
+    service_names = [name.strip() for name in (form.services.data or []) if name and name.strip()]
+    return (
+        {
+            "full_name": form.full_name.data.strip(),
+            "phone": phone,
+            "email": email,
+            "city": form.city.data.strip(),
+        },
+        list(dict.fromkeys(service_names)),
+    )
+
+
+def _resolve_service_options(service_names: list[str]) -> list[ServiceOption]:
+    if not service_names:
+        return []
+
+    try:
+        existing = {
+            option.name: option
+            for option in ServiceOption.query.filter(ServiceOption.name.in_(service_names)).all()
+        }
+    except SQLAlchemyError:
+        db.session.rollback()
+        db.create_all()
+        existing = {
+            option.name: option
+            for option in ServiceOption.query.filter(ServiceOption.name.in_(service_names)).all()
+        }
+
+    resolved = []
+    for name in service_names:
+        option = existing.get(name)
+        if option is None:
+            option = ServiceOption(name=name)
+            db.session.add(option)
+            existing[name] = option
+        resolved.append(option)
+    return resolved
 
 
 def _trigger_email_hooks(quote_request: QuoteRequest) -> None:

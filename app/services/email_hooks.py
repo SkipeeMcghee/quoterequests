@@ -17,7 +17,7 @@ def send_customer_confirmation(quote_request: QuoteRequest) -> None:
 def send_admin_notification(quote_request: QuoteRequest) -> None:
     _log_email_hook(
         recipient=current_app.config["ADMIN_NOTIFICATION_EMAIL"],
-        subject=f"New quote request: {quote_request.service_type}",
+        subject=f"New quote request: {quote_request.service_list_display}",
         template="admin_notification",
         quote_request=quote_request,
     )

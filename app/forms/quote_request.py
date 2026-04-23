@@ -1,31 +1,82 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, MultipleFileField
-from wtforms import EmailField, SelectField, StringField, SubmitField, TextAreaField
+from sqlalchemy.exc import SQLAlchemyError
+from wtforms import DateField, EmailField, ValidationError, SelectMultipleField, StringField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired, Email, Length, Optional
+from wtforms.widgets import CheckboxInput, ListWidget
+
+from app.extensions import db
+from app.models import ServiceOption
 
 
-PREFERRED_CONTACT_CHOICES = [
-    ("Phone", "Phone"),
-    ("Email", "Email"),
-    ("Text", "Text"),
+class CheckboxInputWithoutRequired(CheckboxInput):
+    validation_attrs = ["disabled"]
+
+
+SERVICE_CHOICES = [
+    ("Landscape Design", "Landscape Design"),
+    ("Roof Repair", "Roof Repair"),
+    ("Window Cleaning", "Window Cleaning"),
+    ("Inspection", "Inspection"),
+    ("Painting", "Painting"),
+    ("Deck Staining", "Deck Staining"),
+    ("Flooring", "Flooring"),
+    ("Siding", "Siding"),
+    ("Fence Repair", "Fence Repair"),
+    ("General Maintenance", "General Maintenance"),
 ]
 
 
 class QuoteRequestForm(FlaskForm):
-    full_name = StringField("Full name", validators=[DataRequired(), Length(max=255)])
-    phone = StringField("Phone", validators=[DataRequired(), Length(max=50)])
-    email = EmailField("Email", validators=[DataRequired(), Email(), Length(max=255)])
-    service_type = StringField("Service type", validators=[DataRequired(), Length(max=120)])
-    address = StringField("Address", validators=[DataRequired(), Length(max=255)])
-    description = TextAreaField("Project details", validators=[DataRequired(), Length(max=4000)])
-    preferred_contact_method = SelectField(
-        "Preferred contact method",
-        choices=PREFERRED_CONTACT_CHOICES,
+    full_name = StringField("Name", validators=[DataRequired(), Length(max=255)])
+    contact_information = StringField("Contact Information", validators=[DataRequired(), Length(max=255)])
+    city = StringField("Location", validators=[DataRequired(), Length(max=255)])
+    preferred_date = DateField("Preferred date", validators=[Optional()])
+    preferred_time_window = StringField("Preferred time window", validators=[Optional(), Length(max=120)])
+    scheduling_notes = TextAreaField("Scheduling notes", validators=[Optional(), Length(max=2000)])
+    services = SelectMultipleField(
+        "Services",
+        choices=[],
         validators=[DataRequired()],
+        validate_choice=False,
+        widget=ListWidget(prefix_label=False),
+        option_widget=CheckboxInputWithoutRequired(),
     )
-    preferred_contact_time = StringField("Preferred contact time", validators=[Optional(), Length(max=120)])
     photos = MultipleFileField(
         "Project photos",
         validators=[FileAllowed(["jpg", "jpeg", "png", "gif", "webp"], "Images only.")],
     )
     submit = SubmitField("Send request")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.services.choices = self._load_service_choices()
+
+    def _load_service_choices(self) -> list[tuple[str, str]]:
+        try:
+            options = ServiceOption.query.order_by(ServiceOption.name).all()
+            if options:
+                return [(option.name, option.name) for option in options]
+        except SQLAlchemyError:
+            db.session.rollback()
+
+        return SERVICE_CHOICES
+
+    def validate(self, extra_validators=None) -> bool:
+        valid = super().validate(extra_validators=extra_validators)
+        if not valid:
+            return False
+
+        contact = (self.contact_information.data or "").strip()
+        if not contact:
+            self.contact_information.errors.append("Provide a phone number or email address.")
+            return False
+
+        if "@" in contact:
+            try:
+                Email()(self, self.contact_information)
+            except ValidationError as exc:
+                self.contact_information.errors.append(str(exc))
+                return False
+
+        return True

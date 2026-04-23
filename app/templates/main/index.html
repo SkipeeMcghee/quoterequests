@@ -1,1 +1,36 @@
 {% extends "base.html" %}
+
+{% block title %}Get a Quote{% endblock %}
+
+{% block content %}
+<main class="shell">
+  <section class="section-intro">
+    <p class="eyebrow">Simple quote intake</p>
+    <h1>Get a clear estimate without the guesswork.</h1>
+    <p>Answer a few straightforward questions, share photos, and let our team follow up by phone or email.</p>
+
+    <div class="form-actions">
+      <a href="{{ url_for('main.quote_request') }}" class="button">Start your quote request</a>
+      {% if enable_scheduling %}
+        <a href="{{ url_for('main.schedule_work') }}" class="button button-secondary">Schedule some work</a>
+      {% endif %}
+      <span class="subtle-text">No account required. Mobile-friendly and easy to begin.</span>
+    </div>
+  </section>
+
+  <div class="hero-points">
+    <article>
+      <strong>Fast intake</strong>
+      <div class="subtle-text">Capture the essentials needed to move your request toward an estimate.</div>
+    </article>
+    <article>
+      <strong>Photo-friendly</strong>
+      <div class="subtle-text">Customers can upload project images to save time and improve accuracy.</div>
+    </article>
+    <article>
+      <strong>Review-ready</strong>
+      <div class="subtle-text">Every submission arrives in a clean admin workflow your team can act on.</div>
+    </article>
+  </div>
+</main>
+{% endblock %}
