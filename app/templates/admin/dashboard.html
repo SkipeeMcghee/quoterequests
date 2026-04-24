@@ -34,19 +34,22 @@
         <thead>
           <tr>
             <th>Customer</th>
+            <th>Type</th>
             <th>Services</th>
             <th>Contact</th>
             <th>Status</th>
             <th>Submitted</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
           {% for item in quote_requests %}
-            <tr>
+            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.request_detail', request_id=item.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.request_detail', request_id=item.id) }}'">
               <td>
                 <strong class="row-title">{{ item.full_name }}</strong>
                 <div class="subtle-text">{{ item.city }}</div>
+              </td>
+              <td>
+                <span class="tag-pill">{{ item.request_type|replace(' request', '')|lower }}</span>
               </td>
               <td>
                 {% if item.service_list_display %}
@@ -74,7 +77,6 @@
               </td>
               <td><span class="status-badge status-{{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</span></td>
               <td>{{ item.created_at.strftime('%b %d, %Y %I:%M %p') }}</td>
-              <td><a class="text-link" href="{{ url_for('admin.request_detail', request_id=item.id) }}">Open</a></td>
             </tr>
           {% else %}
             <tr>

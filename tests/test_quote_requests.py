@@ -61,6 +61,108 @@ def test_schedule_work_page_renders_scheduling_fields(client, app):
     assert "Scheduling notes" in body
 
 
+def test_schedule_work_submission_records_work_request_type(client, app):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    response = client.post(
+        "/schedule-work",
+        data={
+            "full_name": "Taylor Grant",
+            "contact_information": "555-333-2222",
+            "services": ["Inspection"],
+            "city": "14 Maple Ln",
+            "preferred_date": "2026-05-15",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.request_type == "Work request"
+
+
+def test_admin_request_detail_shows_request_type_and_status_form(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "contact_information": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/requests/1")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Quote request" in body
+    assert "Request status" in body
+    assert "name=\"status\"" in body
+
+
+def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "contact_information": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/requests/1")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Last contacted on" in body
+    assert "name=\"last_contacted_on\"" in body
+
+
+def test_admin_can_update_last_contacted_date(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "contact_information": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        "/admin/requests/1/last-contacted",
+        data={"last_contacted_on": "2026-04-24"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    with app.app_context():
+        assert QuoteRequest.query.one().last_contacted_on.isoformat() == "2026-04-24"
+
+
 def test_quote_request_validation_errors_do_not_save_request(client, app):
     response = client.post(
         "/quote-request",
@@ -131,6 +233,29 @@ def test_image_upload_is_stored_and_path_is_saved(client, app):
         assert stored_file.exists()
 
 
+def test_upload_more_than_twenty_photos_is_rejected(client, app):
+    photo_data = [(BytesIO(JPEG_BYTES), f"photo{i}.jpg") for i in range(21)]
+    response = client.post(
+        "/quote-request",
+        data={
+            "full_name": "Jordan Harper",
+            "contact_information": "555-111-2222",
+            "services": ["Landscape Design"],
+            "city": "123 Garden St",
+            "photos": photo_data,
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "You can upload up to 20 photos." in body
+
+    with app.app_context():
+        assert QuoteRequest.query.count() == 0
+
+
 def test_invalid_upload_type_is_rejected(client, app):
     response = client.post(
         "/quote-request",
@@ -169,10 +294,33 @@ def test_invalid_upload_content_is_rejected(client, app):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Uploaded file content does not match a supported image type." in body
+    assert "content does not match a supported image type." in body
 
     with app.app_context():
         assert QuoteRequest.query.count() == 0
+
+
+def test_multiple_image_uploads_are_accepted(client, app):
+    response = client.post(
+        "/quote-request",
+        data={
+            "full_name": "Multi Image",
+            "contact_information": "555-121-1212",
+            "services": ["Inspection"],
+            "city": "17 Walnut Ave",
+            "photos": [
+                (BytesIO(PNG_BYTES), "deck.png"),
+                (BytesIO(JPEG_BYTES), "yard.jpg"),
+            ],
+        },
+        content_type="multipart/form-data",
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    with app.app_context():
+        assert QuoteRequest.query.count() == 1
+        assert len(QuoteRequest.query.first().photos) == 2
 
 
 def test_quote_request_persists_even_if_email_hook_fails(client, app, monkeypatch):

@@ -16,7 +16,7 @@ def quote_request():
     form = QuoteRequestForm()
     if form.validate_on_submit():
         try:
-            create_quote_request(form, form.photos.data)
+            create_quote_request(form, form.photos.data, request_type="Quote request")
         except BadRequest as exc:
             form.photos.errors.append(exc.description)
             flash(exc.description, "error")
@@ -34,7 +34,7 @@ def schedule_work():
     form = QuoteRequestForm()
     if form.validate_on_submit():
         try:
-            create_quote_request(form, form.photos.data)
+            create_quote_request(form, form.photos.data, request_type="Work request")
         except BadRequest as exc:
             form.photos.errors.append(exc.description)
             flash(exc.description, "error")

@@ -8,6 +8,8 @@ from app.extensions import db
 
 
 QUOTE_REQUEST_STATUSES = ("New", "Contacted", "Quoted", "Won", "Lost")
+REQUEST_TYPES = ("Quote request", "Work request")
+
 APPOINTMENT_STATUSES = ("Requested", "Confirmed", "Rescheduled", "Completed", "Cancelled", "No Show")
 
 quote_request_service_options = db.Table(
@@ -51,6 +53,7 @@ class ServiceOption(db.Model):
 
 class QuoteRequest(db.Model):
     __tablename__ = "quote_requests"
+    REQUEST_TYPES = ("Quote request", "Work request")
 
     id = db.Column(db.Integer, primary_key=True)
     full_name = db.Column(db.String(255), nullable=False)
@@ -58,6 +61,8 @@ class QuoteRequest(db.Model):
     email = db.Column(db.String(255), nullable=True, index=True)
     city = db.Column(db.String(255), nullable=False)
     status = db.Column(db.String(32), nullable=False, default="New")
+    request_type = db.Column(db.String(32), nullable=False, default="Quote request")
+    last_contacted_on = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     services = db.relationship(

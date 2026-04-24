@@ -271,6 +271,12 @@ textarea {
   box-shadow: 0 10px 24px rgba(23, 77, 56, 0.16);
 }
 
+.button-small {
+  min-height: 34px;
+  padding: 0 0.9rem;
+  font-size: 0.92rem;
+}
+
 .button-secondary {
   background: var(--accent);
   color: var(--card);
@@ -323,6 +329,25 @@ textarea {
   border: 1px solid rgba(23, 77, 56, 0.22);
   background: #fcfcfc;
   color: var(--text);
+}
+
+.status-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.status-form .select,
+#status-select {
+  width: 220px;
+  min-width: 180px;
+  max-width: 280px;
+  margin-top: 0;
+}
+
+.status-form .status-label {
+  margin: 0;
 }
 
 .input:focus,
@@ -433,6 +458,15 @@ td {
 
 tbody tr:hover {
   background: rgba(23, 77, 56, 0.06);
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:focus {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
 }
 
 thead th {

@@ -11,8 +11,11 @@ from app.services.email_hooks import send_admin_notification, send_customer_conf
 from app.services.uploads import cleanup_request_photo_dir, save_request_photos
 
 
-def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorage]) -> QuoteRequest:
-    payload, service_names = _quote_request_payload(form)
+def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorage], request_type: str = "Quote request") -> QuoteRequest:
+    if request_type not in QuoteRequest.REQUEST_TYPES:
+        request_type = QuoteRequest.REQUEST_TYPES[0]
+
+    payload, service_names = _quote_request_payload(form, request_type)
     quote_request = QuoteRequest(**payload)
     db.session.add(quote_request)
 
@@ -50,7 +53,7 @@ def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorag
     return quote_request
 
 
-def _quote_request_payload(form: QuoteRequestForm) -> tuple[dict[str, str | None], list[str]]:
+def _quote_request_payload(form: QuoteRequestForm, request_type: str) -> tuple[dict[str, str | None], list[str]]:
     contact = (form.contact_information.data or "").strip()
     phone = None
     email = None
@@ -67,6 +70,7 @@ def _quote_request_payload(form: QuoteRequestForm) -> tuple[dict[str, str | None
             "phone": phone,
             "email": email,
             "city": form.city.data.strip(),
+            "request_type": request_type,
         },
         list(dict.fromkeys(service_names)),
     )

@@ -48,8 +48,11 @@
 
         <label class="form-field field-span-2">
           <span>Project photos</span>
-          {{ form.photos(class_="file-input", multiple=true) }}
-          <small class="field-help">Accepted types: JPG, PNG, GIF, and WebP.</small>
+          {{ form.photos(class_="file-input", id="photos", multiple=true) }}
+          <div class="field-help">
+            <small>Accepted types: JPG, PNG, GIF, and WebP. Upload up to 20 photos (300 MB max total).</small>
+            <small id="photo-preview" class="subtle-text">No files selected.</small>
+          </div>
           {% for error in form.photos.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
       </div>
@@ -61,4 +64,40 @@
     </form>
   </div>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const input = document.querySelector('#photos') || document.querySelector('input[name="photos"]');
+  const preview = document.querySelector('#photo-preview');
+  if (!input || !preview) {
+    return;
+  }
+
+  const formatBytes = (bytes) => {
+    if (bytes < 1024) return `${bytes} bytes`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const updatePreview = () => {
+    const files = input.files;
+    if (!files || files.length === 0) {
+      preview.textContent = 'No files selected.';
+      return;
+    }
+
+    let total = 0;
+    Array.from(files).forEach((file) => {
+      total += file.size;
+    });
+
+    preview.textContent = `Selected ${files.length} file${files.length === 1 ? '' : 's'} · ${formatBytes(total)} total.`;
+  };
+
+  input.addEventListener('change', updatePreview);
+  updatePreview();
+})();
+</script>
 {% endblock %}

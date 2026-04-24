@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from flask import current_app
+from PIL import Image, UnidentifiedImageError
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import BadRequest
 from werkzeug.utils import secure_filename
@@ -56,7 +57,14 @@ def _validate_file(file: FileStorage) -> str:
     if file.mimetype and not file.mimetype.startswith("image/"):
         raise BadRequest("Uploaded file must be an image.")
     if not _matches_signature(file, extension):
-        raise BadRequest("Uploaded file content does not match a supported image type.")
+        current_app.logger.warning(
+            "Rejected image upload with invalid signature: %s mimetype=%s",
+            file.filename,
+            file.mimetype,
+        )
+        raise BadRequest(
+            f"Uploaded file '{secure_filename(file.filename)}' content does not match a supported image type."
+        )
     return extension
 
 
@@ -74,11 +82,51 @@ def cleanup_request_photo_dir(quote_request_id: int) -> None:
 
 def _matches_signature(file: FileStorage, extension: str) -> bool:
     stream = file.stream
-    current_position = stream.tell()
-    header = stream.read(16)
-    stream.seek(current_position)
+    try:
+        stream.seek(0)
+    except (AttributeError, OSError):
+        pass
+
+    format_name = None
+    try:
+        with Image.open(stream) as image:
+            image.verify()
+            format_name = image.format.lower() if image.format else None
+    except (UnidentifiedImageError, OSError, ValueError):
+        format_name = None
+    finally:
+        try:
+            stream.seek(0)
+        except (AttributeError, OSError):
+            pass
+
+    if format_name:
+        if format_name == extension:
+            return True
+        if format_name == "jpeg" and extension in {"jpg", "jpeg"}:
+            return True
+
+    header = stream.read(256)
+    try:
+        stream.seek(0)
+    except (AttributeError, OSError):
+        pass
 
     if extension == "webp":
-        return header.startswith(b"RIFF") and header[8:12] == b"WEBP"
+        if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
+            return True
+    elif extension in {"jpg", "jpeg"}:
+        if header.startswith(b"\xff\xd8"):
+            return True
+    else:
+        if any(header.startswith(signature) for signature in IMAGE_SIGNATURES[extension]):
+            return True
 
-    return any(header.startswith(signature) for signature in IMAGE_SIGNATURES[extension])
+    current_app.logger.warning(
+        "Rejected image upload: %s extension=%s detected=%s header=%s",
+        file.filename,
+        extension,
+        format_name,
+        header[:16],
+    )
+    return False

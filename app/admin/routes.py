@@ -5,6 +5,7 @@ from app.admin import bp
 from app.forms.admin import (
     AppointmentForm,
     AppointmentStatusForm,
+    LastContactedForm,
     NoteForm,
     RescheduleAppointmentForm,
     StatusUpdateForm,
@@ -18,6 +19,7 @@ from app.services.admin_requests import (
     reschedule_appointment,
     update_appointment,
     update_appointment_status,
+    update_last_contacted_on,
     update_request_status,
 )
 
@@ -39,6 +41,7 @@ def request_detail(request_id: int):
     appointment_status_form = None
     reschedule_form = None
 
+    last_contacted_form = LastContactedForm(obj=quote_request)
     if current_app.config.get("ENABLE_SCHEDULING"):
         if quote_request.current_appointment:
             appointment_form = AppointmentForm(
@@ -55,6 +58,7 @@ def request_detail(request_id: int):
         quote_request=quote_request,
         status_form=status_form,
         note_form=note_form,
+        last_contacted_form=last_contacted_form,
         appointment_form=appointment_form,
         appointment_status_form=appointment_status_form,
         reschedule_form=reschedule_form,
@@ -72,6 +76,19 @@ def update_status(request_id: int):
         flash("Choose a valid status.", "error")
 
     return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="status"))
+
+
+@bp.post("/requests/<int:request_id>/last-contacted")
+@login_required
+def update_last_contacted_on_route(request_id: int):
+    form = LastContactedForm()
+    if form.validate_on_submit():
+        update_last_contacted_on(request_id, form.last_contacted_on.data)
+        flash("Last contacted date updated.", "success")
+    else:
+        flash("Enter a valid date or clear the field.", "error")
+
+    return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="request-details"))
 
 
 @bp.post("/requests/<int:request_id>/appointments")

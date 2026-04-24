@@ -18,6 +18,11 @@ class NoteForm(FlaskForm):
     submit = SubmitField("Save note")
 
 
+class LastContactedForm(FlaskForm):
+    last_contacted_on = DateField("Last contacted on", validators=[Optional()])
+    submit = SubmitField("Save last contact")
+
+
 class AppointmentForm(FlaskForm):
     requested_date = DateField("Requested date", validators=[Optional()])
     requested_time_window = StringField("Requested time window", validators=[Optional(), Length(max=120)])

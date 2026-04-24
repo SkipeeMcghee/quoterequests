@@ -128,6 +128,13 @@ def update_appointment_status(appointment_id: int, status: str) -> Appointment:
     return appointment
 
 
+def update_last_contacted_on(request_id: int, last_contacted_on) -> QuoteRequest:
+    quote_request = get_quote_request(request_id)
+    quote_request.last_contacted_on = last_contacted_on
+    db.session.commit()
+    return quote_request
+
+
 def update_request_status(request_id: int, status: str) -> QuoteRequest:
     if status not in QUOTE_REQUEST_STATUSES:
         raise BadRequest("Choose a valid status.")

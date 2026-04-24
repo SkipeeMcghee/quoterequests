@@ -8,10 +8,14 @@
     <div>
       <p class="eyebrow">Request #{{ quote_request.id }}</p>
       <h1>{{ quote_request.full_name }}</h1>
-      <p>{{ quote_request.service_list_display }} in {{ quote_request.city }}</p>
+      <p class="subtle-text">{{ quote_request.request_type }} · {{ quote_request.service_list_display or 'No services selected' }} in {{ quote_request.city }}</p>
     </div>
     <div class="detail-actions">
-      <span class="status-badge status-{{ quote_request.status|lower|replace(' ', '-') }}">{{ quote_request.status }}</span>
+      <form method="post" action="{{ url_for('admin.update_status', request_id=quote_request.id) }}" class="status-form" id="status-form">
+        {{ status_form.hidden_tag() }}
+        <span class="status-label subtle-text">Request status</span>
+        {{ status_form.status(class_="select", id="status-select") }}
+      </form>
       <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
     </div>
   </section>
@@ -44,6 +48,27 @@
             <dd>{{ quote_request.city }}</dd>
           </div>
           <div>
+            <dt>Request type</dt>
+            <dd>{{ quote_request.request_type }}</dd>
+          </div>
+          <div>
+            <dt>Last contacted on</dt>
+            <dd>
+              <form method="post" action="{{ url_for('admin.update_last_contacted_on_route', request_id=quote_request.id) }}" class="stacked-form" id="request-details">
+                {{ last_contacted_form.hidden_tag() }}
+                <div class="form-grid">
+                  <label class="form-field">
+                    {{ last_contacted_form.last_contacted_on(class_="input") }}
+                    {% for error in last_contacted_form.last_contacted_on.errors %}
+                      <small class="field-error">{{ error }}</small>
+                    {% endfor %}
+                  </label>
+                  {{ last_contacted_form.submit(class_="button button-secondary button-small") }}
+                </div>
+              </form>
+            </dd>
+          </div>
+          <div>
             <dt>Services</dt>
             <dd>
               {% if quote_request.service_list_display %}
@@ -56,9 +81,13 @@
                 <span class="subtle-text">No services selected</span>
               {% endif %}
             </dd>
-          <h2>Uploaded photos</h2>
-          <p class="subtle-text">Images open in a new tab.</p>
-        </div>
+          </div>
+        </dl>
+
+
+        <h2>Uploaded photos</h2>
+        <p class="subtle-text">Images open in a new tab.</p>
+        
         <div class="photo-grid">
           {% for photo in quote_request.photos %}
             <a class="photo-card" href="{{ url_for('static', filename=photo.file_path) }}" target="_blank" rel="noreferrer">
@@ -69,10 +98,11 @@
           {% endfor %}
         </div>
       </article>
+
     </div>
 
     <div class="detail-grid">
-      {% if enable_scheduling %}
+      {% if enable_scheduling and quote_request.request_type == 'Work request' %}
         <article class="summary-card" id="scheduling">
           <div class="section-bar compact-bar">
             <h2>Scheduling</h2>
@@ -108,7 +138,7 @@
                 <dd>{{ appointment.customer_notes or 'None' }}</dd>
               </div>
               <div>
-                <dt>Internal notes</dt>
+                <dt>Scheduling details</dt>
                 <dd>{{ appointment.internal_notes or 'None' }}</dd>
               </div>
             </dl>
@@ -146,7 +176,7 @@
                   {{ appointment_form.customer_notes(class_="textarea") }}
                 </label>
                 <label class="form-field field-span-2">
-                  <span>Internal notes</span>
+                  <span>Scheduling details</span>
                   {{ appointment_form.internal_notes(class_="textarea") }}
                 </label>
               </div>
@@ -165,7 +195,7 @@
                   {{ reschedule_form.requested_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
                 </label>
                 <label class="form-field field-span-2">
-                  <span>Internal notes</span>
+                  <span>Scheduling details</span>
                   {{ reschedule_form.internal_notes(class_="textarea") }}
                 </label>
               </div>
@@ -216,7 +246,7 @@
         </article>
       {% endif %}
 
-      <article class="summary-card" id="status">
+      <article class="summary-card" id="notes">
         <div class="section-bar compact-bar">
           <h2>Internal notes</h2>
         </div>
@@ -245,4 +275,18 @@
     </div>
   </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const statusForm = document.getElementById('status-form');
+  const statusSelect = document.getElementById('status-select');
+  if (statusForm && statusSelect) {
+    statusSelect.addEventListener('change', function () {
+      statusForm.submit();
+    });
+  }
+})();
+</script>
 {% endblock %}

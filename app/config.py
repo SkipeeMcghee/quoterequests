@@ -17,7 +17,7 @@ def get_required_env(name: str) -> str:
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    MAX_CONTENT_LENGTH = 10 * 1024 * 1024
+    MAX_CONTENT_LENGTH = 300 * 1024 * 1024
     UPLOAD_FOLDER = str(BASE_DIR / "app" / "static" / "uploads")
     ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
     ENABLE_SCHEDULING = os.getenv("ENABLE_SCHEDULING", "false").lower() in ("1", "true", "yes")

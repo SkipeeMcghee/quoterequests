@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, render_template_string
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.auth import bp as auth_bp
 from app.config import config_by_name
@@ -23,6 +24,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_blueprints(app)
     register_login_manager()
     register_context_processors(app)
+    register_error_handlers(app)
     register_cli(app)
 
     return app
@@ -57,6 +59,31 @@ def register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_scheduling_flag() -> dict[str, bool]:
         return {"enable_scheduling": app.config.get("ENABLE_SCHEDULING", False)}
+
+
+def register_error_handlers(app: Flask) -> None:
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_request_entity_too_large(error: RequestEntityTooLarge):
+        return render_template_string(
+            """<!doctype html>
+            <html lang=\"en\">
+              <head>
+                <meta charset=\"utf-8\">
+                <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+                <title>Upload too large</title>
+              </head>
+              <body>
+                <div class=\"page-shell\">
+                  <section class=\"section-intro\">
+                    <h1>Upload too large</h1>
+                    <p>The total upload size exceeds the configured limit. Try smaller files or fewer photos.</p>
+                    <p><a href=\"{{ url_for('main.quote_request') }}\">Back to request form</a></p>
+                  </section>
+                </div>
+              </body>
+            </html>""",
+            error=error,
+        ), 413
 
 
 def _ensure_runtime_directories(app: Flask) -> None:

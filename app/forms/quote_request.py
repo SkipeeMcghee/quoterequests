@@ -67,6 +67,10 @@ class QuoteRequestForm(FlaskForm):
         if not valid:
             return False
 
+        if self.photos.data and len(self.photos.data) > 20:
+            self.photos.errors.append("You can upload up to 20 photos.")
+            return False
+
         contact = (self.contact_information.data or "").strip()
         if not contact:
             self.contact_information.errors.append("Provide a phone number or email address.")
