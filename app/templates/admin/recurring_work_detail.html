@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Recurring work #{{ work.id }}{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="split-intro section-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>Recurring work #{{ work.id }}</h1>
+      <p class="subtle-text">Manage this recurring schedule and review generated appointments.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+      <a class="button-secondary" href="{{ url_for('admin.recurring_work_list') }}">Back to recurring work</a>
+      {% if work.customer %}
+        <a class="button button-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">Customer</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <article class="summary-card">
+      <div class="section-bar compact-bar">
+        <h2>Recurring schedule</h2>
+      </div>
+      <dl class="detail-list vertical-list">
+        <div>
+          <dt>Customer</dt>
+          <dd>
+            {% if work.customer %}
+              <a href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">{{ work.customer.primary_name or 'Unnamed' }}</a>
+            {% else %}
+              None
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Frequency</dt>
+          <dd>{{ work.frequency|capitalize }}</dd>
+        </div>
+        {% if work.frequency == 'weekly' %}
+          <div>
+            <dt>Day</dt>
+            <dd>{{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][work.day_of_week] }}</dd>
+          </div>
+        {% else %}
+          <div>
+            <dt>Day</dt>
+            <dd>{{ work.day_of_month }}</dd>
+          </div>
+        {% endif %}
+        <div>
+          <dt>Preferred time</dt>
+          <dd>
+            {% if work.start_time and work.end_time %}
+              {{ work.start_time.strftime('%H:%M') }} – {{ work.end_time.strftime('%H:%M') }}
+            {% else %}
+              Not set
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Starts on</dt>
+          <dd>{{ work.starts_on.strftime('%b %d, %Y') }}</dd>
+        </div>
+        <div>
+          <dt>Ends on</dt>
+          <dd>{{ work.ends_on.strftime('%b %d, %Y') if work.ends_on else 'None' }}</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd>{{ work.status }}</dd>
+        </div>
+        {% if work.notes %}
+          <div>
+            <dt>Notes</dt>
+            <dd>{{ work.notes }}</dd>
+          </div>
+        {% endif %}
+      </dl>
+    </article>
+
+    <article class="summary-card">
+      <div class="section-bar compact-bar">
+        <h2>Generated appointments</h2>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Scheduled</th>
+              <th>Customer</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for appointment in work.appointments %}
+              <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}'">
+                <td>{{ appointment.id }}</td>
+                <td>
+                  {{ appointment.scheduled_date.strftime('%b %d, %Y') if appointment.scheduled_date else 'No date' }}
+                  {% if appointment.start_time and appointment.end_time %} · {{ appointment.start_time.strftime('%H:%M') }}{% endif %}
+                </td>
+                <td>{{ appointment.customer.primary_name or 'Customer' }}</td>
+                <td>{{ appointment.status }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="4" class="empty-state">No generated appointments yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+</main>
+{% endblock %}

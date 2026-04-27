@@ -4,7 +4,7 @@ from io import BytesIO
 from pathlib import Path
 
 from app.extensions import db
-from app.models import QuoteRequest
+from app.models import QuoteRequest, RequestNote
 from app.models.user import User
 
 
@@ -38,7 +38,7 @@ def test_quote_request_does_not_show_scheduling_fields(client, app):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Preferred date" not in body
-    assert "Scheduling notes" not in body
+    assert "Additional Notes" in body
 
 
 def test_schedule_work_button_visible_in_index_when_scheduling_enabled(client, app):
@@ -58,7 +58,7 @@ def test_schedule_work_page_renders_scheduling_fields(client, app):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Preferred date" in body
-    assert "Scheduling notes" in body
+    assert "Additional Notes" in body
 
 
 def test_schedule_work_submission_records_work_request_type(client, app):
@@ -68,7 +68,7 @@ def test_schedule_work_submission_records_work_request_type(client, app):
         "/schedule-work",
         data={
             "full_name": "Taylor Grant",
-            "contact_information": "555-333-2222",
+            "phone": "555-333-2222",
             "services": ["Inspection"],
             "city": "14 Maple Ln",
             "preferred_date": "2026-05-15",
@@ -83,12 +83,12 @@ def test_schedule_work_submission_records_work_request_type(client, app):
         assert quote_request.request_type == "Work request"
 
 
-def test_admin_request_detail_shows_request_type_and_status_form(client, app, admin_user):
+def test_admin_request_detail_shows_status_form_and_submission_time(client, app, admin_user):
     client.post(
         "/quote-request",
         data={
             "full_name": "Casey Blake",
-            "contact_information": "555-444-9999",
+            "phone": "555-444-9999",
             "services": ["Painting"],
             "city": "77 Market St",
         },
@@ -104,9 +104,10 @@ def test_admin_request_detail_shows_request_type_and_status_form(client, app, ad
     response = client.get("/admin/requests/1")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Quote request" in body
+    assert "Submitted" in body
     assert "Request status" in body
     assert "name=\"status\"" in body
+    assert "Request type" not in body
 
 
 def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user):
@@ -114,7 +115,7 @@ def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user
         "/quote-request",
         data={
             "full_name": "Casey Blake",
-            "contact_information": "555-444-9999",
+            "phone": "555-444-9999",
             "services": ["Painting"],
             "city": "77 Market St",
         },
@@ -134,33 +135,47 @@ def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user
     assert "name=\"last_contacted_on\"" in body
 
 
-def test_admin_can_update_last_contacted_date(client, app, admin_user):
+def test_admin_can_edit_and_delete_own_internal_note(client, app, admin_user):
     client.post(
         "/quote-request",
         data={
             "full_name": "Casey Blake",
-            "contact_information": "555-444-9999",
+            "phone": "555-444-9999",
             "services": ["Painting"],
             "city": "77 Market St",
         },
         follow_redirects=False,
     )
-
     client.post(
         "/auth/login",
         data={"email": admin_user, "password": "password123", "remember_me": "y"},
         follow_redirects=False,
     )
+    client.post(
+        "/admin/requests/1/notes",
+        data={"note_text": "Initial internal note."},
+        follow_redirects=False,
+    )
+    response = client.post(
+        "/admin/notes/1/edit",
+        data={"edit-note-1-note_text": "Updated internal note."},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        note = RequestNote.query.one()
+        assert note.note_text == "Updated internal note."
 
     response = client.post(
-        "/admin/requests/1/last-contacted",
-        data={"last_contacted_on": "2026-04-24"},
-        follow_redirects=True,
+        "/admin/notes/1/delete",
+        data={},
+        follow_redirects=False,
     )
+    assert response.status_code == 302
 
-    assert response.status_code == 200
     with app.app_context():
-        assert QuoteRequest.query.one().last_contacted_on.isoformat() == "2026-04-24"
+        assert RequestNote.query.count() == 0
 
 
 def test_quote_request_validation_errors_do_not_save_request(client, app):
@@ -168,7 +183,8 @@ def test_quote_request_validation_errors_do_not_save_request(client, app):
         "/quote-request",
         data={
             "full_name": "",
-            "contact_information": "",
+            "phone": "",
+            "email": "",
             "services": [],
             "city": "",
         },
@@ -188,7 +204,7 @@ def test_public_quote_request_submission_creates_request(client, app):
         "/quote-request",
         data={
             "full_name": "Jordan Harper",
-            "contact_information": "555-111-2222",
+            "phone": "555-111-2222",
             "services": ["Landscape Design"],
             "city": "123 Garden St",
             "photos": [(BytesIO(JPEG_BYTES), "yard.jpg")],
@@ -212,7 +228,7 @@ def test_image_upload_is_stored_and_path_is_saved(client, app):
         "/quote-request",
         data={
             "full_name": "Morgan Ellis",
-            "contact_information": "555-888-1111",
+            "phone": "555-888-1111",
             "services": ["Roof Repair"],
             "city": "45 Cedar Ave",
             "photos": [(BytesIO(JPEG_BYTES), "leak.jpg")],
@@ -239,7 +255,7 @@ def test_upload_more_than_twenty_photos_is_rejected(client, app):
         "/quote-request",
         data={
             "full_name": "Jordan Harper",
-            "contact_information": "555-111-2222",
+            "phone": "555-111-2222",
             "services": ["Landscape Design"],
             "city": "123 Garden St",
             "photos": photo_data,
@@ -261,7 +277,7 @@ def test_invalid_upload_type_is_rejected(client, app):
         "/quote-request",
         data={
             "full_name": "Taylor Reed",
-            "contact_information": "555-000-1212",
+            "phone": "555-000-1212",
             "services": ["Window Cleaning"],
             "city": "88 Pine St",
             "photos": [(BytesIO(b"not-an-image"), "notes.pdf")],
@@ -283,7 +299,7 @@ def test_invalid_upload_content_is_rejected(client, app):
         "/quote-request",
         data={
             "full_name": "Signature Check",
-            "contact_information": "555-121-1212",
+            "phone": "555-121-1212",
             "services": ["Inspection"],
             "city": "17 Walnut Ave",
             "photos": [(BytesIO(b"not-a-real-jpeg"), "fake.jpg")],
@@ -305,7 +321,7 @@ def test_multiple_image_uploads_are_accepted(client, app):
         "/quote-request",
         data={
             "full_name": "Multi Image",
-            "contact_information": "555-121-1212",
+            "phone": "555-121-1212",
             "services": ["Inspection"],
             "city": "17 Walnut Ave",
             "photos": [
@@ -335,7 +351,7 @@ def test_quote_request_persists_even_if_email_hook_fails(client, app, monkeypatc
         "/quote-request",
         data={
             "full_name": "Email Hook Failure",
-            "contact_information": "555-434-3434",
+            "phone": "555-434-3434",
             "services": ["Painting"],
             "city": "55 Cedar Way",
         },
@@ -363,7 +379,7 @@ def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_u
         "/quote-request",
         data={
             "full_name": "Avery Stone",
-            "contact_information": "555-343-2222",
+            "phone": "555-343-2222",
             "services": ["Deck Staining"],
             "city": "18 Oak Lane",
             "photos": [(BytesIO(PNG_BYTES), "deck.png")],
@@ -392,7 +408,7 @@ def test_dashboard_lists_quote_requests(client, admin_user):
         "/quote-request",
         data={
             "full_name": "Jamie Cole",
-            "contact_information": "555-111-0000",
+            "phone": "555-111-0000",
             "services": ["Flooring"],
             "city": "14 Birch Rd",
         },
@@ -419,7 +435,7 @@ def test_dashboard_shows_newest_requests_first(client, admin_user):
         "/quote-request",
         data={
             "full_name": "First Request",
-            "contact_information": "555-100-0001",
+            "phone": "555-100-0001",
             "services": ["Siding"],
             "city": "1 First St",
         },
@@ -429,7 +445,7 @@ def test_dashboard_shows_newest_requests_first(client, admin_user):
         "/quote-request",
         data={
             "full_name": "Second Request",
-            "contact_information": "555-100-0002",
+            "phone": "555-100-0002",
             "services": ["Fence Repair"],
             "city": "2 Second St",
         },
@@ -526,7 +542,7 @@ def test_admin_can_login_update_status_and_add_note(client, app, admin_user):
         "/quote-request",
         data={
             "full_name": "Casey Blake",
-            "contact_information": "555-444-9999",
+            "phone": "555-444-9999",
             "services": ["Painting"],
             "city": "77 Market St",
         },
@@ -559,6 +575,7 @@ def test_admin_can_login_update_status_and_add_note(client, app, admin_user):
     with app.app_context():
         quote_request = QuoteRequest.query.one()
         assert quote_request.status == "Quoted"
+        assert quote_request.last_contacted_on.isoformat() == __import__('datetime').date.today().isoformat()
         assert quote_request.notes[0].note_text == "Reviewed photos and prepared pricing draft."
 
 
@@ -568,13 +585,13 @@ def test_scheduling_fields_are_hidden_when_disabled(client, app, admin_user):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Preferred date" not in body
-    assert "Scheduling notes" not in body
+    assert "Additional Notes" in body
 
     client.post(
         "/quote-request",
         data={
             "full_name": "Skyler Kent",
-            "contact_information": "555-222-3333",
+            "phone": "555-222-3333",
             "services": ["Inspection"],
             "city": "99 Maple Blvd",
         },
@@ -598,12 +615,12 @@ def test_quote_request_does_not_create_appointment_when_scheduling_disabled(clie
         "/quote-request",
         data={
             "full_name": "Nova Lane",
-            "contact_information": "nova@example.com",
+            "email": "nova@example.com",
             "services": ["Roof Repair"],
             "city": "141 Elm St",
             "preferred_date": "2026-05-01",
             "preferred_time_window": "10am - 2pm",
-            "scheduling_notes": "Please call before arrival.",
+            "additional_notes": "Please call before arrival.",
         },
         follow_redirects=False,
     )
@@ -624,24 +641,24 @@ def test_quote_request_creates_appointment_when_scheduling_enabled(client, app):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Preferred date" not in body
-    assert "Scheduling notes" not in body
+    assert "Additional Notes" in body
 
     response = client.get("/schedule-work")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Preferred date" in body
-    assert "Scheduling notes" in body
+    assert "Additional Notes" in body
 
     response = client.post(
         "/schedule-work",
         data={
             "full_name": "Ari Grant",
-            "contact_information": "ari@example.com",
+            "email": "ari@example.com",
             "services": ["Deck Staining"],
             "city": "202 Garden Path",
             "preferred_date": "2026-06-10",
             "preferred_time_window": "8am - 11am",
-            "scheduling_notes": "Please send a confirmation email.",
+            "additional_notes": "Please send a confirmation email.",
         },
         follow_redirects=False,
     )
@@ -656,4 +673,4 @@ def test_quote_request_creates_appointment_when_scheduling_enabled(client, app):
         assert appointment.status == "Requested"
         assert appointment.requested_date.isoformat() == "2026-06-10"
         assert appointment.requested_time_window == "8am - 11am"
-        assert appointment.customer_notes == "Please send a confirmation email."
+        assert appointment.internal_notes == "Please send a confirmation email."

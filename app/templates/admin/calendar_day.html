@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Agenda for {{ view_date.strftime('%b %d, %Y') }}{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>Agenda for {{ view_date.strftime('%A, %b %d, %Y') }}</h1>
+      <p class="subtle-text">View work across the day with time slots, duration blocks, and appointment detail links.</p>
+    </div>
+    <div class="detail-actions calendar-day-nav">
+      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=prev_date.year, month=prev_date.month, day=prev_date.day) }}">Previous day</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month) }}">Month view</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=next_date.year, month=next_date.month, day=next_date.day) }}">Next day</a>
+    </div>
+  </section>
+
+  <section class="agenda-page">
+    <div class="agenda-sidebar">
+      {% for hour in range(day_start, day_end + 1) %}
+        <div class="agenda-hour-label">{{ "%02d:00"|format(hour) }}</div>
+      {% endfor %}
+    </div>
+    <div class="agenda-body">
+      <div class="agenda-grid">
+        {% for hour in range(day_start, day_end) %}
+          <div class="agenda-grid-line"></div>
+        {% endfor %}
+        {% if scheduled_appointments %}
+          {% for item in scheduled_appointments %}
+            {% set appt = item.appointment %}
+            <a class="agenda-event" href="{{ url_for('admin.appointment_detail', appointment_id=appt.id) }}" style="top: {{ item.top_percent }}%; height: {{ item.height_percent }}%; left: {{ item.left_percent }}%; width: {{ item.width_percent }}%;">
+                <div class="agenda-event-row">
+                  <span class="agenda-event-time">{{ appt.start_time.strftime('%H:%M') }}&nbsp;–&nbsp;{{ appt.end_time.strftime('%H:%M') }}</span>
+                  <span class="status-badge status-{{ appt.status|lower|replace(' ', '-') }}">{{ appt.status }}</span>
+                </div>
+                <div class="agenda-event-title">{{ appt.customer.primary_name or appt.quote_request.full_name or 'Customer' }}</div>
+                <div class="agenda-event-subtitle">{{ appt.display_title }}</div>
+                {% if appt.recurring_work_id %}
+                  <div class="agenda-event-note">Recurring work #{{ appt.recurring_work_id }}</div>
+                {% endif %}
+            </a>
+          {% endfor %}
+        {% else %}
+          <div class="agenda-empty">No scheduled work on this day.</div>
+        {% endif %}
+      </div>
+
+      {% if unscheduled_appointments %}
+        <section class="section-bar compact-bar">
+          <h2>Unscheduled or out-of-range work</h2>
+        </section>
+        <div class="agenda-unscheduled">
+          {% for appointment in unscheduled_appointments %}
+            <article class="summary-card">
+              <div class="section-bar compact-bar">
+                <div>
+                  <h2>{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'No time' }}</h2>
+                  <p class="subtle-text">{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</p>
+                </div>
+                <span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span>
+              </div>
+              <div class="stacked-content">
+                <p><strong>{{ appointment.display_title }}</strong></p>
+                {% if appointment.quote_request_id %}
+                  <p><a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">View request #{{ appointment.quote_request_id }}</a></p>
+                {% endif %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% endblock %}

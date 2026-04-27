@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Customer records{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>Customer records</h1>
+      <p>View and manage internal customer records, billing, and request history.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+    </div>
+  </section>
+
+  <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Customers</h2>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>City</th>
+            <th>Billing</th>
+            <th>Last activity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for customer in customers %}
+            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.customer_detail', customer_id=customer.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.customer_detail', customer_id=customer.id) }}'">
+              <td>{{ customer.primary_name or 'Unnamed' }}</td>
+              <td>{{ customer.primary_phone or '—' }}</td>
+              <td>{{ customer.primary_email or '—' }}</td>
+              <td>{{ customer.primary_city or '—' }}</td>
+              <td>
+                {% if customer.billing_amount is not none %}
+                  {{ customer.billing_amount }}
+                {% else %}
+                  —
+                {% endif %}
+                {% if customer.billing_frequency %}
+                  <span class="subtle-text">/{{ customer.billing_frequency }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if customer.last_activity %}
+                  {{ customer.last_activity.strftime('%b %d, %Y') }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="empty-state">No customers created yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

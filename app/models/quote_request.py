@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, Time
 
 from app.extensions import db
 
@@ -10,7 +10,7 @@ from app.extensions import db
 QUOTE_REQUEST_STATUSES = ("New", "Contacted", "Quoted", "Won", "Lost")
 REQUEST_TYPES = ("Quote request", "Work request")
 
-APPOINTMENT_STATUSES = ("Requested", "Confirmed", "Rescheduled", "Completed", "Cancelled", "No Show")
+APPOINTMENT_STATUSES = ("Requested", "Scheduled", "Completed", "Cancelled", "Rescheduled", "No Show")
 
 quote_request_service_options = db.Table(
     "quote_request_service_options",
@@ -62,8 +62,10 @@ class QuoteRequest(db.Model):
     city = db.Column(db.String(255), nullable=False)
     status = db.Column(db.String(32), nullable=False, default="New")
     request_type = db.Column(db.String(32), nullable=False, default="Quote request")
+    additional_notes = db.Column(db.Text, nullable=True)
     last_contacted_on = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    customer_id = db.Column(db.Integer, db.ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
 
     services = db.relationship(
         "ServiceOption",
@@ -89,6 +91,7 @@ class QuoteRequest(db.Model):
         cascade="all, delete-orphan",
         order_by="RequestNote.created_at.desc()",
     )
+    customer = db.relationship("Customer", back_populates="quote_requests")
 
     @property
     def service_list_display(self) -> str:
@@ -103,7 +106,13 @@ class Appointment(db.Model):
     __tablename__ = "appointments"
 
     id = db.Column(db.Integer, primary_key=True)
-    quote_request_id = db.Column(db.Integer, db.ForeignKey("quote_requests.id"), nullable=False, index=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
+    quote_request_id = db.Column(db.Integer, db.ForeignKey("quote_requests.id"), nullable=True, index=True)
+    recurring_work_id = db.Column(db.Integer, db.ForeignKey("recurring_works.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = db.Column(db.String(255), nullable=True)
+    scheduled_date = db.Column(db.Date, nullable=True)
+    start_time = db.Column(Time, nullable=True)
+    end_time = db.Column(Time, nullable=True)
     requested_date = db.Column(db.Date, nullable=True)
     requested_time_window = db.Column(db.String(120), nullable=True)
     confirmed_date = db.Column(db.Date, nullable=True)
@@ -116,6 +125,12 @@ class Appointment(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     quote_request = db.relationship("QuoteRequest", back_populates="appointments")
+    customer = db.relationship("Customer", back_populates="appointments")
+    recurring_work = db.relationship(
+        "RecurringWork",
+        back_populates="appointments",
+        foreign_keys=[recurring_work_id],
+    )
     previous_appointment = db.relationship(
         "Appointment",
         remote_side=[id],
@@ -123,10 +138,21 @@ class Appointment(db.Model):
         foreign_keys=[previous_appointment_id],
     )
 
+    @property
+    def display_title(self) -> str:
+        if self.title:
+            return self.title
+        if self.quote_request and self.quote_request.full_name:
+            return f"Appointment for {self.quote_request.full_name}"
+        if self.customer and self.customer.primary_name:
+            return f"Appointment for {self.customer.primary_name}"
+        return "Scheduled work"
+
     def __repr__(self) -> str:
         return (
-            f"<Appointment {self.id} for request {self.quote_request_id} "
-            f"status={self.status} requested={self.requested_date}>")
+            f"<Appointment {self.id} customer={self.customer_id} request={self.quote_request_id} "
+            f"status={self.status} scheduled={self.scheduled_date}>"
+        )
 
 class RequestPhoto(db.Model):
     __tablename__ = "request_photos"

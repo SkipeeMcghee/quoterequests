@@ -20,16 +20,33 @@
           {% for error in form.full_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
 
-        <label class="form-field field-span-2">
-          <span>Contact Information</span>
-          {{ form.contact_information(class_="input", placeholder="Phone/Email") }}
-          {% for error in form.contact_information.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
+        <div class="form-field field-span-2">
+          <span>Contact information</span>
+          <div class="contact-grid">
+            <label class="form-field contact-field">
+              {{ form.phone(class_="input", placeholder="Phone (optional)") }}
+              {% for error in form.phone.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+
+            <div class="contact-or">OR</div>
+
+            <label class="form-field contact-field">
+              {{ form.email(class_="input", placeholder="Email (optional)") }}
+              {% for error in form.email.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+          </div>
+        </div>
 
         <label class="form-field field-span-2">
           <span>Location</span>
           {{ form.city(class_="input", placeholder="City") }}
           {% for error in form.city.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+
+        <label class="form-field field-span-2">
+          <span>Additional Notes</span>
+          {{ form.additional_notes(class_="textarea textarea--small") }}
+          {% for error in form.additional_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
 
         <div class="form-field field-span-2">

@@ -7,6 +7,7 @@
   <section class="section-intro split-intro">
     <div>
       <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
       <h1>Quote requests</h1>
       <p>Track every inquiry from first contact to final outcome without leaving the server-rendered workflow.</p>
     </div>
@@ -19,6 +20,18 @@
         <strong>{{ quote_requests | selectattr('status', 'equalto', 'New') | list | length }}</strong>
         <span>Need first response</span>
       </article>
+    </div>
+    <div class="dashboard-actions">
+      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Requests</a>
+      {% if enable_calendar %}
+        <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">Schedule</a>
+      {% endif %}
+      {% if enable_customer_records %}
+        <a class="button button-secondary" href="{{ url_for('admin.customer_list') }}">Customers</a>
+      {% endif %}
+      {% if enable_recurring_work %}
+        <a class="button button-secondary" href="{{ url_for('admin.recurring_work_list') }}">Recurring Work</a>
+      {% endif %}
     </div>
   </section>
 
@@ -88,4 +101,29 @@
     </div>
   </section>
 </main>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const toolbar = document.querySelector('.dashboard-view-toolbar');
+  const requestsPanel = document.getElementById('requests-panel');
+  if (!toolbar || !requestsPanel) {
+    return;
+  }
+
+  toolbar.addEventListener('click', function (event) {
+    const button = event.target.closest('button[data-view]');
+    if (!button) {
+      return;
+    }
+
+    toolbar.querySelectorAll('.button-toggle').forEach((btn) => {
+      btn.classList.toggle('active', btn === button);
+    });
+
+    const view = button.dataset.view;
+    requestsPanel.style.display = view === 'requests' ? '' : 'none';
+  });
+})();
+</script>
 {% endblock %}

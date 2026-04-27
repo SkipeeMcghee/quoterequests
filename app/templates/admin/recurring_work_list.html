@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Recurring Work{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>Recurring work</h1>
+      <p class="subtle-text">Review active recurring work and navigate directly to customer records or generated appointments.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+    </div>
+  </section>
+
+  <section class="table-card">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Customer</th>
+            <th>Schedule</th>
+            <th>Starts</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for work in recurring_works %}
+            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.recurring_work_detail', recurring_work_id=work.id) }}'">
+              <td>{{ work.id }}</td>
+              <td>{{ work.customer.primary_name or 'Unnamed' }}</td>
+              <td>
+                {% if work.frequency == 'weekly' %}
+                  Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][work.day_of_week] }}
+                {% else %}
+                  Monthly on day {{ work.day_of_month }}
+                {% endif %}
+              </td>
+              <td>{{ work.starts_on.strftime('%b %d, %Y') }}</td>
+              <td>{{ work.status }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="5" class="empty-state">No recurring work configured.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

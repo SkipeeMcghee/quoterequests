@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}Customer: {{ customer.primary_name or 'Unnamed' }}{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="split-intro section-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>{{ customer.primary_name or 'Unnamed customer' }}</h1>
+      <p class="subtle-text">Manage this customer record, alternate contact values, billing, and linked history.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+      <a class="button-secondary" href="{{ url_for('admin.customer_list') }}">Back to customers</a>
+      <a class="button button-secondary" href="{{ url_for('admin.customer_merge', customer_id=customer.id) }}">Merge customer</a>
+    </div>
+  </section>
+
+        <dl class="detail-list vertical-list">
+          <div>
+            <dt>Name</dt>
+            <dd>{{ customer.primary_name or 'None' }}</dd>
+          </div>
+          <div>
+            <dt>Phone</dt>
+            <dd>{{ customer.primary_phone or 'None' }}</dd>
+          </div>
+          <div>
+            <dt>Email</dt>
+            <dd>{{ customer.primary_email or 'None' }}</dd>
+          </div>
+          <div>
+            <dt>City</dt>
+            <dd>{{ customer.primary_city or 'None' }}</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="summary-card" id="billing">
+        <div class="section-bar compact-bar">
+          <h2>Billing</h2>
+        </div>
+        <form method="post" action="{{ url_for('admin.update_customer_billing_route', customer_id=customer.id) }}" class="stacked-form">
+          {{ billing_form.hidden_tag() }}
+          <label class="form-field">
+            <span>Amount</span>
+            {{ billing_form.billing_amount(class_="input") }}
+            {% for error in billing_form.billing_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Frequency</span>
+            {{ billing_form.billing_frequency(class_="select") }}
+          </label>
+          {{ billing_form.submit(class_="button") }}
+        </form>
+      </article>
+    </div>
+
+    <div class="detail-grid">
+      <article class="summary-card" id="fields">
+        <div class="section-bar compact-bar">
+          <h2>Alternate contact values</h2>
+        </div>
+
+        {% for kind, fields in customer.fields_by_kind.items() %}
+          <div class="field-group">
+            <h3>{{ kind|capitalize }}s</h3>
+            {% if fields %}
+              <div class="tag-list">
+                {% for field in fields %}
+                  <article class="tag-pill tag-pill--interactive">
+                    <strong>{{ field.value }}</strong>
+                    {% if field.is_primary %}
+                      <span class="subtle-text">(primary)</span>
+                    {% else %}
+                      <form method="post" action="{{ url_for('admin.set_primary_field_route', customer_id=customer.id) }}" class="inline-form">
+                        {{ set_primary_field_form.hidden_tag() }}
+                        {{ set_primary_field_form.field_id(value=field.id) }}
+                        {{ set_primary_field_form.submit(class_="button button-small button-secondary", value="Make primary") }}
+                      </form>
+                    {% endif %}
+                  </article>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="subtle-text">No alternate {{ kind }} values.</p>
+            {% endif %}
+          </div>
+        {% endfor %}
+
+        <div class="section-bar compact-bar">
+          <h3>Add alternate value</h3>
+        </div>
+        <form method="post" action="{{ url_for('admin.add_customer_field_route', customer_id=customer.id) }}" class="stacked-form">
+          {{ add_field_form.hidden_tag() }}
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Type</span>
+              {{ add_field_form.kind(class_="select") }}
+            </label>
+            <label class="form-field">
+              <span>Value</span>
+              {{ add_field_form.value(class_="input") }}
+            </label>
+          </div>
+          {{ add_field_form.submit(class_="button") }}
+        </form>
+      </article>
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <div class="detail-grid">
+      <article class="summary-card" id="notes">
+        <div class="section-bar compact-bar">
+          <h2>Customer notes</h2>
+        </div>
+        <form method="post" action="{{ url_for('admin.add_customer_note_route', customer_id=customer.id) }}" class="stacked-form">
+          {{ note_form.hidden_tag() }}
+          <label class="form-field">
+            <span>Add note</span>
+            {{ note_form.note_text(class_="textarea") }}
+            {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          {{ note_form.submit(class_="button") }}
+        </form>
+
+        <div class="notes-list">
+          {% for note in customer.notes %}
+            <article class="note-item">
+              <div class="note-header">
+                <div>
+                  <strong>{{ note.author.email }}</strong>
+                  <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+                </div>
+              </div>
+              <p>{{ note.note_text }}</p>
+            </article>
+          {% else %}
+            <div class="empty-state">No customer notes yet.</div>
+          {% endfor %}
+        </div>
+      </article>
+    </div>
+
+    <div class="detail-grid">
+      <article class="summary-card" id="requests">
+        <div class="section-bar compact-bar">
+          <h2>Linked requests</h2>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for request in customer.quote_requests %}
+                <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.request_detail', request_id=request.id) }}'">
+                  <td>{{ request.id }}</td>
+                  <td>{{ request.request_type|replace(' request', '')|lower }}</td>
+                  <td>{{ request.status }}</td>
+                  <td>{{ request.created_at.strftime('%b %d, %Y') }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="4" class="empty-state">No linked quote/work requests.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      {% if enable_recurring_work %}
+      <article class="summary-card" id="recurring-work">
+        <div class="section-bar compact-bar">
+          <h2>Recurring work</h2>
+        </div>
+        {% if customer.recurring_works %}
+          <ul class="recurring-list">
+            {% for recurring_work in customer.recurring_works %}
+              <li>
+                <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id) }}">{{ recurring_work.title or (recurring_work.frequency|capitalize) }}</a></strong>
+                <div class="subtle-text">
+                  {% if recurring_work.frequency == 'weekly' %}
+                    Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][recurring_work.day_of_week] }}
+                  {% else %}
+                    Monthly on day {{ recurring_work.day_of_month }}
+                  {% endif %}
+                  · starts {{ recurring_work.starts_on.strftime('%b %d, %Y') }}
+                  {% if recurring_work.ends_on %} · ends {{ recurring_work.ends_on.strftime('%b %d, %Y') }}{% endif %}
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+          <form method="post" action="{{ url_for('admin.generate_recurring_appointments_route', customer_id=customer.id) }}" class="stacked-form">
+            {{ generate_recurring_appointments_form.hidden_tag() }}
+            <label class="form-field">
+              <span>Generate appointments for</span>
+              {{ generate_recurring_appointments_form.days_ahead(class_="select") }}
+            </label>
+            {{ generate_recurring_appointments_form.submit(class_="button") }}
+          </form>
+        {% else %}
+          <p class="subtle-text">No recurring work configured for this customer.</p>
+        {% endif %}
+      </article>
+      {% endif %}
+
+      <article class="summary-card" id="appointments">
+        <div class="section-bar compact-bar">
+          <h2>Linked appointments</h2>
+          <a class="button button-small button-secondary" href="{{ url_for('admin.recurring_work_list') }}">All recurring work</a>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Request</th>
+                <th>Status</th>
+                <th>Requested</th>
+                <th>Confirmed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for appointment in appointments %}
+                <tr>
+                  <td>
+                    <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">#{{ appointment.id }}</a>
+                    {% if appointment.quote_request_id %}
+                      <div class="subtle-text">Request #{{ appointment.quote_request_id }}</div>
+                    {% endif %}
+                  </td>
+                  <td>{{ appointment.status }}</td>
+                  <td>{{ appointment.requested_date.strftime('%b %d, %Y') if appointment.requested_date else '—' }}</td>
+                  <td>{{ appointment.confirmed_date.strftime('%b %d, %Y') if appointment.confirmed_date else '—' }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="4" class="empty-state">No linked appointments.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  </section>
+</main>
+{% endblock %}

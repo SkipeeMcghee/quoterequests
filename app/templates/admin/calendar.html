@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Calendar{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>Schedule</h1>
+      <p class="subtle-text">Browse scheduled work in a month view and click any day to see its agenda.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+    </div>
+  </section>
+
+  <section class="calendar-toolbar section-bar">
+    <div>
+      <h2>{{ month_name }} {{ year }}</h2>
+    </div>
+    <div class="calendar-nav">
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month) }}">Previous</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">This month</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month) }}">Next</a>
+    </div>
+  </section>
+
+  <section class="calendar-grid">
+    {% for name in day_names %}
+      <div class="calendar-cell calendar-cell--header">{{ name }}</div>
+    {% endfor %}
+
+    {% for week in month_matrix %}
+      {% for day in week %}
+        {% if day %}
+          {% set cell_date = date(year, month, day) %}
+          <a class="calendar-cell calendar-cell--day {% if cell_date == today %}calendar-cell--today{% endif %}" href="{{ url_for('admin.calendar_day_view', year=year, month=month, day=day) }}">
+            <div class="calendar-day-label">{{ day }}</div>
+            <div class="calendar-appointments">
+              {% for appointment in appointments_by_date.get(cell_date, [])[:3] %}
+                <article class="calendar-appointment-preview">
+                  <span class="calendar-time">{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'All day' }}</span>
+                  <strong>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</strong>
+                  <div class="subtle-text">{{ appointment.display_title }}</div>
+                </article>
+              {% endfor %}
+              {% if appointments_by_date.get(cell_date, [])|length > 3 %}
+                <div class="calendar-more">+{{ appointments_by_date.get(cell_date, [])|length - 3 }} more</div>
+              {% endif %}
+            </div>
+          </a>
+        {% else %}
+          <div class="calendar-cell calendar-cell--empty"></div>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.calendar-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.calendar-nav .button {
+  margin-left: 0.5rem;
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.calendar-cell {
+  border: 1px solid #d3d3d3;
+  padding: 0.75rem;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+}
+.calendar-cell--header {
+  background: #f4f4f4;
+  font-weight: 700;
+  text-align: center;
+}
+.calendar-cell--empty {
+  background: #fafafa;
+  border-color: transparent;
+}
+.calendar-cell--day {
+  transition: background 0.2s ease;
+}
+.calendar-cell--day:hover {
+  background: #fbfbfb;
+}
+.calendar-cell--today {
+  border-color: #005b94;
+  background: #eef7ff;
+}
+.calendar-day-label {
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.calendar-appointment-preview {
+  margin-bottom: 0.5rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 5px;
+  background: #f8f8f8;
+}
+.calendar-appointment-preview strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.calendar-time {
+  display: inline-block;
+  margin-bottom: 0.25rem;
+  font-size: 0.85rem;
+  color: #303030;
+}
+.calendar-more {
+  margin-top: auto;
+  font-size: 0.9rem;
+  color: #666;
+}
+</style>
+{% endblock %}

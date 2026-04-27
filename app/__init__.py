@@ -57,8 +57,13 @@ def register_login_manager() -> None:
 
 def register_context_processors(app: Flask) -> None:
     @app.context_processor
-    def inject_scheduling_flag() -> dict[str, bool]:
-        return {"enable_scheduling": app.config.get("ENABLE_SCHEDULING", False)}
+    def inject_feature_flags() -> dict[str, bool]:
+        return {
+            "enable_scheduling": app.config.get("ENABLE_SCHEDULING", False),
+            "enable_customer_records": app.config.get("ENABLE_CUSTOMER_RECORDS", False),
+            "enable_calendar": app.config.get("ENABLE_CALENDAR", False),
+            "enable_recurring_work": app.config.get("ENABLE_RECURRING_WORK", False),
+        }
 
 
 def register_error_handlers(app: Flask) -> None:

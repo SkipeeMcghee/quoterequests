@@ -29,11 +29,16 @@ SERVICE_CHOICES = [
 
 class QuoteRequestForm(FlaskForm):
     full_name = StringField("Name", validators=[DataRequired(), Length(max=255)])
-    contact_information = StringField("Contact Information", validators=[DataRequired(), Length(max=255)])
+    phone = StringField("Phone", validators=[Optional(), Length(max=50)])
+    email = EmailField("Email", validators=[Optional(), Length(max=255)])
     city = StringField("Location", validators=[DataRequired(), Length(max=255)])
     preferred_date = DateField("Preferred date", validators=[Optional()])
     preferred_time_window = StringField("Preferred time window", validators=[Optional(), Length(max=120)])
-    scheduling_notes = TextAreaField("Scheduling notes", validators=[Optional(), Length(max=2000)])
+    additional_notes = TextAreaField(
+        "Additional Notes",
+        validators=[Optional(), Length(max=2000)],
+        render_kw={"placeholder": "Optional", "rows": 1},
+    )
     services = SelectMultipleField(
         "Services",
         choices=[],
@@ -71,16 +76,17 @@ class QuoteRequestForm(FlaskForm):
             self.photos.errors.append("You can upload up to 20 photos.")
             return False
 
-        contact = (self.contact_information.data or "").strip()
-        if not contact:
-            self.contact_information.errors.append("Provide a phone number or email address.")
+        phone = (self.phone.data or "").strip()
+        email = (self.email.data or "").strip()
+        if not phone and not email:
+            self.phone.errors.append("Provide a phone number or email address.")
             return False
 
-        if "@" in contact:
+        if email:
             try:
-                Email()(self, self.contact_information)
+                Email()(self, self.email)
             except ValidationError as exc:
-                self.contact_information.errors.append(str(exc))
+                self.email.errors.append(str(exc))
                 return False
 
         return True

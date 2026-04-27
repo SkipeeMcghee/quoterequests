@@ -1,0 +1,12 @@
+<section class="dashboard-actions admin-nav-buttons">
+  <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Requests</a>
+  {% if enable_calendar %}
+    <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">Schedule</a>
+  {% endif %}
+  {% if enable_customer_records %}
+    <a class="button button-secondary" href="{{ url_for('admin.customer_list') }}">Customers</a>
+  {% endif %}
+  {% if enable_recurring_work %}
+    <a class="button button-secondary" href="{{ url_for('admin.recurring_work_list') }}">Recurring Work</a>
+  {% endif %}
+</section>

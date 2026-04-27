@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Merge customer: {{ source.primary_name or 'Unnamed' }}{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="split-intro section-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      <h1>Merge customer</h1>
+      <p class="subtle-text">Select a surviving target customer and confirm the merge.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button-secondary" href="{{ url_for('admin.customer_detail', customer_id=source.id) }}">Back to customer</a>
+    </div>
+  </section>
+
+  <section class="section-intro">
+    <div class="detail-card">
+      <h2>Source customer</h2>
+      <dl class="detail-list vertical-list">
+        <div><dt>Name</dt><dd>{{ source.primary_name or 'None' }}</dd></div>
+        <div><dt>Email</dt><dd>{{ source.primary_email or 'None' }}</dd></div>
+        <div><dt>Phone</dt><dd>{{ source.primary_phone or 'None' }}</dd></div>
+        <div><dt>City</dt><dd>{{ source.primary_city or 'None' }}</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="detail-card">
+    <form method="post" action="{{ url_for('admin.customer_merge_action', customer_id=source.id) }}" class="stacked-form">
+      {{ merge_form.hidden_tag() }}
+      <label class="form-field">
+        <span>Surviving customer</span>
+        {{ merge_form.target_customer_id(class_="select") }}
+        {% for error in merge_form.target_customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+      <label class="form-field">
+        <span>Confirm merge</span>
+        {{ merge_form.confirm() }}
+        {% for error in merge_form.confirm.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+      <div class="subtle-text">
+        All linked quote/work requests will move to the surviving customer. Source customer will be deleted.
+      </div>
+      {{ merge_form.submit(class_="button button-primary") }}
+    </form>
+  </section>
+</main>
+{% endblock %}

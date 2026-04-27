@@ -7,8 +7,10 @@
   <section class="split-intro section-intro">
     <div>
       <p class="eyebrow">Request #{{ quote_request.id }}</p>
+      {% include "admin/nav_buttons.html" %}
       <h1>{{ quote_request.full_name }}</h1>
-      <p class="subtle-text">{{ quote_request.request_type }} · {{ quote_request.service_list_display or 'No services selected' }} in {{ quote_request.city }}</p>
+      <p class="subtle-text">{{ quote_request.service_list_display or 'No services selected' }} in {{ quote_request.city }}</p>
+      <p class="subtle-text">Submitted {{ quote_request.created_at.strftime('%b %d, %Y %I:%M %p') }}</p>
     </div>
     <div class="detail-actions">
       <form method="post" action="{{ url_for('admin.update_status', request_id=quote_request.id) }}" class="status-form" id="status-form">
@@ -26,7 +28,7 @@
         <div class="section-bar compact-bar">
           <h2>Request details</h2>
         </div>
-        <dl class="detail-list">
+        <dl class="detail-list vertical-list">
           <div>
             <dt>Contact</dt>
             <dd>
@@ -43,28 +45,86 @@
               </div>
             </dd>
           </div>
+          {% if enable_customer_records and quote_request.customer %}
+            <div>
+              <dt>Linked customer</dt>
+              <dd>
+                <div class="contact-block">
+                  <div class="contact-row"><span class="contact-label">Name:</span> <span>{{ quote_request.customer.primary_name or 'Unnamed' }}</span></div>
+                  {% if quote_request.customer.primary_email %}
+                    <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ quote_request.customer.primary_email }}</span></div>
+                  {% endif %}
+                  {% if quote_request.customer.primary_phone %}
+                    <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ quote_request.customer.primary_phone }}</span></div>
+                  {% endif %}
+                  {% if quote_request.customer.primary_city %}
+                    <div class="contact-row"><span class="contact-label">City:</span> <span>{{ quote_request.customer.primary_city }}</span></div>
+                  {% endif %}
+                </div>
+              </dd>
+            </div>
+          {% elif enable_customer_records and customer_matches %}
+            <div class="customer-match-card">
+              <dt>Customer match</dt>
+              <dd>
+                <p class="subtle-text">Existing customer matches found for this request. Confirm link to one of these records or create a new customer later.</p>
+                <div class="customer-match-list">
+                  {% for customer in customer_matches %}
+                    <article class="customer-match-item">
+                      <div>
+                        <strong>{{ customer.primary_name or 'Unnamed customer' }}</strong>
+                        <div class="subtle-text">
+                          {% if customer.primary_email %}{{ customer.primary_email }}{% endif %}
+                          {% if customer.primary_email and customer.primary_phone %} · {% endif %}
+                          {% if customer.primary_phone %}{{ customer.primary_phone }}{% endif %}
+                        </div>
+                      </div>
+                      <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="inline-form">
+                        {{ link_customer_form.hidden_tag() }}
+                        {{ link_customer_form.customer_id(value=customer.id) }}
+                        {{ link_customer_form.submit(class_="button button-small") }}
+                      </form>
+                    </article>
+                  {% endfor %}
+                  {% if customer_matches|length > 1 %}
+                    <p class="subtle-text">Multiple customers match this request. Confirm the correct customer before linking.</p>
+                  {% endif %}
+                </div>
+              </dd>
+            </div>
+          {% else %}
+            {% if enable_customer_records %}
+              <div class="customer-match-card">
+                <dt>Customer match</dt>
+                <dd>
+                  <p class="subtle-text">No existing customer matches found. Create a new internal customer record for this request if desired.</p>
+                  <form method="post" action="{{ url_for('admin.create_customer_route', request_id=quote_request.id) }}" class="inline-form">
+                    {{ create_customer_form.hidden_tag() }}
+                    {{ create_customer_form.submit(class_="button button-small") }}
+                  </form>
+                </dd>
+              </div>
+            {% endif %}
+          {% endif %}
           <div>
             <dt>City</dt>
             <dd>{{ quote_request.city }}</dd>
           </div>
           <div>
-            <dt>Request type</dt>
-            <dd>{{ quote_request.request_type }}</dd>
+            <dt>Additional notes</dt>
+            <dd>{{ quote_request.additional_notes or 'None' }}</dd>
           </div>
           <div>
             <dt>Last contacted on</dt>
             <dd>
-              <form method="post" action="{{ url_for('admin.update_last_contacted_on_route', request_id=quote_request.id) }}" class="stacked-form" id="request-details">
+              <form method="post" action="{{ url_for('admin.update_last_contacted_on_route', request_id=quote_request.id) }}" class="stacked-form" id="last-contacted-form">
                 {{ last_contacted_form.hidden_tag() }}
-                <div class="form-grid">
-                  <label class="form-field">
-                    {{ last_contacted_form.last_contacted_on(class_="input") }}
-                    {% for error in last_contacted_form.last_contacted_on.errors %}
-                      <small class="field-error">{{ error }}</small>
-                    {% endfor %}
-                  </label>
-                  {{ last_contacted_form.submit(class_="button button-secondary button-small") }}
-                </div>
+                <label class="form-field">
+                  {{ last_contacted_form.last_contacted_on(class_="input compact-input", id="last-contacted-on") }}
+                  {% for error in last_contacted_form.last_contacted_on.errors %}
+                    <small class="field-error">{{ error }}</small>
+                  {% endfor %}
+                </label>
               </form>
             </dd>
           </div>
@@ -110,38 +170,54 @@
 
           {% if quote_request.current_appointment %}
             {% set appointment = quote_request.current_appointment %}
-            <dl class="detail-list">
+            <dl class="detail-list vertical-list">
               <div>
                 <dt>Status</dt>
                 <dd>{{ appointment.status }}</dd>
               </div>
               <div>
-                <dt>Requested</dt>
+                <dt>Scheduled</dt>
                 <dd>
-                  {{ appointment.requested_date.strftime('%b %d, %Y') if appointment.requested_date else 'Not set' }}
-                  {% if appointment.requested_time_window %}
-                    · {{ appointment.requested_time_window }}
+                  {{ appointment.scheduled_date.strftime('%b %d, %Y') if appointment.scheduled_date else 'Not set' }}
+                  {% if appointment.start_time and appointment.end_time %}
+                    · {{ appointment.start_time.strftime('%H:%M') }} – {{ appointment.end_time.strftime('%H:%M') }}
                   {% endif %}
                 </dd>
               </div>
               <div>
-                <dt>Confirmed</dt>
-                <dd>
-                  {{ appointment.confirmed_date.strftime('%b %d, %Y') if appointment.confirmed_date else 'Not set' }}
-                  {% if appointment.confirmed_time_window %}
-                    · {{ appointment.confirmed_time_window }}
-                  {% endif %}
-                </dd>
-              </div>
-              <div>
-                <dt>Customer notes</dt>
-                <dd>{{ appointment.customer_notes or 'None' }}</dd>
-              </div>
-              <div>
-                <dt>Scheduling details</dt>
-                <dd>{{ appointment.internal_notes or 'None' }}</dd>
+                <dt>Appointment</dt>
+                <dd><a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">View appointment #{{ appointment.id }}</a></dd>
               </div>
             </dl>
+
+            <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id) }}" class="stacked-form" id="confirmed-details-form">
+              {{ appointment_form.hidden_tag() }}
+              <div class="form-grid">
+                <label class="form-field">
+                  <span>Scheduled date</span>
+                  {{ appointment_form.scheduled_date(class_="input") }}
+                </label>
+                <label class="form-field">
+                  <span>Start time</span>
+                  {{ appointment_form.start_time(class_="input") }}
+                </label>
+                <label class="form-field">
+                  <span>End time</span>
+                  {{ appointment_form.end_time(class_="input") }}
+                </label>
+              </div>
+              <div class="form-grid">
+                <label class="form-field">
+                  <span>Status</span>
+                  {{ appointment_form.status(class_="select") }}
+                </label>
+              </div>
+              <label class="form-field">
+                <span>Internal notes</span>
+                {{ appointment_form.internal_notes(class_="textarea") }}
+              </label>
+              {{ appointment_form.submit(class_="button") }}
+            </form>
 
             <form method="post" action="{{ url_for('admin.update_appointment_status_route', appointment_id=appointment.id) }}" class="stacked-form">
               {{ appointment_status_form.hidden_tag() }}
@@ -152,56 +228,6 @@
               {{ appointment_status_form.submit(class_="button") }}
             </form>
 
-            <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
-              {{ appointment_form.hidden_tag() }}
-              <div class="form-grid">
-                <label class="form-field">
-                  <span>Requested date</span>
-                  {{ appointment_form.requested_date(class_="input") }}
-                </label>
-                <label class="form-field">
-                  <span>Requested time window</span>
-                  {{ appointment_form.requested_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
-                </label>
-                <label class="form-field">
-                  <span>Confirmed date</span>
-                  {{ appointment_form.confirmed_date(class_="input") }}
-                </label>
-                <label class="form-field">
-                  <span>Confirmed time window</span>
-                  {{ appointment_form.confirmed_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
-                </label>
-                <label class="form-field field-span-2">
-                  <span>Customer notes</span>
-                  {{ appointment_form.customer_notes(class_="textarea") }}
-                </label>
-                <label class="form-field field-span-2">
-                  <span>Scheduling details</span>
-                  {{ appointment_form.internal_notes(class_="textarea") }}
-                </label>
-              </div>
-              {{ appointment_form.submit(class_="button") }}
-            </form>
-
-            <form method="post" action="{{ url_for('admin.reschedule_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
-              {{ reschedule_form.hidden_tag() }}
-              <div class="form-grid">
-                <label class="form-field">
-                  <span>Reschedule date</span>
-                  {{ reschedule_form.requested_date(class_="input") }}
-                </label>
-                <label class="form-field">
-                  <span>Time window</span>
-                  {{ reschedule_form.requested_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
-                </label>
-                <label class="form-field field-span-2">
-                  <span>Scheduling details</span>
-                  {{ reschedule_form.internal_notes(class_="textarea") }}
-                </label>
-              </div>
-              {{ reschedule_form.submit(class_="button") }}
-            </form>
-
             {% if quote_request.appointments|length > 1 %}
               <div class="appointment-history">
                 <h3>Appointment history</h3>
@@ -209,7 +235,7 @@
                   <article class="history-item">
                     <div class="history-header">
                       <strong>{{ old_appointment.status }}</strong>
-                      <span class="subtle-text">{{ old_appointment.requested_date.strftime('%b %d, %Y') if old_appointment.requested_date else 'No date' }}{% if old_appointment.requested_time_window %} · {{ old_appointment.requested_time_window }}{% endif %}</span>
+                      <span class="subtle-text">{{ old_appointment.scheduled_date.strftime('%b %d, %Y') if old_appointment.scheduled_date else 'No date' }}{% if old_appointment.start_time and old_appointment.end_time %} · {{ old_appointment.start_time.strftime('%H:%M') }} – {{ old_appointment.end_time.strftime('%H:%M') }}{% endif %}</span>
                     </div>
                     <div class="history-body">
                       <p>{{ old_appointment.customer_notes or 'No customer notes' }}</p>
@@ -220,28 +246,51 @@
               </div>
             {% endif %}
           {% else %}
-            <form method="post" action="{{ url_for('admin.create_appointment_route', request_id=quote_request.id) }}" class="stacked-form">
-              {{ appointment_form.hidden_tag() }}
-              <div class="form-grid">
+            {% if quote_request.customer %}
+              <form method="post" action="{{ url_for('admin.create_appointment_route', request_id=quote_request.id) }}" class="stacked-form">
+                {{ appointment_form.hidden_tag() }}
+                {{ appointment_form.customer_id(type="hidden") }}
+                <div class="form-grid">
+                  <label class="form-field">
+                    <span>Scheduled date</span>
+                    {{ appointment_form.scheduled_date(class_="input") }}
+                  </label>
+                  <label class="form-field">
+                    <span>Start time</span>
+                    {{ appointment_form.start_time(class_="input") }}
+                  </label>
+                  <label class="form-field">
+                    <span>End time</span>
+                    {{ appointment_form.end_time(class_="input") }}
+                  </label>
+                </div>
+                <div class="form-grid">
+                  <label class="form-field">
+                    <span>Status</span>
+                    {{ appointment_form.status(class_="select") }}
+                  </label>
+                </div>
                 <label class="form-field">
-                  <span>Requested date</span>
-                  {{ appointment_form.requested_date(class_="input") }}
-                </label>
-                <label class="form-field">
-                  <span>Requested time window</span>
-                  {{ appointment_form.requested_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
-                </label>
-                <label class="form-field field-span-2">
-                  <span>Customer notes</span>
-                  {{ appointment_form.customer_notes(class_="textarea") }}
-                </label>
-                <label class="form-field field-span-2">
                   <span>Internal notes</span>
                   {{ appointment_form.internal_notes(class_="textarea") }}
                 </label>
+                {{ appointment_form.submit(class_="button", value="Schedule work") }}
+              </form>
+            {% else %}
+              <div class="notice-card">
+                <p class="subtle-text">This request is not linked to a customer. Link an existing customer or create a new customer before scheduling work.</p>
+                <div class="button-row">
+                  <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="inline-form">
+                    {{ link_customer_form.hidden_tag() }}
+                    <button type="submit" class="button button-secondary">Link customer</button>
+                  </form>
+                  <form method="post" action="{{ url_for('admin.create_customer_route', request_id=quote_request.id) }}" class="inline-form">
+                    {{ create_customer_form.hidden_tag() }}
+                    <button type="submit" class="button">Create customer</button>
+                  </form>
+                </div>
               </div>
-              {{ appointment_form.submit(class_="button") }}
-            </form>
+            {% endif %}
           {% endif %}
         </article>
       {% endif %}
@@ -262,10 +311,37 @@
 
         <div class="notes-list">
           {% for note in quote_request.notes %}
-            <article>
-              <strong>{{ note.author.email }}</strong>
-              <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+            <article class="note-item">
+              <div class="note-header">
+                <div>
+                  <strong>{{ note.author.email }}</strong>
+                  <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+                </div>
+                {% if note.created_by == current_user.id %}
+                  <div class="note-actions">
+                    <button type="button" class="button button-small note-edit-toggle" data-note-id="{{ note.id }}">Edit</button>
+                    <form method="post" action="{{ url_for('admin.delete_note_route', note_id=note.id) }}" class="inline-form">
+                      {{ delete_note_form.hidden_tag() }}
+                      <button type="submit" class="button button-small button-secondary">Delete</button>
+                    </form>
+                  </div>
+                {% endif %}
+              </div>
               <p>{{ note.note_text }}</p>
+              {% if note.created_by == current_user.id %}
+                <div id="note-edit-panel-{{ note.id }}" class="note-edit-panel hidden">
+                  <form method="post" action="{{ url_for('admin.edit_note_route', note_id=note.id) }}" class="stacked-form">
+                    {{ edit_note_forms[note.id].hidden_tag() }}
+                    <label class="form-field">
+                      {{ edit_note_forms[note.id].note_text(class_="textarea textarea--small") }}
+                      {% for error in edit_note_forms[note.id].note_text.errors %}
+                        <small class="field-error">{{ error }}</small>
+                      {% endfor %}
+                    </label>
+                    {{ edit_note_forms[note.id].submit(class_="button button-small") }}
+                  </form>
+                </div>
+              {% endif %}
             </article>
           {% else %}
             <div class="empty-state">No internal notes yet.</div>
@@ -276,7 +352,6 @@
   </section>
 </main>
 {% endblock %}
-
 {% block scripts %}
 <script>
 (function () {
@@ -286,6 +361,36 @@
     statusSelect.addEventListener('change', function () {
       statusForm.submit();
     });
+  }
+
+  const lastContactedForm = document.getElementById('last-contacted-form');
+  const lastContactedInput = document.getElementById('last-contacted-on');
+  if (lastContactedForm && lastContactedInput) {
+    lastContactedInput.addEventListener('change', function () {
+      lastContactedForm.submit();
+    });
+  }
+
+  const confirmedDetailsForm = document.getElementById('confirmed-details-form');
+  const confirmedDate = document.getElementById('confirmed-date');
+  const confirmedTimeWindow = document.getElementById('confirmed-time-window');
+  const confirmedDetails = document.getElementById('confirmed-details');
+  if (confirmedDetailsForm) {
+    const submitConfirmed = function () {
+      confirmedDetailsForm.submit();
+    };
+
+    if (confirmedDate) {
+      confirmedDate.addEventListener('change', submitConfirmed);
+    }
+
+    if (confirmedTimeWindow) {
+      confirmedTimeWindow.addEventListener('change', submitConfirmed);
+    }
+
+    if (confirmedDetails) {
+      confirmedDetails.addEventListener('blur', submitConfirmed);
+    }
   }
 })();
 </script>

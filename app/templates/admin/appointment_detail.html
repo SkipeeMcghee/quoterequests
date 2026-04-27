@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}Appointment #{{ appointment.id }}{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>Appointment #{{ appointment.id }}</h1>
+      <p class="subtle-text">Edit the scheduled work details, review linked records, and preserve reschedule history.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=calendar_year, month=calendar_month, day=appointment.scheduled_date.day if appointment.scheduled_date else today.day) }}">Back to day</a>
+      {% if appointment.customer %}
+        <a class="button button-secondary" href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id) }}">Customer</a>
+      {% endif %}
+      {% if appointment.quote_request_id %}
+        <a class="button button-secondary" href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">Request</a>
+      {% endif %}
+    </div>
+  </section>
+
+
+  <section class="detail-grid">
+    <article class="summary-card">
+      <div class="section-bar compact-bar">
+        <h2>Appointment details</h2>
+      </div>
+      <dl class="detail-list vertical-list">
+        <div>
+          <dt>Status</dt>
+          <dd>{{ appointment.status }}</dd>
+        </div>
+        <div>
+          <dt>Scheduled</dt>
+          <dd>
+            {{ appointment.scheduled_date.strftime('%b %d, %Y') if appointment.scheduled_date else 'Not set' }}
+            {% if appointment.start_time and appointment.end_time %}
+              · {{ appointment.start_time.strftime('%H:%M') }} – {{ appointment.end_time.strftime('%H:%M') }}
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Customer</dt>
+          <dd>
+            {% if appointment.customer %}
+              <a href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id) }}">{{ appointment.customer.primary_name or 'Customer' }}</a>
+            {% else %}
+              None
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Quote/work request</dt>
+          <dd>
+            {% if appointment.quote_request_id %}
+              <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">#{{ appointment.quote_request_id }}</a>
+            {% else %}
+              None
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Recurring work</dt>
+          <dd>
+            {% if appointment.recurring_work %}
+              Recurring work #{{ appointment.recurring_work.id }}
+            {% else %}
+              None
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Created</dt>
+          <dd>{{ appointment.created_at.strftime('%b %d, %Y %I:%M %p') }}</dd>
+        </div>
+      </dl>
+    </article>
+
+    <article class="summary-card">
+      <div class="section-bar compact-bar">
+        <h2>Edit scheduling</h2>
+      </div>
+      <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
+        {{ appointment_form.hidden_tag() }}
+        <div class="form-grid">
+          <label class="form-field">
+            <span>Scheduled date</span>
+            {{ appointment_form.scheduled_date(class_="input") }}
+          </label>
+          <label class="form-field">
+            <span>Start time</span>
+            {{ appointment_form.start_time(class_="input") }}
+          </label>
+          <label class="form-field">
+            <span>End time</span>
+            {{ appointment_form.end_time(class_="input") }}
+          </label>
+        </div>
+        <div class="form-grid">
+          <label class="form-field">
+            <span>Status</span>
+            {{ appointment_form.status(class_="select") }}
+          </label>
+        </div>
+        <label class="form-field">
+          <span>Internal notes</span>
+          {{ appointment_form.internal_notes(class_="textarea") }}
+        </label>
+        {{ appointment_form.submit(class_="button") }}
+      </form>
+    </article>
+  </section>
+
+  <section class="detail-grid">
+    <article class="summary-card">
+      <div class="section-bar compact-bar">
+        <h2>Reschedule</h2>
+      </div>
+      <form method="post" action="{{ url_for('admin.reschedule_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
+        {{ reschedule_form.hidden_tag() }}
+        <div class="form-grid">
+          <label class="form-field">
+            <span>New requested date</span>
+            {{ reschedule_form.requested_date(class_="input") }}
+          </label>
+          <label class="form-field">
+            <span>New time window</span>
+            {{ reschedule_form.requested_time_window(class_="input") }}
+          </label>
+        </div>
+        <label class="form-field">
+          <span>Internal notes</span>
+          {{ reschedule_form.internal_notes(class_="textarea") }}
+        </label>
+        {{ reschedule_form.submit(class_="button") }}
+      </form>
+    </article>
+
+    <article class="summary-card">
+      <div class="section-bar compact-bar">
+        <h2>History</h2>
+      </div>
+      {% if history or future_reschedules %}
+        <div class="notes-list">
+          {% for past in history %}
+            <article class="note-item">
+              <div class="note-header">
+                <div>
+                  <strong>Previous version</strong>
+                  <div class="subtle-text">{{ past.scheduled_date.strftime('%b %d, %Y') if past.scheduled_date else 'No date' }}{% if past.start_time and past.end_time %} · {{ past.start_time.strftime('%H:%M') }} – {{ past.end_time.strftime('%H:%M') }}{% endif %}</div>
+                </div>
+              </div>
+              <p>Status: {{ past.status }}</p>
+              <p>{{ past.customer_notes or 'No customer notes' }}</p>
+              <p class="subtle-text">Rescheduled to appointment #{{ past.id }}</p>
+            </article>
+          {% endfor %}
+          {% for future in future_reschedules %}
+            <article class="note-item">
+              <div class="note-header">
+                <div>
+                  <strong>Rescheduled to</strong>
+                  <div class="subtle-text">{{ future.scheduled_date.strftime('%b %d, %Y') if future.scheduled_date else 'No date' }}{% if future.start_time and future.end_time %} · {{ future.start_time.strftime('%H:%M') }} – {{ future.end_time.strftime('%H:%M') }}{% endif %}</div>
+                </div>
+              </div>
+              <p>Status: {{ future.status }}</p>
+              <p>{{ future.customer_notes or 'No customer notes' }}</p>
+              <p class="subtle-text">Appointment #{{ future.id }}</p>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="subtle-text">No reschedule history for this appointment.</p>
+      {% endif %}
+    </article>
+  </section>
+</main>
+{% endblock %}

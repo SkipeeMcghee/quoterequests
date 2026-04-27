@@ -26,17 +26,20 @@ def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorag
         for photo in save_request_photos(uploaded_files or [], quote_request.id):
             quote_request.photos.append(photo)
 
-        if current_app.config.get("ENABLE_SCHEDULING"):
+        additional_notes = (form.additional_notes.data or "").strip() or None
+        if additional_notes:
+            quote_request.additional_notes = additional_notes
+
+        if current_app.config.get("ENABLE_SCHEDULING") and request_type == "Work request":
             preferred_date = form.preferred_date.data
             preferred_window = (form.preferred_time_window.data or "").strip() or None
-            scheduling_notes = (form.scheduling_notes.data or "").strip() or None
-            if preferred_date or preferred_window or scheduling_notes:
+            if preferred_date or preferred_window or additional_notes:
                 appointment = Appointment(
                     quote_request=quote_request,
                     requested_date=preferred_date,
                     requested_time_window=preferred_window,
-                    customer_notes=scheduling_notes,
-                    internal_notes=None,
+                    customer_notes=None,
+                    internal_notes=additional_notes,
                     status="Requested",
                 )
                 db.session.add(appointment)
@@ -54,14 +57,8 @@ def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorag
 
 
 def _quote_request_payload(form: QuoteRequestForm, request_type: str) -> tuple[dict[str, str | None], list[str]]:
-    contact = (form.contact_information.data or "").strip()
-    phone = None
-    email = None
-    if contact:
-        if "@" in contact:
-            email = contact.lower()
-        else:
-            phone = contact
+    phone = (form.phone.data or "").strip() or None
+    email = (form.email.data or "").strip().lower() or None
 
     service_names = [name.strip() for name in (form.services.data or []) if name and name.strip()]
     return (
@@ -71,6 +68,7 @@ def _quote_request_payload(form: QuoteRequestForm, request_type: str) -> tuple[d
             "email": email,
             "city": form.city.data.strip(),
             "request_type": request_type,
+            "additional_notes": (form.additional_notes.data or "").strip() or None,
         },
         list(dict.fromkeys(service_names)),
     )
