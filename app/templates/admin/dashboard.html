@@ -21,18 +21,6 @@
         <span>Need first response</span>
       </article>
     </div>
-    <div class="dashboard-actions">
-      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Requests</a>
-      {% if enable_calendar %}
-        <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">Schedule</a>
-      {% endif %}
-      {% if enable_customer_records %}
-        <a class="button button-secondary" href="{{ url_for('admin.customer_list') }}">Customers</a>
-      {% endif %}
-      {% if enable_recurring_work %}
-        <a class="button button-secondary" href="{{ url_for('admin.recurring_work_list') }}">Recurring Work</a>
-      {% endif %}
-    </div>
   </section>
 
   <section class="table-card">
@@ -62,7 +50,7 @@
                 <div class="subtle-text">{{ item.city }}</div>
               </td>
               <td>
-                <span class="tag-pill">{{ item.request_type|replace(' request', '')|lower }}</span>
+                <span class="tag-pill">{{ (item.request_type or 'Unknown')|replace(' request', '')|lower }}</span>
               </td>
               <td>
                 {% if item.service_list_display %}

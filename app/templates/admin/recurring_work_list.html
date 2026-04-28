@@ -12,7 +12,8 @@
       <p class="subtle-text">Review active recurring work and navigate directly to customer records or generated appointments.</p>
     </div>
     <div class="detail-actions">
-      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+      <a class="button button-primary" href="{{ url_for('admin.customer_list') }}">Add recurring work</a>
     </div>
   </section>
 
@@ -26,6 +27,7 @@
             <th>Schedule</th>
             <th>Starts</th>
             <th>Status</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -42,6 +44,7 @@
               </td>
               <td>{{ work.starts_on.strftime('%b %d, %Y') }}</td>
               <td>{{ work.status }}</td>
+              <td><a class="button button-small button-secondary" href="{{ url_for('admin.recurring_work_detail', recurring_work_id=work.id) }}">Edit</a></td>
             </tr>
           {% else %}
             <tr>

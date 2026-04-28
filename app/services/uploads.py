@@ -10,7 +10,7 @@ from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import BadRequest
 from werkzeug.utils import secure_filename
 
-from app.models import RequestPhoto
+from app.models import CustomerPhoto, RequestPhoto
 
 
 IMAGE_SIGNATURES: dict[str, tuple[bytes, ...]] = {
@@ -76,6 +76,42 @@ def get_request_photo_dirs(quote_request_id: int) -> tuple[Path, Path]:
 
 def cleanup_request_photo_dir(quote_request_id: int) -> None:
     _, target_dir = get_request_photo_dirs(quote_request_id)
+    if target_dir.exists():
+        shutil.rmtree(target_dir, ignore_errors=True)
+
+
+def save_customer_photos(files: list[FileStorage], customer_id: int) -> list[CustomerPhoto]:
+    photos: list[CustomerPhoto] = []
+    for file in files:
+        if file is None or not file.filename:
+            continue
+
+        extension = _validate_file(file)
+        original_name = secure_filename(file.filename)
+        if not original_name:
+            raise BadRequest("Uploaded file name is invalid.")
+
+        relative_dir, target_dir = get_customer_photo_dirs(customer_id)
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        stem = Path(original_name).stem or "photo"
+        stored_name = f"{uuid4().hex}-{stem}.{extension}"
+        absolute_path = target_dir / stored_name
+        file.save(absolute_path)
+
+        photos.append(CustomerPhoto(file_path=str(relative_dir / stored_name).replace("\\", "/")))
+
+    return photos
+
+
+def get_customer_photo_dirs(customer_id: int) -> tuple[Path, Path]:
+    relative_dir = Path("uploads") / "customers" / str(customer_id)
+    target_dir = Path(current_app.config["UPLOAD_FOLDER"]) / "customers" / str(customer_id)
+    return relative_dir, target_dir
+
+
+def cleanup_customer_photo_dir(customer_id: int) -> None:
+    _, target_dir = get_customer_photo_dirs(customer_id)
     if target_dir.exists():
         shutil.rmtree(target_dir, ignore_errors=True)
 

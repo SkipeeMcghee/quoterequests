@@ -80,14 +80,17 @@ textarea {
 }
 
 .site-nav a {
-  padding: 0.15rem 0;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
 
 .ghost-button {
   border: 0;
   background: transparent;
-  padding: 0;
+  padding: 0.15rem 0.35rem;
   cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
 }
 
 .flash-stack {
@@ -280,6 +283,7 @@ textarea {
   border: 0;
   cursor: pointer;
   text-decoration: none;
+  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
 
 .button {
@@ -299,13 +303,31 @@ textarea {
   color: var(--card);
 }
 
+.button:focus-visible,
+.button-secondary:focus-visible,
+.ghost-button:focus-visible,
+.site-nav a:focus-visible,
+.brand:focus-visible {
+  outline: 2px solid rgba(77, 23, 23, 0.9);
+  outline-offset: 3px;
+}
+
 .button:hover,
 .button-secondary:hover,
 .action-link:hover,
 .site-nav a:hover,
 .ghost-button:hover,
 .brand:hover {
-  opacity: 0.88;
+  opacity: 0.9;
+}
+
+.button:active,
+.button-secondary:active,
+.site-nav a:active,
+.ghost-button:active,
+.brand:active {
+  transform: translateY(1px);
+  opacity: 0.85;
 }
 
 .stacked-form,

@@ -14,28 +14,55 @@
     <div class="detail-actions">
       <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
       <a class="button-secondary" href="{{ url_for('admin.customer_list') }}">Back to customers</a>
+      {% if enable_recurring_work %}
+        <a class="button button-primary" href="{{ url_for('admin.recurring_work_list') }}">Add recurring work</a>
+      {% endif %}
       <a class="button button-secondary" href="{{ url_for('admin.customer_merge', customer_id=customer.id) }}">Merge customer</a>
     </div>
   </section>
 
-        <dl class="detail-list vertical-list">
-          <div>
-            <dt>Name</dt>
-            <dd>{{ customer.primary_name or 'None' }}</dd>
+  <section class="summary-grid">
+    <div class="detail-grid">
+      <article class="summary-card" id="customer-info">
+        <div class="section-bar compact-bar">
+          <h2>Customer information</h2>
+        </div>
+        <form method="post" action="{{ url_for('admin.update_customer_info_route', customer_id=customer.id) }}" class="stacked-form">
+          {{ customer_info_form.hidden_tag() }}
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Name</span>
+              {{ customer_info_form.primary_name(class_="input") }}
+              {% for error in customer_info_form.primary_name.errors %}
+                <small class="field-error">{{ error }}</small>
+              {% endfor %}
+            </label>
+            <label class="form-field">
+              <span>City</span>
+              {{ customer_info_form.primary_city(class_="input") }}
+              {% for error in customer_info_form.primary_city.errors %}
+                <small class="field-error">{{ error }}</small>
+              {% endfor %}
+            </label>
           </div>
-          <div>
-            <dt>Phone</dt>
-            <dd>{{ customer.primary_phone or 'None' }}</dd>
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Phone</span>
+              {{ customer_info_form.primary_phone(class_="input") }}
+              {% for error in customer_info_form.primary_phone.errors %}
+                <small class="field-error">{{ error }}</small>
+              {% endfor %}
+            </label>
+            <label class="form-field">
+              <span>Email</span>
+              {{ customer_info_form.primary_email(class_="input") }}
+              {% for error in customer_info_form.primary_email.errors %}
+                <small class="field-error">{{ error }}</small>
+              {% endfor %}
+            </label>
           </div>
-          <div>
-            <dt>Email</dt>
-            <dd>{{ customer.primary_email or 'None' }}</dd>
-          </div>
-          <div>
-            <dt>City</dt>
-            <dd>{{ customer.primary_city or 'None' }}</dd>
-          </div>
-        </dl>
+          {{ customer_info_form.submit(class_="button") }}
+        </form>
       </article>
 
       <article class="summary-card" id="billing">
@@ -58,6 +85,41 @@
       </article>
     </div>
 
+    <div class="detail-grid">
+      <article class="summary-card" id="gallery">
+        <div class="section-bar compact-bar">
+          <h2>Image gallery</h2>
+        </div>
+        <div class="photo-grid">
+          {% for photo in customer.photos %}
+            {% if photo.file_path %}
+              <a class="photo-card" href="{{ url_for('static', filename=photo.file_path) }}" target="_blank" rel="noreferrer">
+                <img src="{{ url_for('static', filename=photo.file_path) }}" alt="Customer photo {{ loop.index }}">
+              </a>
+            {% else %}
+              <div class="photo-card empty-state">Missing photo reference</div>
+            {% endif %}
+          {% else %}
+            <div class="empty-state">No photos uploaded for this customer yet.</div>
+          {% endfor %}
+        </div>
+
+        <form method="post" action="{{ url_for('admin.upload_customer_photos_route', customer_id=customer.id) }}" enctype="multipart/form-data" class="stacked-form">
+          {{ photo_upload_form.hidden_tag() }}
+          <label class="form-field">
+            <span>Upload images</span>
+            {{ photo_upload_form.photos(class_="input", multiple="multiple") }}
+            {% for error in photo_upload_form.photos.errors %}
+              <small class="field-error">{{ error }}</small>
+            {% endfor %}
+          </label>
+          {{ photo_upload_form.submit(class_="button") }}
+        </form>
+      </article>
+    </div>
+  </section>
+
+  <section class="summary-grid">
     <div class="detail-grid">
       <article class="summary-card" id="fields">
         <div class="section-bar compact-bar">
@@ -108,11 +170,7 @@
           {{ add_field_form.submit(class_="button") }}
         </form>
       </article>
-    </div>
-  </section>
 
-  <section class="summary-grid">
-    <div class="detail-grid">
       <article class="summary-card" id="notes">
         <div class="section-bar compact-bar">
           <h2>Customer notes</h2>
@@ -132,7 +190,7 @@
             <article class="note-item">
               <div class="note-header">
                 <div>
-                  <strong>{{ note.author.email }}</strong>
+                  <strong>{{ note.author.email if note.author else 'Unknown author' }}</strong>
                   <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
                 </div>
               </div>
@@ -164,7 +222,7 @@
               {% for request in customer.quote_requests %}
                 <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.request_detail', request_id=request.id) }}'">
                   <td>{{ request.id }}</td>
-                  <td>{{ request.request_type|replace(' request', '')|lower }}</td>
+                  <td>{{ (request.request_type or 'Unknown')|replace(' request', '')|lower }}</td>
                   <td>{{ request.status }}</td>
                   <td>{{ request.created_at.strftime('%b %d, %Y') }}</td>
                 </tr>
@@ -181,7 +239,10 @@
       {% if enable_recurring_work %}
       <article class="summary-card" id="recurring-work">
         <div class="section-bar compact-bar">
-          <h2>Recurring work</h2>
+          <div>
+            <h2>Recurring work</h2>
+          </div>
+          <a class="button button-small button-secondary" href="{{ url_for('admin.recurring_work_list') }}">Add recurring work</a>
         </div>
         {% if customer.recurring_works %}
           <ul class="recurring-list">
@@ -190,9 +251,19 @@
                 <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id) }}">{{ recurring_work.title or (recurring_work.frequency|capitalize) }}</a></strong>
                 <div class="subtle-text">
                   {% if recurring_work.frequency == 'weekly' %}
-                    Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][recurring_work.day_of_week] }}
+                    {% if recurring_work.day_of_week is not none and 0 <= recurring_work.day_of_week < 7 %}
+                      Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][recurring_work.day_of_week] }}
+                    {% else %}
+                      Weekly schedule unavailable
+                    {% endif %}
+                  {% elif recurring_work.frequency == 'monthly' %}
+                    {% if recurring_work.day_of_month is not none %}
+                      Monthly on day {{ recurring_work.day_of_month }}
+                    {% else %}
+                      Monthly schedule unavailable
+                    {% endif %}
                   {% else %}
-                    Monthly on day {{ recurring_work.day_of_month }}
+                    Schedule configuration unavailable
                   {% endif %}
                   · starts {{ recurring_work.starts_on.strftime('%b %d, %Y') }}
                   {% if recurring_work.ends_on %} · ends {{ recurring_work.ends_on.strftime('%b %d, %Y') }}{% endif %}

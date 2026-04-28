@@ -8,7 +8,8 @@ from sqlalchemy.orm import selectinload
 from werkzeug.exceptions import BadRequest, NotFound
 
 from app.extensions import db
-from app.models import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, Appointment, Customer, CustomerField, CustomerNote, QuoteRequest, RecurringWork, RequestNote, User
+from app.models import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, Appointment, Customer, CustomerField, CustomerNote, CustomerPhoto, QuoteRequest, RecurringWork, RequestNote, User
+from app.services.uploads import save_customer_photos
 
 
 def list_quote_requests() -> list[QuoteRequest]:
@@ -290,6 +291,33 @@ def add_customer_note(customer_id: int, note_text: str, user: User) -> CustomerN
     db.session.add(note)
     db.session.commit()
     return note
+
+
+def update_customer_info(customer_id: int, primary_name: str, primary_phone: str | None, primary_email: str | None, primary_city: str | None) -> Customer:
+    customer = get_customer(customer_id)
+    cleaned_name = (primary_name or "").strip()
+    if not cleaned_name:
+        raise BadRequest("Customer name cannot be blank.")
+    cleaned_city = (primary_city or "").strip()
+    if not cleaned_city:
+        raise BadRequest("Customer city cannot be blank.")
+
+    customer.primary_name = cleaned_name
+    customer.primary_phone = (primary_phone or "").strip() or None
+    customer.primary_email = (primary_email or "").strip().lower() or None
+    customer.primary_city = cleaned_city
+    db.session.commit()
+    return customer
+
+
+def upload_customer_photos(customer_id: int, uploaded_files: list) -> list[CustomerPhoto]:
+    customer = get_customer(customer_id)
+    photos = save_customer_photos(uploaded_files, customer_id)
+    for photo in photos:
+        photo.customer = customer
+        db.session.add(photo)
+    db.session.commit()
+    return photos
 
 
 def get_appointment(appointment_id: int) -> Appointment:

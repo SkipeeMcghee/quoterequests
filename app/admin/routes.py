@@ -10,7 +10,9 @@ from app.forms.admin import (
     CreateCustomerForm,
     CustomerBillingForm,
     CustomerFieldForm,
+    CustomerInfoForm,
     CustomerNoteForm,
+    CustomerPhotoUploadForm,
     DeleteNoteForm,
     LastContactedForm,
     LinkCustomerForm,
@@ -45,6 +47,8 @@ from app.services.admin_requests import (
     update_appointment,
     update_appointment_status,
     update_customer_billing,
+    update_customer_info,
+    upload_customer_photos,
     generate_recurring_appointments_for_customer,
     update_last_contacted_on,
     update_request_note,
@@ -267,6 +271,13 @@ def request_detail(request_id: int):
     }
     delete_note_form = DeleteNoteForm(prefix="delete-note")
     link_customer_form = LinkCustomerForm(prefix="link-customer")
+    link_customer_form.manual_customer_id.choices = [
+        (0, "Choose an existing customer"),
+        *[
+            (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
+            for customer in list_customers()
+        ],
+    ]
     create_customer_form = CreateCustomerForm(prefix="create-customer")
     customer_matches = find_customer_matches_for_request(quote_request)
     customer_billing_form = CustomerBillingForm(
@@ -367,6 +378,17 @@ def create_appointment_route(request_id: int):
 
     form = AppointmentForm(prefix="create")
     quote_request = get_quote_request(request_id)
+    if quote_request.customer:
+        form.customer_id.choices = [
+            (quote_request.customer.id, quote_request.customer.primary_name or 'Customer')
+        ]
+        form.customer_id.data = quote_request.customer.id
+    else:
+        form.customer_id.choices = [
+            (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
+            for customer in list_customers()
+        ]
+
     if form.validate_on_submit():
         if quote_request.customer_id is None and not form.customer_id.data:
             flash("Choose a customer or link the request before scheduling.", "error")
@@ -374,7 +396,7 @@ def create_appointment_route(request_id: int):
             flash("Enter a scheduled date before saving.", "error")
         else:
             if quote_request.customer_id is None and form.customer_id.data:
-                link_quote_request_to_customer(request_id, form.customer_id.data)
+                link_quote_request_to_customer(request_id, int(form.customer_id.data))
             create_appointment(
                 request_id,
                 requested_date=form.requested_date.data,
@@ -402,13 +424,28 @@ def link_customer_route(request_id: int):
 
     form = LinkCustomerForm(prefix="link-customer")
     if form.validate_on_submit():
-        try:
-            link_quote_request_to_customer(request_id, int(form.customer_id.data))
-            flash("Request linked to existing customer.", "success")
-        except Exception as exc:
-            flash(str(exc), "error")
+        selected_customer_id = None
+        if form.customer_id.data:
+            try:
+                selected_customer_id = int(form.customer_id.data)
+            except (TypeError, ValueError):
+                selected_customer_id = None
+        elif form.manual_customer_id.data:
+            try:
+                selected_customer_id = int(form.manual_customer_id.data)
+            except (TypeError, ValueError):
+                selected_customer_id = None
+
+        if selected_customer_id:
+            try:
+                link_quote_request_to_customer(request_id, selected_customer_id)
+                flash("Request linked to existing customer.", "success")
+            except Exception as exc:
+                flash(str(exc), "error")
+        else:
+            flash("Select an existing customer before linking.", "error")
     else:
-        flash("Select a valid customer before linking.", "error")
+        flash("Select an existing customer before linking.", "error")
 
     return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="customer-matching"))
 
@@ -465,12 +502,19 @@ def customer_detail(customer_id: int):
     if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     customer = get_customer(customer_id)
-    customer = get_customer(customer_id)
     billing_form = CustomerBillingForm(
         billing_amount=customer.billing_amount,
         billing_frequency=customer.billing_frequency,
         prefix="customer-billing",
     )
+    customer_info_form = CustomerInfoForm(
+        prefix="customer-info",
+        primary_name=customer.primary_name,
+        primary_phone=customer.primary_phone,
+        primary_email=customer.primary_email,
+        primary_city=customer.primary_city,
+    )
+    photo_upload_form = CustomerPhotoUploadForm(prefix="customer-photos")
     add_field_form = CustomerFieldForm(prefix="add-customer-field")
     note_form = CustomerNoteForm(prefix="customer-note")
     set_primary_field_form = SetPrimaryFieldForm(prefix="set-primary")
@@ -484,6 +528,8 @@ def customer_detail(customer_id: int):
         "admin/customer_detail.html",
         customer=customer,
         billing_form=billing_form,
+        customer_info_form=customer_info_form,
+        photo_upload_form=photo_upload_form,
         add_field_form=add_field_form,
         note_form=note_form,
         set_primary_field_form=set_primary_field_form,
@@ -557,6 +603,47 @@ def update_customer_billing_route(customer_id: int):
     else:
         flash("Correct the billing information before saving.", "error")
     return redirect(url_for("admin.customer_detail", customer_id=customer_id, _anchor="billing"))
+
+
+@bp.post("/customers/<int:customer_id>/info")
+@login_required
+def update_customer_info_route(customer_id: int):
+    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+        return redirect(url_for("admin.dashboard"))
+    form = CustomerInfoForm(prefix="customer-info")
+    if form.validate_on_submit():
+        try:
+            update_customer_info(
+                customer_id,
+                form.primary_name.data,
+                form.primary_phone.data,
+                form.primary_email.data,
+                form.primary_city.data,
+            )
+            flash("Customer details updated.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Correct the customer details before saving.", "error")
+    return redirect(url_for("admin.customer_detail", customer_id=customer_id, _anchor="customer-info"))
+
+
+@bp.post("/customers/<int:customer_id>/photos")
+@login_required
+def upload_customer_photos_route(customer_id: int):
+    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+        return redirect(url_for("admin.dashboard"))
+    form = CustomerPhotoUploadForm(prefix="customer-photos")
+    if form.validate_on_submit():
+        try:
+            files = request.files.getlist("customer-photos-photos")
+            upload_customer_photos(customer_id, files)
+            flash("Customer photos uploaded.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Upload valid image files before saving.", "error")
+    return redirect(url_for("admin.customer_detail", customer_id=customer_id, _anchor="gallery"))
 
 
 @bp.post("/customers/<int:customer_id>/fields")

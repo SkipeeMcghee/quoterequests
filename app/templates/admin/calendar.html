@@ -13,17 +13,18 @@
     </div>
     <div class="detail-actions">
       <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
+      <a class="button button-primary" href="{{ url_for('main.schedule_work') }}">Add work</a>
     </div>
   </section>
 
-  <section class="calendar-toolbar section-bar">
+  <section class="calendar-toolbar section-bar" id="calendar">
     <div>
       <h2>{{ month_name }} {{ year }}</h2>
     </div>
     <div class="calendar-nav">
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month) }}">Previous</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">This month</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month) }}">Next</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month) }}#calendar">Previous</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}#calendar">This month</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month) }}#calendar">Next</a>
     </div>
   </section>
 
@@ -36,7 +37,7 @@
       {% for day in week %}
         {% if day %}
           {% set cell_date = date(year, month, day) %}
-          <a class="calendar-cell calendar-cell--day {% if cell_date == today %}calendar-cell--today{% endif %}" href="{{ url_for('admin.calendar_day_view', year=year, month=month, day=day) }}">
+          <a class="calendar-cell calendar-cell--day {% if cell_date == today %}calendar-cell--today{% endif %}" href="{{ url_for('admin.calendar_day_view', year=year, month=month, day=day) }}" title="View schedule for {{ cell_date.strftime('%B %d, %Y') }}" aria-label="View schedule for {{ cell_date.strftime('%B %d, %Y') }}">
             <div class="calendar-day-label">{{ day }}</div>
             <div class="calendar-appointments">
               {% for appointment in appointments_by_date.get(cell_date, [])[:3] %}
@@ -96,14 +97,23 @@
   border-color: transparent;
 }
 .calendar-cell--day {
-  transition: background 0.2s ease;
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  border-color: #d3d3d3;
 }
-.calendar-cell--day:hover {
-  background: #fbfbfb;
+.calendar-cell--day:hover,
+.calendar-cell--day:focus-visible {
+  background: #eef7ff;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(0, 91, 148, 0.08);
+}
+.calendar-cell--day:focus-visible {
+  outline: 2px solid #005b94;
+  outline-offset: 2px;
 }
 .calendar-cell--today {
   border-color: #005b94;
-  background: #eef7ff;
+  background: #e6f2ff;
 }
 .calendar-day-label {
   font-weight: 700;

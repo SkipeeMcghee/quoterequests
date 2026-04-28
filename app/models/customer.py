@@ -50,6 +50,12 @@ class Customer(db.Model):
         cascade="all, delete-orphan",
         order_by="RecurringWork.starts_on.desc()",
     )
+    photos = db.relationship(
+        "CustomerPhoto",
+        back_populates="customer",
+        cascade="all, delete-orphan",
+        order_by="CustomerPhoto.created_at.desc()",
+    )
 
     def __repr__(self) -> str:
         return f"<Customer {self.id} {self.primary_name or 'Unnamed'}>"
@@ -102,6 +108,20 @@ class CustomerNote(db.Model):
 
     def __repr__(self) -> str:
         return f"<CustomerNote customer={self.customer_id} author={self.created_by}>"
+
+
+class CustomerPhoto(db.Model):
+    __tablename__ = "customer_photos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_path = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    customer = db.relationship("Customer", back_populates="photos")
+
+    def __repr__(self) -> str:
+        return f"<CustomerPhoto {self.id} customer={self.customer_id} file={self.file_path}>"
 
 
 class RecurringWork(db.Model):

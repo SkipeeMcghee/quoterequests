@@ -107,7 +107,8 @@ def test_admin_request_detail_shows_status_form_and_submission_time(client, app,
     assert "Submitted" in body
     assert "Request status" in body
     assert "name=\"status\"" in body
-    assert "Request type" not in body
+    assert "Request type" in body
+    assert "Quote request" in body
 
 
 def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user):

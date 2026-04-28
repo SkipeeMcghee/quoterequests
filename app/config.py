@@ -52,10 +52,10 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     TESTING = True
     WTF_CSRF_ENABLED = False
-    ENABLE_SCHEDULING = True
-    ENABLE_CUSTOMER_RECORDS = True
-    ENABLE_CALENDAR = True
-    ENABLE_RECURRING_WORK = True
+    ENABLE_SCHEDULING = False
+    ENABLE_CUSTOMER_RECORDS = False
+    ENABLE_CALENDAR = False
+    ENABLE_RECURRING_WORK = False
     SQLALCHEMY_DATABASE_URI = os.getenv("TEST_DATABASE_URL", "sqlite+pysqlite:///:memory:")
 
 

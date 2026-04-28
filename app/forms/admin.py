@@ -1,7 +1,8 @@
 from app.models import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES
 from flask_wtf import FlaskForm
+from flask_wtf.file import FileAllowed, MultipleFileField
 from wtforms import BooleanField, DateField, DecimalField, HiddenField, SelectField, StringField, SubmitField, TextAreaField, TimeField
-from wtforms.validators import DataRequired, Length, NumberRange, Optional
+from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional
 
 
 class StatusUpdateForm(FlaskForm):
@@ -28,12 +29,29 @@ class LastContactedForm(FlaskForm):
 
 
 class LinkCustomerForm(FlaskForm):
-    customer_id = HiddenField("Customer ID", validators=[DataRequired()])
+    customer_id = HiddenField("Customer ID", validators=[Optional()])
+    manual_customer_id = SelectField("Customer", coerce=int, validators=[Optional()])
     submit = SubmitField("Link customer")
 
 
 class CreateCustomerForm(FlaskForm):
     submit = SubmitField("Create customer")
+
+
+class CustomerInfoForm(FlaskForm):
+    primary_name = StringField("Name", validators=[DataRequired(), Length(max=255)])
+    primary_phone = StringField("Phone", validators=[Optional(), Length(max=50)])
+    primary_email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
+    primary_city = StringField("City", validators=[DataRequired(), Length(max=255)])
+    submit = SubmitField("Save customer")
+
+
+class CustomerPhotoUploadForm(FlaskForm):
+    photos = MultipleFileField(
+        "Customer photos",
+        validators=[FileAllowed(["jpg", "jpeg", "png", "gif", "webp"], "Images only.")],
+    )
+    submit = SubmitField("Upload photos")
 
 
 class CustomerFieldForm(FlaskForm):
