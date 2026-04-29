@@ -12,8 +12,9 @@
       <p class="subtle-text">Browse scheduled work in a month view and click any day to see its agenda.</p>
     </div>
     <div class="detail-actions">
-      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
-      <a class="button button-primary" href="{{ url_for('main.schedule_work') }}">Add work</a>
+      {% if enable_scheduling %}
+        <a class="button button-primary" href="{{ url_for('admin.new_scheduled_work', date=date(year, month, 1).isoformat()) }}">Add work</a>
+      {% endif %}
     </div>
   </section>
 

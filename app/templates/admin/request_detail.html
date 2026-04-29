@@ -18,11 +18,83 @@
         {{ status_form.status(class_="select", id="status-select") }}
       </form>
       {% if enable_scheduling and not quote_request.current_appointment %}
-        <a class="button button-primary" href="#scheduling">Schedule work</a>
+        <a class="button button-primary" href="{{ url_for('admin.new_scheduled_work', request_id=quote_request.id) }}">Schedule this work</a>
       {% endif %}
-      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
     </div>
   </section>
+
+  {% if enable_customer_records %}
+    <section class="customer-link-panel">
+      <div class="section-bar compact-bar">
+        <h2>Customer account</h2>
+        <p class="subtle-text">Link this request to an existing customer or create a new internal customer account.</p>
+      </div>
+
+      {% if quote_request.customer %}
+        <div class="customer-link-summary">
+          <p><strong>Linked customer:</strong> {{ quote_request.customer.primary_name or 'Unnamed customer' }}</p>
+          <div class="contact-block">
+            {% if quote_request.customer.primary_email %}
+              <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ quote_request.customer.primary_email }}</span></div>
+            {% endif %}
+            {% if quote_request.customer.primary_phone %}
+              <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ quote_request.customer.primary_phone }}</span></div>
+            {% endif %}
+            {% if quote_request.customer.primary_city %}
+              <div class="contact-row"><span class="contact-label">City:</span> <span>{{ quote_request.customer.primary_city }}</span></div>
+            {% endif %}
+          </div>
+          <a class="button-secondary button-small" href="{{ url_for('admin.customer_detail', customer_id=quote_request.customer.id) }}">View customer record</a>
+        </div>
+      {% else %}
+        <div class="customer-link-actions">
+          {% if customer_matches %}
+            <p class="subtle-text">Existing customer matches were found for this request. Confirm a link or select another record.</p>
+            <div class="customer-match-list">
+              {% for customer in customer_matches %}
+                <article class="customer-match-item">
+                  <div>
+                    <strong>{{ customer.primary_name or 'Unnamed customer' }}</strong>
+                    <div class="subtle-text">
+                      {% if customer.primary_email %}{{ customer.primary_email }}{% endif %}
+                      {% if customer.primary_email and customer.primary_phone %} · {% endif %}
+                      {% if customer.primary_phone %}{{ customer.primary_phone }}{% endif %}
+                    </div>
+                  </div>
+                  <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="inline-form">
+                    {{ link_customer_form.csrf_token }}
+                    {{ link_customer_form.customer_id(value=customer.id) }}
+                    {{ link_customer_form.submit(class_="button button-small") }}
+                  </form>
+                </article>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="subtle-text">No existing customer matches were found. You can select an existing customer or create a new one below.</p>
+          {% endif %}
+
+          <div class="manual-link-section">
+            <p class="subtle-text">Select an existing customer to link if the correct match is not listed.</p>
+            <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="stacked-form">
+              {{ link_customer_form.csrf_token }}
+              <label class="form-field">
+                {{ link_customer_form.manual_customer_id(class_="select") }}
+              </label>
+              {{ link_customer_form.submit(class_="button button-small") }}
+            </form>
+          </div>
+
+          <div class="create-customer-section">
+            <p class="subtle-text">If the correct customer is not listed, create a new customer record from this request.</p>
+            <form method="post" action="{{ url_for('admin.create_customer_route', request_id=quote_request.id) }}" class="inline-form">
+              {{ create_customer_form.hidden_tag() }}
+              {{ create_customer_form.submit(class_="button button-small") }}
+            </form>
+          </div>
+        </div>
+      {% endif %}
+    </section>
+  {% endif %}
 
   <section class="summary-grid">
     <div class="detail-grid">
@@ -51,77 +123,6 @@
             <dt>Request type</dt>
             <dd>{{ quote_request.request_type }}</dd>
           </div>
-          {% if enable_customer_records and quote_request.customer %}
-            <div>
-              <dt>Linked customer</dt>
-              <dd>
-                <div class="contact-block">
-                  <div class="contact-row"><span class="contact-label">Name:</span> <span>{{ quote_request.customer.primary_name or 'Unnamed' }}</span></div>
-                  {% if quote_request.customer.primary_email %}
-                    <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ quote_request.customer.primary_email }}</span></div>
-                  {% endif %}
-                  {% if quote_request.customer.primary_phone %}
-                    <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ quote_request.customer.primary_phone }}</span></div>
-                  {% endif %}
-                  {% if quote_request.customer.primary_city %}
-                    <div class="contact-row"><span class="contact-label">City:</span> <span>{{ quote_request.customer.primary_city }}</span></div>
-                  {% endif %}
-                </div>
-              </dd>
-            </div>
-          {% elif enable_customer_records %}
-            <div class="customer-match-card">
-              <dt>Customer match</dt>
-              <dd>
-                {% if customer_matches %}
-                  <p class="subtle-text">Existing customer matches found for this request. Confirm link to one of these records or select another existing customer.</p>
-                  <div class="customer-match-list">
-                    {% for customer in customer_matches %}
-                      <article class="customer-match-item">
-                        <div>
-                          <strong>{{ customer.primary_name or 'Unnamed customer' }}</strong>
-                          <div class="subtle-text">
-                            {% if customer.primary_email %}{{ customer.primary_email }}{% endif %}
-                            {% if customer.primary_email and customer.primary_phone %} · {% endif %}
-                            {% if customer.primary_phone %}{{ customer.primary_phone }}{% endif %}
-                          </div>
-                        </div>
-                        <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="inline-form">
-                          {{ link_customer_form.csrf_token }}
-                          {{ link_customer_form.customer_id(value=customer.id) }}
-                          {{ link_customer_form.submit(class_="button button-small") }}
-                        </form>
-                      </article>
-                    {% endfor %}
-                    {% if customer_matches|length > 1 %}
-                      <p class="subtle-text">Multiple customers match this request. Confirm the correct customer before linking.</p>
-                    {% endif %}
-                  </div>
-                {% else %}
-                  <p class="subtle-text">No existing customer matches found. Create a new internal customer record for this request if desired, or select an existing customer below.</p>
-                {% endif %}
-
-                <div class="manual-link-section">
-                  <p class="subtle-text">Select an existing customer to link if the correct match is not listed.</p>
-                  <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="stacked-form">
-                    {{ link_customer_form.csrf_token }}
-                    <label class="form-field">
-                      {{ link_customer_form.manual_customer_id(class_="select") }}
-                    </label>
-                    {{ link_customer_form.submit(class_="button button-small") }}
-                  </form>
-                </div>
-
-                <div class="create-customer-section">
-                  <p class="subtle-text">If the correct customer is not listed, create a new customer record from this request.</p>
-                  <form method="post" action="{{ url_for('admin.create_customer_route', request_id=quote_request.id) }}" class="inline-form">
-                    {{ create_customer_form.hidden_tag() }}
-                    {{ create_customer_form.submit(class_="button button-small") }}
-                  </form>
-                </div>
-              </dd>
-            </div>
-          {% endif %}
           <div>
             <dt>City</dt>
             <dd>{{ quote_request.city }}</dd>

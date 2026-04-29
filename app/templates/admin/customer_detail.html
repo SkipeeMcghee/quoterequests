@@ -12,8 +12,10 @@
       <p class="subtle-text">Manage this customer record, alternate contact values, billing, and linked history.</p>
     </div>
     <div class="detail-actions">
-      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
       <a class="button-secondary" href="{{ url_for('admin.customer_list') }}">Back to customers</a>
+      {% if enable_scheduling %}
+        <a class="button button-primary" href="{{ url_for('admin.new_scheduled_work', customer_id=customer.id) }}">Schedule work</a>
+      {% endif %}
       {% if enable_recurring_work %}
         <a class="button button-primary" href="{{ url_for('admin.recurring_work_list') }}">Add recurring work</a>
       {% endif %}
@@ -62,6 +64,69 @@
             </label>
           </div>
           {{ customer_info_form.submit(class_="button") }}
+        </form>
+      </article>
+
+      <article class="summary-card" id="customer-addresses">
+        <div class="section-bar compact-bar">
+          <h2>Customer addresses</h2>
+        </div>
+        {% if customer.addresses %}
+          <div class="address-list">
+            {% for address in customer.addresses %}
+              <article class="address-card">
+                <div>
+                  {% if address.address_line_1 %}<div>{{ address.address_line_1 }}</div>{% endif %}
+                  {% if address.address_line_2 %}<div>{{ address.address_line_2 }}</div>{% endif %}
+                  <div>
+                    {% if address.state %}{{ address.state }}{% endif %}
+                    {% if address.state and address.zip_code %}, {% endif %}
+                    {% if address.zip_code %}{{ address.zip_code }}{% endif %}
+                  </div>
+                </div>
+                <div class="address-actions">
+                  {% if address.is_billing or customer.addresses|length == 1 %}
+                    <span class="status-badge status-billing">Billing</span>
+                  {% else %}
+                    <form method="post" action="{{ url_for('admin.set_customer_billing_address_route', customer_id=customer.id, address_id=address.id) }}" class="inline-form">
+                      <button type="submit" class="button-small button-secondary">Set billing</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">No addresses saved for this customer yet.</div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('admin.add_customer_address_route', customer_id=customer.id) }}" class="stacked-form">
+          {{ address_form.hidden_tag() }}
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Address Line 1</span>
+              {{ address_form.address_line_1(class_="input") }}
+            </label>
+            <label class="form-field">
+              <span>Address Line 2</span>
+              {{ address_form.address_line_2(class_="input") }}
+            </label>
+          </div>
+          <div class="form-grid">
+            <label class="form-field">
+              <span>State</span>
+              {{ address_form.state(class_="input") }}
+            </label>
+            <label class="form-field">
+              <span>Zip</span>
+              {{ address_form.zip_code(class_="input") }}
+            </label>
+          </div>
+          <div class="inline-form">
+            {{ address_form.is_billing() }}
+            <label class="checkbox-label">Mark as billing address</label>
+          </div>
+          {{ address_form.submit(class_="button") }}
         </form>
       </article>
 

@@ -8,6 +8,8 @@ from app.forms.admin import (
     AppointmentForm,
     AppointmentStatusForm,
     CreateCustomerForm,
+    CreateScheduledWorkForm,
+    CustomerAddressForm,
     CustomerBillingForm,
     CustomerFieldForm,
     CustomerInfoForm,
@@ -28,6 +30,8 @@ from app.services.admin_requests import (
     add_customer_note,
     add_request_note,
     create_appointment,
+    create_customer,
+    create_scheduled_work,
     create_customer_from_quote_request,
     delete_request_note,
     find_customer_matches_for_request,
@@ -41,15 +45,19 @@ from app.services.admin_requests import (
     list_recurring_works,
     list_appointments_for_day,
     list_appointments_for_month,
+    link_quote_request_to_customer,
+    add_customer_address,
+    generate_recurring_appointments_for_customer,
+    link_quote_request_to_customer,
     merge_customers,
     reschedule_appointment,
+    set_customer_billing_address,
     set_primary_customer_field,
     update_appointment,
     update_appointment_status,
     update_customer_billing,
     update_customer_info,
     upload_customer_photos,
-    generate_recurring_appointments_for_customer,
     update_last_contacted_on,
     update_request_note,
     update_request_status,
@@ -186,6 +194,124 @@ def calendar_day_view(year: int, month: int, day: int):
         month=month,
         day_start=6,
         day_end=20,
+    )
+
+
+@bp.route("/scheduled-work/new", methods=["GET", "POST"])
+@login_required
+def new_scheduled_work():
+    if not current_app.config.get("ENABLE_SCHEDULING"):
+        return redirect(url_for("admin.dashboard"))
+
+    request_id = request.args.get("request_id", type=int)
+    customer_id = request.args.get("customer_id", type=int)
+    date_str = request.args.get("date")
+
+    quote_request = None
+    customer = None
+    scheduled_date = None
+
+    if request_id is not None:
+        try:
+            quote_request = get_quote_request(request_id)
+        except Exception:
+            flash("Request not found.", "error")
+            return redirect(url_for("admin.dashboard"))
+
+    if customer_id is not None:
+        try:
+            customer = get_customer(customer_id)
+        except Exception:
+            flash("Customer not found.", "error")
+            return redirect(url_for("admin.dashboard"))
+
+    if date_str:
+        try:
+            scheduled_date = date.fromisoformat(date_str)
+        except ValueError:
+            flash("Invalid date format. Use YYYY-MM-DD.", "error")
+
+    form = CreateScheduledWorkForm(prefix="scheduled-work")
+    customers = list_customers()
+    form.customer_id.choices = [
+        (0, "Choose an existing customer"),
+        *[
+            (
+                existing_customer.id,
+                f"{existing_customer.primary_name or 'Unnamed'} — {existing_customer.primary_email or 'no email'} — {existing_customer.primary_phone or 'no phone'}",
+            )
+            for existing_customer in customers
+        ],
+    ]
+
+    if request.method == "GET":
+        if quote_request:
+            form.request_id.data = quote_request.id
+            if quote_request.customer is not None:
+                form.customer_id.data = quote_request.customer.id
+            else:
+                form.new_customer_name.data = quote_request.full_name
+                form.new_customer_city.data = quote_request.city
+            form.title.data = quote_request.service_list_display or quote_request.request_type
+        if customer is not None:
+            form.customer_id.data = customer.id
+        if scheduled_date is not None:
+            form.scheduled_date.data = scheduled_date
+
+    if form.validate_on_submit():
+        selected_customer_id = form.customer_id.data if form.customer_id.data else None
+        if selected_customer_id == 0:
+            selected_customer_id = None
+
+        if selected_customer_id is None and not (form.new_customer_name.data or "").strip():
+            form.customer_id.errors.append("Choose an existing customer or enter a new customer name.")
+        if selected_customer_id is None and not (form.new_customer_city.data or "").strip():
+            form.new_customer_city.errors.append("Enter a city for the new customer.")
+
+        if form.errors:
+            return render_template(
+                "admin/scheduled_work_form.html",
+                form=form,
+                quote_request=quote_request,
+                customer=customer,
+                scheduled_date=scheduled_date,
+            )
+
+        try:
+            appointment = create_scheduled_work(
+                request_id=int(form.request_id.data) if form.request_id.data else None,
+                customer_id=selected_customer_id,
+                new_customer_name=form.new_customer_name.data,
+                new_customer_phone=form.new_customer_phone.data,
+                new_customer_email=form.new_customer_email.data,
+                new_customer_city=form.new_customer_city.data,
+                title=form.title.data,
+                scheduled_date=form.scheduled_date.data,
+                start_time=form.start_time.data,
+                end_time=form.end_time.data,
+                status=form.status.data,
+                customer_notes=form.customer_notes.data,
+                internal_notes=form.internal_notes.data,
+            )
+        except Exception as exc:
+            flash(str(exc), "error")
+            return render_template(
+                "admin/scheduled_work_form.html",
+                form=form,
+                quote_request=quote_request,
+                customer=customer,
+                scheduled_date=scheduled_date,
+            )
+
+        flash("Scheduled work created.", "success")
+        return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id))
+
+    return render_template(
+        "admin/scheduled_work_form.html",
+        form=form,
+        quote_request=quote_request,
+        customer=customer,
+        scheduled_date=scheduled_date,
     )
 
 
@@ -423,6 +549,14 @@ def link_customer_route(request_id: int):
         return redirect(url_for("admin.request_detail", request_id=request_id))
 
     form = LinkCustomerForm(prefix="link-customer")
+    form.manual_customer_id.choices = [
+        (0, "Choose an existing customer"),
+        *[
+            (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
+            for customer in list_customers()
+        ],
+    ]
+
     if form.validate_on_submit():
         selected_customer_id = None
         if form.customer_id.data:
@@ -514,6 +648,7 @@ def customer_detail(customer_id: int):
         primary_email=customer.primary_email,
         primary_city=customer.primary_city,
     )
+    address_form = CustomerAddressForm(prefix="customer-address")
     photo_upload_form = CustomerPhotoUploadForm(prefix="customer-photos")
     add_field_form = CustomerFieldForm(prefix="add-customer-field")
     note_form = CustomerNoteForm(prefix="customer-note")
@@ -529,6 +664,7 @@ def customer_detail(customer_id: int):
         customer=customer,
         billing_form=billing_form,
         customer_info_form=customer_info_form,
+        address_form=address_form,
         photo_upload_form=photo_upload_form,
         add_field_form=add_field_form,
         note_form=note_form,
@@ -626,6 +762,47 @@ def update_customer_info_route(customer_id: int):
     else:
         flash("Correct the customer details before saving.", "error")
     return redirect(url_for("admin.customer_detail", customer_id=customer_id, _anchor="customer-info"))
+
+
+@bp.post("/customers/<int:customer_id>/addresses")
+@login_required
+def add_customer_address_route(customer_id: int):
+    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+        return redirect(url_for("admin.dashboard"))
+
+    form = CustomerAddressForm(prefix="customer-address")
+    if form.validate_on_submit():
+        try:
+            add_customer_address(
+                customer_id,
+                form.address_line_1.data,
+                form.address_line_2.data,
+                form.state.data,
+                form.zip_code.data,
+                form.is_billing.data,
+            )
+            flash("Customer address added.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Correct the address details before saving.", "error")
+
+    return redirect(url_for("admin.customer_detail", customer_id=customer_id, _anchor="customer-addresses"))
+
+
+@bp.post("/customers/<int:customer_id>/addresses/<int:address_id>/billing")
+@login_required
+def set_customer_billing_address_route(customer_id: int, address_id: int):
+    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+        return redirect(url_for("admin.dashboard"))
+
+    try:
+        set_customer_billing_address(customer_id, address_id)
+        flash("Billing address updated.", "success")
+    except Exception as exc:
+        flash(str(exc), "error")
+
+    return redirect(url_for("admin.customer_detail", customer_id=customer_id, _anchor="customer-addresses"))
 
 
 @bp.post("/customers/<int:customer_id>/photos")

@@ -136,6 +136,92 @@ def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user
     assert "name=\"last_contacted_on\"" in body
 
 
+def test_admin_calendar_and_day_add_work_links_visible_when_enabled(client, app, admin_user):
+    app.config["ENABLE_CALENDAR"] = True
+    app.config["ENABLE_SCHEDULING"] = True
+
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Ari Blake",
+            "phone": "555-444-7777",
+            "services": ["Painting"],
+            "city": "32 Broad St",
+        },
+        follow_redirects=False,
+    )
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/calendar")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Add work" in body
+    assert "/admin/scheduled-work/new?date=" in body
+
+    response = client.get("/admin/calendar/2026/05/01")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Add work" in body
+    assert "/admin/scheduled-work/new?date=2026-05-01" in body
+
+
+def test_admin_customer_detail_schedule_work_button_visible_when_enabled(client, app, admin_user):
+    app.config["ENABLE_CUSTOMER_RECORDS"] = True
+    app.config["ENABLE_SCHEDULING"] = True
+
+    with app.app_context():
+        from app.models import Customer
+
+        customer = Customer(primary_name="Test Customer", primary_city="Test City", primary_email="test@example.com")
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get(f"/admin/customers/{customer_id}")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Schedule work" in body
+    assert f"/admin/scheduled-work/new?customer_id={customer.id}" in body
+
+
+def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Ari Blake",
+            "phone": "555-444-7777",
+            "services": ["Painting"],
+            "city": "32 Broad St",
+        },
+        follow_redirects=False,
+    )
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/scheduled-work/new?request_id=1&date=2026-05-10")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "name=\"scheduled-work-request_id\"" in body
+    assert "value=\"1\"" in body
+    assert "name=\"scheduled-work-scheduled_date\"" in body
+    assert "value=\"2026-05-10\"" in body
+
+
 def test_admin_can_edit_and_delete_own_internal_note(client, app, admin_user):
     client.post(
         "/quote-request",

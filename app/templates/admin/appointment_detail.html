@@ -13,7 +13,8 @@
     </div>
     <div class="detail-actions">
       <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=calendar_year, month=calendar_month, day=appointment.scheduled_date.day if appointment.scheduled_date else today.day) }}">Back to day</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">Month view</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=calendar_year, month=calendar_month, day=appointment.scheduled_date.day if appointment.scheduled_date else today.day) }}">Daily agenda</a>
       {% if appointment.customer %}
         <a class="button button-secondary" href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id) }}">Customer</a>
       {% endif %}
@@ -31,6 +32,10 @@
       </div>
       <dl class="detail-list vertical-list">
         <div>
+          <dt>Work title</dt>
+          <dd>{{ appointment.title or appointment.display_title }}</dd>
+        </div>
+        <div>
           <dt>Status</dt>
           <dd>{{ appointment.status }}</dd>
         </div>
@@ -41,6 +46,13 @@
             {% if appointment.start_time and appointment.end_time %}
               · {{ appointment.start_time.strftime('%H:%M') }} – {{ appointment.end_time.strftime('%H:%M') }}
             {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Location</dt>
+          <dd>
+            {% set location = appointment.quote_request.city if appointment.quote_request and appointment.quote_request.city else appointment.customer.primary_city if appointment.customer and appointment.customer.primary_city else None %}
+            {{ location or 'Not specified' }}
           </dd>
         </div>
         <div>
@@ -77,6 +89,20 @@
           <dt>Created</dt>
           <dd>{{ appointment.created_at.strftime('%b %d, %Y %I:%M %p') }}</dd>
         </div>
+        <div>
+          <dt>Notes</dt>
+          <dd>
+            {% if appointment.customer_notes %}
+              <p><strong>Customer notes:</strong> {{ appointment.customer_notes }}</p>
+            {% endif %}
+            {% if appointment.internal_notes %}
+              <p><strong>Internal notes:</strong> {{ appointment.internal_notes }}</p>
+            {% endif %}
+            {% if not appointment.customer_notes and not appointment.internal_notes %}
+              <span class="subtle-text">No notes yet.</span>
+            {% endif %}
+          </dd>
+        </div>
       </dl>
     </article>
 
@@ -86,6 +112,11 @@
       </div>
       <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
         {{ appointment_form.hidden_tag() }}
+        <label class="form-field">
+          <span>Work title / summary</span>
+          {{ appointment_form.title(class_="input") }}
+          {% for error in appointment_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
         <div class="form-grid">
           <label class="form-field">
             <span>Scheduled date</span>
@@ -106,6 +137,10 @@
             {{ appointment_form.status(class_="select") }}
           </label>
         </div>
+        <label class="form-field">
+          <span>Customer notes</span>
+          {{ appointment_form.customer_notes(class_="textarea") }}
+        </label>
         <label class="form-field">
           <span>Internal notes</span>
           {{ appointment_form.internal_notes(class_="textarea") }}

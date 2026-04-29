@@ -31,6 +31,74 @@ def test_customer_detail_loads_with_empty_related_data(client, app, admin_user):
     assert 'No photos uploaded for this customer yet.' in body
 
 
+def test_customer_detail_can_add_multiple_addresses_and_mark_billing(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='Address Customer', primary_city='City')
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.post(
+        f'/admin/customers/{customer_id}/addresses',
+        data={
+            'customer-address-address_line_1': '123 Main St',
+            'customer-address-address_line_2': 'Suite 100',
+            'customer-address-state': 'CA',
+            'customer-address-zip_code': '90210',
+            'customer-address-is_billing': 'y',
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        customer = Customer.query.get(customer_id)
+        assert len(customer.addresses) == 1
+        assert customer.billing_address is not None
+        assert customer.billing_address.address_line_1 == '123 Main St'
+        assert customer.billing_address.is_billing is True
+
+    response = client.post(
+        f'/admin/customers/{customer_id}/addresses',
+        data={
+            'customer-address-address_line_1': '456 Oak Ave',
+            'customer-address-state': 'CA',
+            'customer-address-zip_code': '90001',
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        customer = Customer.query.get(customer_id)
+        assert len(customer.addresses) == 2
+        billing_addresses = [address for address in customer.addresses if address.is_billing]
+        assert len(billing_addresses) == 1
+
+        new_address = next(address for address in customer.addresses if address.address_line_1 == '456 Oak Ave')
+
+    response = client.post(
+        f'/admin/customers/{customer_id}/addresses/{new_address.id}/billing',
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        customer = Customer.query.get(customer_id)
+        billing_addresses = [address for address in customer.addresses if address.is_billing]
+        assert len(billing_addresses) == 1
+        assert billing_addresses[0].address_line_1 == '456 Oak Ave'
+
+
 def test_customer_detail_handles_incomplete_recurring_work(client, app, admin_user):
     app.config.update(
         ENABLE_CUSTOMER_RECORDS=True,

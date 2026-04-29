@@ -220,6 +220,61 @@ textarea {
   border: 1px solid rgba(23, 77, 56, 0.18);
 }
 
+.customer-link-panel {
+  padding: 1.3rem 1.4rem;
+  margin-bottom: 1.5rem;
+  border-radius: 22px;
+  background: rgba(23, 77, 56, 0.08);
+  border: 1px solid rgba(23, 77, 56, 0.18);
+}
+
+.customer-link-panel .section-bar {
+  margin-bottom: 1rem;
+}
+
+.customer-link-summary {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.customer-link-summary p {
+  margin: 0;
+}
+
+.customer-link-summary .contact-block {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.customer-link-actions {
+  display: grid;
+  gap: 1rem;
+}
+
+.customer-link-actions .customer-match-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.customer-link-panel .customer-match-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+}
+
+.customer-link-panel .manual-link-section,
+.customer-link-panel .create-customer-section {
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+}
+
 .panel-heading {
   margin-bottom: 1.4rem;
 }
@@ -270,6 +325,43 @@ textarea {
 .notes-list article strong,
 .row-title {
   color: var(--accent-strong);
+}
+
+.address-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.address-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: var(--card-solid);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+}
+
+.address-card div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.address-actions {
+  display: grid;
+  gap: 0.6rem;
+  justify-items: end;
+}
+
+.status-badge.status-billing {
+  background: rgba(23, 77, 56, 0.18);
+  color: var(--accent-strong);
+  border: 1px solid rgba(23, 77, 56, 0.22);
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
 }
 
 .button,

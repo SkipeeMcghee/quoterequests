@@ -16,6 +16,9 @@
       <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=prev_date.year, month=prev_date.month, day=prev_date.day) }}">Previous day</a>
       <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month) }}">Month view</a>
       <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=next_date.year, month=next_date.month, day=next_date.day) }}">Next day</a>
+      {% if enable_scheduling %}
+        <a class="button button-primary" href="{{ url_for('admin.new_scheduled_work', date=view_date.isoformat()) }}">Add work</a>
+      {% endif %}
     </div>
   </section>
 

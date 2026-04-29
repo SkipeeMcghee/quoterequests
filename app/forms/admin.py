@@ -46,6 +46,15 @@ class CustomerInfoForm(FlaskForm):
     submit = SubmitField("Save customer")
 
 
+class CustomerAddressForm(FlaskForm):
+    address_line_1 = StringField("Address Line 1", validators=[Optional(), Length(max=255)])
+    address_line_2 = StringField("Address Line 2", validators=[Optional(), Length(max=255)])
+    state = StringField("State", validators=[Optional(), Length(max=255)])
+    zip_code = StringField("Zip", validators=[Optional(), Length(max=20)])
+    is_billing = BooleanField("Mark as billing address", validators=[Optional()])
+    submit = SubmitField("Save address")
+
+
 class CustomerPhotoUploadForm(FlaskForm):
     photos = MultipleFileField(
         "Customer photos",
@@ -95,6 +104,28 @@ class MergeCustomerForm(FlaskForm):
     submit = SubmitField("Merge customer")
 
 
+class CreateScheduledWorkForm(FlaskForm):
+    request_id = HiddenField()
+    customer_id = SelectField("Customer", coerce=int, validators=[Optional()])
+    new_customer_name = StringField("New customer name", validators=[Optional(), Length(max=255)])
+    new_customer_phone = StringField("Phone", validators=[Optional(), Length(max=50)])
+    new_customer_email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
+    new_customer_city = StringField("City", validators=[Optional(), Length(max=255)])
+    title = StringField("Work title / summary", validators=[DataRequired(), Length(max=255)])
+    scheduled_date = DateField("Scheduled date", validators=[DataRequired()])
+    start_time = TimeField("Start time", validators=[Optional()])
+    end_time = TimeField("End time", validators=[Optional()])
+    status = SelectField(
+        "Status",
+        choices=[(status, status) for status in ("Scheduled", "Requested", "Completed", "Cancelled", "Rescheduled", "No Show")],
+        default="Scheduled",
+        validators=[DataRequired()],
+    )
+    customer_notes = TextAreaField("Customer notes", validators=[Optional(), Length(max=2000)])
+    internal_notes = TextAreaField("Internal notes", validators=[Optional(), Length(max=2000)])
+    submit = SubmitField("Create scheduled work")
+
+
 class RecurringWorkGenerationForm(FlaskForm):
     days_ahead = SelectField(
         "Generate for",
@@ -107,6 +138,7 @@ class RecurringWorkGenerationForm(FlaskForm):
 
 class AppointmentForm(FlaskForm):
     customer_id = SelectField("Customer", coerce=int, validators=[Optional()])
+    title = StringField("Work title / summary", validators=[Optional(), Length(max=255)])
     scheduled_date = DateField("Scheduled date", validators=[Optional()])
     start_time = TimeField("Start time", validators=[Optional()])
     end_time = TimeField("End time", validators=[Optional()])

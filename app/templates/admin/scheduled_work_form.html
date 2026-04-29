@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Create Scheduled Work{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>Create Scheduled Work</h1>
+      <p class="subtle-text">Create a scheduled event linked to a customer and optional quote/work request.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">Back to schedule</a>
+      {% if quote_request %}
+        <a class="button button-secondary" href="{{ url_for('admin.request_detail', request_id=quote_request.id) }}">Back to request</a>
+      {% elif customer %}
+        <a class="button button-secondary" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">Back to customer</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <div class="detail-grid">
+      <article class="summary-card">
+        <div class="section-bar compact-bar">
+          <h2>Scheduled work details</h2>
+        </div>
+        <form method="post" action="" class="stacked-form">
+          {{ form.hidden_tag() }}
+          {{ form.request_id }}
+
+          {% if quote_request %}
+            <div class="notice-card">
+              <p><strong>Source request:</strong> #{{ quote_request.id }} · {{ quote_request.full_name }}</p>
+              <p class="subtle-text">{{ quote_request.service_list_display or quote_request.request_type }} in {{ quote_request.city }}</p>
+            </div>
+          {% endif %}
+
+          <label class="form-field">
+            <span>Existing customer</span>
+            {{ form.customer_id(class_="select") }}
+            {% for error in form.customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <div class="section-bar compact-bar">
+            <h3>Or create a new customer</h3>
+            <p class="subtle-text">Only name and city are required for a new customer.</p>
+          </div>
+
+          <label class="form-field">
+            <span>Name</span>
+            {{ form.new_customer_name(class_="input") }}
+            {% for error in form.new_customer_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>City</span>
+            {{ form.new_customer_city(class_="input") }}
+            {% for error in form.new_customer_city.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Phone</span>
+            {{ form.new_customer_phone(class_="input") }}
+            {% for error in form.new_customer_phone.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Email</span>
+            {{ form.new_customer_email(class_="input") }}
+            {% for error in form.new_customer_email.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label class="form-field">
+            <span>Work title / summary</span>
+            {{ form.title(class_="input") }}
+            {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Scheduled date</span>
+              {{ form.scheduled_date(class_="input") }}
+              {% for error in form.scheduled_date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span>Start time</span>
+              {{ form.start_time(class_="input") }}
+              {% for error in form.start_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span>End time</span>
+              {{ form.end_time(class_="input") }}
+              {% for error in form.end_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+          </div>
+
+          <label class="form-field">
+            <span>Status</span>
+            {{ form.status(class_="select") }}
+            {% for error in form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <label class="form-field">
+            <span>Customer notes</span>
+            {{ form.customer_notes(class_="textarea") }}
+            {% for error in form.customer_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Internal notes</span>
+            {{ form.internal_notes(class_="textarea") }}
+            {% for error in form.internal_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          {{ form.submit(class_="button") }}
+        </form>
+      </article>
+    </div>
+  </section>
+</main>
+{% endblock %}

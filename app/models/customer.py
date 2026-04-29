@@ -56,9 +56,24 @@ class Customer(db.Model):
         cascade="all, delete-orphan",
         order_by="CustomerPhoto.created_at.desc()",
     )
+    addresses = db.relationship(
+        "CustomerAddress",
+        back_populates="customer",
+        cascade="all, delete-orphan",
+        order_by="CustomerAddress.id",
+    )
 
     def __repr__(self) -> str:
         return f"<Customer {self.id} {self.primary_name or 'Unnamed'}>"
+
+    @property
+    def billing_address(self) -> "CustomerAddress" | None:
+        billed = [address for address in self.addresses if address.is_billing]
+        if billed:
+            return billed[0]
+        if len(self.addresses) == 1:
+            return self.addresses[0]
+        return None
 
     @property
     def fields_by_kind(self) -> dict[str, list["CustomerField"]]:
@@ -92,6 +107,24 @@ class CustomerField(db.Model):
 
     def __repr__(self) -> str:
         return f"<CustomerField {self.kind}={self.value} primary={self.is_primary}>"
+
+
+class CustomerAddress(db.Model):
+    __tablename__ = "customer_addresses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    address_line_1 = db.Column(db.String(255), nullable=True)
+    address_line_2 = db.Column(db.String(255), nullable=True)
+    state = db.Column(db.String(255), nullable=True)
+    zip_code = db.Column(db.String(20), nullable=True)
+    is_billing = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    customer = db.relationship("Customer", back_populates="addresses")
+
+    def __repr__(self) -> str:
+        return f"<CustomerAddress {self.id} customer={self.customer_id} billing={self.is_billing}>"
 
 
 class CustomerNote(db.Model):

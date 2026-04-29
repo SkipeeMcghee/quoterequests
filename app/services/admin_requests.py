@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from werkzeug.exceptions import BadRequest, NotFound
 
 from app.extensions import db
-from app.models import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, Appointment, Customer, CustomerField, CustomerNote, CustomerPhoto, QuoteRequest, RecurringWork, RequestNote, User
+from app.models import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, Appointment, Customer, CustomerAddress, CustomerField, CustomerNote, CustomerPhoto, QuoteRequest, RecurringWork, RequestNote, User
 from app.services.uploads import save_customer_photos
 
 
@@ -51,6 +51,7 @@ def get_customer(customer_id: int) -> Customer:
         .options(
             selectinload(Customer.fields),
             selectinload(Customer.notes),
+            selectinload(Customer.addresses),
             selectinload(Customer.quote_requests).selectinload(QuoteRequest.appointments),
             selectinload(Customer.recurring_works),
         )
@@ -145,6 +146,104 @@ def link_quote_request_to_customer(request_id: int, customer_id: int) -> Custome
     return customer
 
 
+def create_customer(
+    primary_name: str,
+    primary_phone: str | None = None,
+    primary_email: str | None = None,
+    primary_city: str | None = None,
+) -> Customer:
+    cleaned_name = (primary_name or "").strip()
+    if not cleaned_name:
+        raise BadRequest("Customer name cannot be blank.")
+    cleaned_city = (primary_city or "").strip()
+    if not cleaned_city:
+        raise BadRequest("Customer city cannot be blank.")
+
+    customer = Customer(
+        primary_name=cleaned_name,
+        primary_phone=(primary_phone or "").strip() or None,
+        primary_email=(primary_email or "").strip().lower() or None,
+        primary_city=cleaned_city,
+        billing_amount=None,
+        billing_frequency=None,
+    )
+    db.session.add(customer)
+    db.session.flush()
+
+    if customer.primary_name:
+        db.session.add(CustomerField(customer_id=customer.id, kind="name", value=customer.primary_name, is_primary=True))
+    if customer.primary_phone:
+        db.session.add(CustomerField(customer_id=customer.id, kind="phone", value=customer.primary_phone, is_primary=True))
+    if customer.primary_email:
+        db.session.add(CustomerField(customer_id=customer.id, kind="email", value=customer.primary_email, is_primary=True))
+    if customer.primary_city:
+        db.session.add(CustomerField(customer_id=customer.id, kind="city", value=customer.primary_city, is_primary=True))
+
+    db.session.commit()
+    return customer
+
+
+def create_scheduled_work(
+    request_id: int | None = None,
+    customer_id: int | None = None,
+    new_customer_name: str | None = None,
+    new_customer_phone: str | None = None,
+    new_customer_email: str | None = None,
+    new_customer_city: str | None = None,
+    title: str | None = None,
+    scheduled_date=None,
+    start_time=None,
+    end_time=None,
+    status: str = "Scheduled",
+    customer_notes: str | None = None,
+    internal_notes: str | None = None,
+) -> Appointment:
+    if status not in APPOINTMENT_STATUSES:
+        raise BadRequest("Choose a valid appointment status.")
+
+    quote_request = None
+    if request_id is not None:
+        quote_request = get_quote_request(request_id)
+
+    customer = None
+    if customer_id is not None:
+        customer = db.session.get(Customer, customer_id)
+        if customer is None:
+            raise NotFound("Customer not found.")
+    elif quote_request is not None and quote_request.customer is not None:
+        customer = quote_request.customer
+    elif new_customer_name or new_customer_city:
+        customer = create_customer(
+            primary_name=new_customer_name or "",
+            primary_phone=new_customer_phone,
+            primary_email=new_customer_email,
+            primary_city=new_customer_city,
+        )
+    else:
+        raise BadRequest("Select an existing customer or enter a new customer name and city.")
+
+    if quote_request is not None and quote_request.customer is None:
+        quote_request.customer = customer
+
+    appointment = Appointment(
+        customer_id=customer.id,
+        quote_request_id=quote_request.id if quote_request is not None else None,
+        title=(title or "").strip() or None,
+        scheduled_date=scheduled_date,
+        start_time=start_time,
+        end_time=end_time,
+        status=status,
+        customer_notes=(customer_notes or "").strip() or None,
+        internal_notes=(internal_notes or "").strip() or None,
+    )
+    db.session.add(appointment)
+    if quote_request is not None:
+        quote_request.appointments.append(appointment)
+
+    db.session.commit()
+    return appointment
+
+
 def merge_customers(source_customer_id: int, target_customer_id: int) -> Customer:
     if source_customer_id == target_customer_id:
         raise BadRequest("Source and target customer must be different.")
@@ -186,6 +285,9 @@ def merge_customers(source_customer_id: int, target_customer_id: int) -> Custome
 
     for note in source.notes:
         note.customer_id = target.id
+
+    for address in source.addresses:
+        address.customer_id = target.id
 
     for quote_request in source.quote_requests:
         quote_request.customer_id = target.id
@@ -255,6 +357,57 @@ def set_primary_customer_field(customer_id: int, field_id: int) -> CustomerField
 
     db.session.commit()
     return field
+
+
+def add_customer_address(
+    customer_id: int,
+    address_line_1: str | None = None,
+    address_line_2: str | None = None,
+    state: str | None = None,
+    zip_code: str | None = None,
+    is_billing: bool = False,
+) -> CustomerAddress:
+    customer = get_customer(customer_id)
+    cleaned_line_1 = (address_line_1 or "").strip() or None
+    cleaned_line_2 = (address_line_2 or "").strip() or None
+    cleaned_state = (state or "").strip() or None
+    cleaned_zip = (zip_code or "").strip() or None
+    if not (cleaned_line_1 or cleaned_line_2 or cleaned_state or cleaned_zip):
+        raise BadRequest("Enter at least one address field before saving.")
+
+    if is_billing:
+        for existing in customer.addresses:
+            existing.is_billing = False
+
+    address = CustomerAddress(
+        customer_id=customer_id,
+        address_line_1=cleaned_line_1,
+        address_line_2=cleaned_line_2,
+        state=cleaned_state,
+        zip_code=cleaned_zip,
+        is_billing=is_billing,
+    )
+    db.session.add(address)
+    db.session.flush()
+
+    if not is_billing and len(customer.addresses) == 0:
+        address.is_billing = True
+
+    db.session.commit()
+    return address
+
+
+def set_customer_billing_address(customer_id: int, address_id: int) -> CustomerAddress:
+    customer = get_customer(customer_id)
+    address = db.session.get(CustomerAddress, address_id)
+    if address is None or address.customer_id != customer_id:
+        raise NotFound("Customer address not found.")
+
+    for existing in customer.addresses:
+        existing.is_billing = (existing.id == address_id)
+
+    db.session.commit()
+    return address
 
 
 def update_customer_billing(customer_id: int, billing_amount, billing_frequency: str | None) -> Customer:
