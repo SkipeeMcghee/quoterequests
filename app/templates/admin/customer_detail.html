@@ -361,6 +361,7 @@
               <tr>
                 <th>Request</th>
                 <th>Status</th>
+                <th>Assigned staff</th>
                 <th>Requested</th>
                 <th>Confirmed</th>
               </tr>
@@ -375,12 +376,23 @@
                     {% endif %}
                   </td>
                   <td>{{ appointment.status }}</td>
+                  <td>
+                    {% if enable_staff_management and appointment.assigned_staff %}
+                      <div class="tag-list">
+                        {% for staff in appointment.assigned_staff %}
+                          <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}" class="tag">{{ staff.display_name }}</a>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <span class="subtle-text">None</span>
+                    {% endif %}
+                  </td>
                   <td>{{ appointment.requested_date.strftime('%b %d, %Y') if appointment.requested_date else '—' }}</td>
                   <td>{{ appointment.confirmed_date.strftime('%b %d, %Y') if appointment.confirmed_date else '—' }}</td>
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="4" class="empty-state">No linked appointments.</td>
+                  <td colspan="5" class="empty-state">No linked appointments.</td>
                 </tr>
               {% endfor %}
             </tbody>

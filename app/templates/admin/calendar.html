@@ -23,12 +23,158 @@
       <h2>{{ month_name }} {{ year }}</h2>
     </div>
     <div class="calendar-nav">
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month) }}#calendar">Previous</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}#calendar">This month</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month) }}#calendar">Next</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show) }}#calendar">Previous</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view=view, show=show) }}#calendar">This month</a>
+      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show) }}#calendar">Next</a>
+    </div>
+    <div class="schedule-view-toggle">
+      <a class="button button-toggle{% if view == 'calendar' %} active{% endif %}" href="{{ url_for('admin.calendar_view', year=year, month=month, view='calendar', show=show) }}#calendar">Calendar</a>
+      <a class="button button-toggle{% if view == 'list' %} active{% endif %}" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=sort_by) }}#calendar">List</a>
     </div>
   </section>
 
+  {% if view == 'list' %}
+  <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Scheduled events</h2>
+        <p class="subtle-text">
+          {% if show == 'all' %}
+            Showing all scheduled events.
+          {% else %}
+            Showing upcoming scheduled events.
+          {% endif %}
+          {% if sort_by != 'soonest' %}
+            Sorted by {{ sort_options | selectattr('0','equalto', sort_by) | map(attribute='1') | first | default('') }}.
+          {% endif %}
+        </p>
+      </div>
+      <div class="detail-actions">
+        {% if show == 'upcoming' %}
+          <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='all', status=status, staff_id=staff_id, sort=sort_by) }}#calendar">View all events</a>
+        {% else %}
+          <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='upcoming', status=status, staff_id=staff_id, sort=sort_by) }}#calendar">View upcoming only</a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="section-bar section-bar--compact filter-toolbar">
+      <form method="get" class="table-filters">
+        <input type="hidden" name="view" value="list">
+        <input type="hidden" name="year" value="{{ year }}">
+        <input type="hidden" name="month" value="{{ month }}">
+        <input type="hidden" name="show" value="{{ show }}">
+        <div class="filter-row">
+          <label class="filter-field">
+            <span>Sort by</span>
+            <select name="sort">
+              {% for value, label in sort_options %}
+                <option value="{{ value }}" {% if sort_by == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="filter-field">
+            <span>Status</span>
+            <select name="status">
+              <option value="all" {% if status == 'all' %}selected{% endif %}>All statuses</option>
+              {% for option in statuses %}
+                <option value="{{ option }}" {% if status == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {% if enable_staff_management %}
+          <label class="filter-field">
+            <span>Assigned staff</span>
+            <select name="staff_id">
+              <option value="0" {% if staff_id == 0 %}selected{% endif %}>All staff</option>
+              {% for staff in staff_members %}
+                <option value="{{ staff.id }}" {% if staff_id == staff.id %}selected{% endif %}>{{ staff.display_name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {% endif %}
+          <div class="filter-actions">
+            <button class="button button-secondary" type="submit">Apply</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Customer</th>
+            <th>Work / Service</th>
+            <th>Status</th>
+            <th>Assigned staff</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for appointment in scheduled_appointments %}
+            {% set customer = appointment.customer if appointment.customer else (appointment.quote_request.customer if appointment.quote_request and appointment.quote_request.customer else None) %}
+            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}'">
+              <td>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</td>
+              <td>
+                {% if appointment.start_time and appointment.end_time %}
+                  {{ appointment.start_time.strftime('%H:%M') }}-{{ appointment.end_time.strftime('%H:%M') }}
+                {% elif appointment.start_time %}
+                  {{ appointment.start_time.strftime('%H:%M') }}
+                {% else %}
+                  All day
+                {% endif %}
+              </td>
+              <td>
+                <strong class="row-title">{{ customer.primary_name if customer else (appointment.quote_request.full_name if appointment.quote_request else 'Customer') }}</strong>
+                {% if customer and customer.primary_city %}
+                  <div class="subtle-text">{{ customer.primary_city }}</div>
+                {% endif %}
+              </td>
+              <td>
+                {% if appointment.quote_request and appointment.quote_request.service_list_display %}
+                  <div class="tag-list">
+                    {% for service in appointment.quote_request.service_list_display.split(', ') %}
+                      <span class="tag-pill">{{ service }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="subtle-text">No services</span>
+                {% endif %}
+              </td>
+              <td><span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span></td>
+              <td>
+                {% if appointment.assigned_staff %}
+                  <div class="tag-list">
+                    {% for staff in appointment.assigned_staff %}
+                      <span class="tag-pill">{{ staff.display_name }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="subtle-text">Unassigned</span>
+                {% endif %}
+              </td>
+              <td class="actions-cell">
+                <div class="button-group">
+                  <a class="button button-small button-secondary" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">View / Edit</a>
+                  {% if customer %}
+                    <a class="button button-small button-secondary" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">Customer</a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="7" class="empty-state">No scheduled events found.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if view == 'calendar' %}
   <section class="calendar-grid">
     {% for name in day_names %}
       <div class="calendar-cell calendar-cell--header">{{ name }}</div>
@@ -46,6 +192,16 @@
                   <span class="calendar-time">{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'All day' }}</span>
                   <strong>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</strong>
                   <div class="subtle-text">{{ appointment.display_title }}</div>
+                  {% if enable_staff_management and appointment.assigned_staff %}
+                    <div class="calendar-staff-list">
+                      {% for staff in appointment.assigned_staff[:2] %}
+                        <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}" class="calendar-staff-pill" title="{{ staff.display_name }}">{{ staff.display_name.split(' ')[0] }}</a>
+                      {% endfor %}
+                      {% if appointment.assigned_staff|length > 2 %}
+                        <span class="calendar-staff-pill">+{{ appointment.assigned_staff|length - 2 }}</span>
+                      {% endif %}
+                    </div>
+                  {% endif %}
                 </article>
               {% endfor %}
               {% if appointments_by_date.get(cell_date, [])|length > 3 %}
@@ -59,6 +215,7 @@
       {% endfor %}
     {% endfor %}
   </section>
+  {% endif %}
 </main>
 {% endblock %}
 
@@ -68,10 +225,70 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
   margin-bottom: 1rem;
 }
-.calendar-nav .button {
-  margin-left: 0.5rem;
+.calendar-nav,
+.schedule-view-toggle {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.calendar-nav .button,
+.schedule-view-toggle .button {
+  margin: 0;
+}
+.schedule-view-toggle {
+  margin-top: 0.5rem;
+}
+.filter-toolbar {
+  padding: 0.75rem 0 0;
+}
+.table-filters {
+  width: 100%;
+}
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(165px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+.filter-field {
+  display: grid;
+  gap: 0.35rem;
+}
+.filter-field span {
+  color: #5f6c72;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.filter-field select {
+  width: 100%;
+  min-width: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 77, 56, 0.16);
+  background: #fff;
+  padding: 0.85rem 0.9rem;
+}
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+.actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+.button-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+.button-group .button {
+  min-width: 90px;
 }
 .calendar-grid {
   display: grid;
@@ -130,6 +347,26 @@
   display: block;
   margin-bottom: 0.25rem;
 }
+.calendar-staff-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+.calendar-staff-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  background: #e8f4ff;
+  color: #005b94;
+  text-decoration: none;
+  font-size: 0.75rem;
+}
+.calendar-staff-pill:hover,
+.calendar-staff-pill:focus-visible {
+  text-decoration: underline;
+}
 .calendar-time {
   display: inline-block;
   margin-bottom: 0.25rem;
@@ -140,6 +377,30 @@
   margin-top: auto;
   font-size: 0.9rem;
   color: #666;
+}
+@media (max-width: 860px) {
+  .calendar-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .calendar-nav,
+  .schedule-view-toggle {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-actions {
+    justify-content: flex-start;
+  }
+
+  .actions-cell {
+    width: auto;
+  }
 }
 </style>
 {% endblock %}

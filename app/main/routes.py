@@ -1,4 +1,4 @@
-from flask import current_app, flash, redirect, render_template, url_for
+from flask import current_app, flash, redirect, render_template, request, url_for
 from werkzeug.exceptions import BadRequest
 
 from app.forms.quote_request import QuoteRequestForm

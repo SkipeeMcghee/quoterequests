@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'New staff member' if is_new else 'Edit staff member' }}{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>{{ 'New staff member' if is_new else 'Edit staff member' }}</h1>
+      <p class="subtle-text">Manage worker contact details, type, availability and skills.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button button-secondary" href="{{ url_for('admin.staff_list') }}">Back to staff</a>
+      {% if not is_new %}
+        <a class="button button-secondary" href="{{ url_for('admin.staff_detail', staff_member_id=staff_member.id) }}">View staff</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <div class="detail-grid">
+      <article class="summary-card">
+        <div class="section-bar compact-bar">
+          <h2>Staff details</h2>
+        </div>
+        <form method="post" action="" class="stacked-form">
+          {{ form.hidden_tag() }}
+
+          <label class="form-field">
+            <span>Name</span>
+            {{ form.display_name(class_="input") }}
+            {% for error in form.display_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Role / title</span>
+              {{ form.role_title(class_="input") }}
+              {% for error in form.role_title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span>Worker type</span>
+              {{ form.worker_type(class_="select") }}
+              {% for error in form.worker_type.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span>Status</span>
+              {{ form.status(class_="select") }}
+              {% for error in form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+          </div>
+
+          <label class="form-field">
+            <span>Phone</span>
+            {{ form.phone(class_="input") }}
+            {% for error in form.phone.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Email</span>
+            {{ form.email(class_="input") }}
+            {% for error in form.email.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          <div class="form-field">
+            <span>Services</span>
+            <div class="checkbox-grid">
+              {% for subfield in form.services %}
+                <label class="checkbox-card">
+                  {{ subfield(class_="checkbox-input") }}
+                  <span>{{ subfield.label.text }}</span>
+                </label>
+              {% endfor %}
+            </div>
+            <small class="field-help">Select one or more services.</small>
+            {% for error in form.services.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </div>
+
+          <label class="form-field">
+            <span>Notes</span>
+            {{ form.notes(class_="textarea") }}
+            {% for error in form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          {{ form.submit(class_="button") }}
+        </form>
+      </article>
+    </div>
+  </section>
+</main>
+{% endblock %}

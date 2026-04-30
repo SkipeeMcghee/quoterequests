@@ -21,6 +21,7 @@ class Config:
     UPLOAD_FOLDER = str(BASE_DIR / "app" / "static" / "uploads")
     ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
     ENABLE_SCHEDULING = os.getenv("ENABLE_SCHEDULING", "false").lower() in ("1", "true", "yes")
+    ENABLE_STAFF_MANAGEMENT = os.getenv("ENABLE_STAFF_MANAGEMENT", "false").lower() in ("1", "true", "yes")
     ENABLE_CUSTOMER_RECORDS = os.getenv("ENABLE_CUSTOMER_RECORDS", "false").lower() in ("1", "true", "yes")
     ENABLE_CALENDAR = os.getenv("ENABLE_CALENDAR", "false").lower() in ("1", "true", "yes")
     ENABLE_RECURRING_WORK = os.getenv("ENABLE_RECURRING_WORK", "false").lower() in ("1", "true", "yes")
@@ -40,6 +41,7 @@ class Config:
 class DevelopmentConfig(Config):
     DEBUG = True
     ENABLE_SCHEDULING = True
+    ENABLE_STAFF_MANAGEMENT = True
     ENABLE_CUSTOMER_RECORDS = True
     ENABLE_CALENDAR = True
     ENABLE_RECURRING_WORK = True
@@ -53,6 +55,7 @@ class TestingConfig(Config):
     TESTING = True
     WTF_CSRF_ENABLED = False
     ENABLE_SCHEDULING = False
+    ENABLE_STAFF_MANAGEMENT = False
     ENABLE_CUSTOMER_RECORDS = False
     ENABLE_CALENDAR = False
     ENABLE_RECURRING_WORK = False

@@ -201,6 +201,22 @@
                   {% endif %}
                 </dd>
               </div>
+              {% if enable_staff_management %}
+              <div>
+                <dt>Assigned staff</dt>
+                <dd>
+                  {% if appointment.assigned_staff %}
+                    <div class="tag-list">
+                      {% for staff in appointment.assigned_staff %}
+                        <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}" class="tag">{{ staff.display_name }}</a>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span class="subtle-text">None</span>
+                  {% endif %}
+                </dd>
+              </div>
+              {% endif %}
               <div>
                 <dt>Appointment</dt>
                 <dd><a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">View appointment #{{ appointment.id }}</a></dd>

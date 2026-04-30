@@ -106,6 +106,79 @@
       </dl>
     </article>
 
+    {% if enable_staff_management %}
+      <article class="summary-card">
+        <div class="section-bar compact-bar">
+          <h2>Assigned staff</h2>
+        </div>
+        {% if appointment.assigned_staff %}
+          <ul class="summary-list">
+            {% for staff in appointment.assigned_staff %}
+              <li>
+                <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}">{{ staff.display_name }}</a>
+                <div class="subtle-text">{{ staff.worker_type.title() }} · {{ staff.status.title() }}</div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="subtle-text">No staff assigned yet.</p>
+        {% endif %}
+
+        <div class="section-bar compact-bar">
+          <h3>Assign staff</h3>
+        </div>
+        <form method="post" action="{{ url_for('admin.assign_staff_to_appointment', appointment_id=appointment.id) }}" class="stacked-form">
+          {{ assign_staff_form.hidden_tag() }}
+
+          <label class="form-field">
+            <span>Assigned staff</span>
+            {{ assign_staff_form.staff_ids(class_="select", multiple=True) }}
+            {% for error in assign_staff_form.staff_ids.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+
+          {% if appointment.quote_request and appointment.quote_request.services %}
+            <p class="subtle-text">Request services:
+              {% for service in appointment.quote_request.services %}
+                <span class="tag-pill">{{ service.name }}</span>
+              {% endfor %}
+            </p>
+          {% endif %}
+
+          <div class="staff-capabilities">
+            <h4>Staff capability preview</h4>
+            <ul class="summary-list">
+              {% for info in all_staff_info %}
+                <li>
+                  <strong>{{ info.staff.display_name }}</strong>
+                  {% if info.staff.services %}
+                    <div class="tag-list">
+                      {% for service in info.staff.services %}
+                        <span class="tag">{{ service.name }}</span>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div class="subtle-text">No service capabilities assigned.</div>
+                  {% endif %}
+                  {% if appointment.quote_request and appointment.quote_request.services %}
+                    <div class="subtle-text">{% if info.matches_request %}Matches request services{% else %}Does not match request services{% endif %}</div>
+                  {% endif %}
+                  {% if info.warnings %}
+                    <ul class="summary-list subtle-text">
+                      {% for warning in info.warnings %}
+                        <li class="field-error">{{ warning }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+
+          {{ assign_staff_form.submit(class_="button") }}
+        </form>
+      </article>
+    {% endif %}
+
     <article class="summary-card">
       <div class="section-bar compact-bar">
         <h2>Edit scheduling</h2>

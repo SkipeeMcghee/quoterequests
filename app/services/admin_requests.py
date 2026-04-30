@@ -8,7 +8,24 @@ from sqlalchemy.orm import selectinload
 from werkzeug.exceptions import BadRequest, NotFound
 
 from app.extensions import db
-from app.models import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, Appointment, Customer, CustomerAddress, CustomerField, CustomerNote, CustomerPhoto, QuoteRequest, RecurringWork, RequestNote, User
+from app.models import (
+    APPOINTMENT_STATUSES,
+    QUOTE_REQUEST_STATUSES,
+    Appointment,
+    AppointmentStaffAssignment,
+    Customer,
+    CustomerAddress,
+    CustomerField,
+    CustomerNote,
+    CustomerPhoto,
+    QuoteRequest,
+    RecurringWork,
+    RequestNote,
+    ServiceOption,
+    StaffAvailability,
+    StaffMember,
+    User,
+)
 from app.services.uploads import save_customer_photos
 
 
@@ -181,6 +198,210 @@ def create_customer(
 
     db.session.commit()
     return customer
+
+
+def list_staff_members() -> list[StaffMember]:
+    statement = select(StaffMember).options(selectinload(StaffMember.services)).order_by(StaffMember.display_name)
+    return list(db.session.scalars(statement))
+
+
+def get_staff_member(staff_member_id: int) -> StaffMember:
+    statement = (
+        select(StaffMember)
+        .where(StaffMember.id == staff_member_id)
+        .options(
+            selectinload(StaffMember.services),
+            selectinload(StaffMember.availability_windows),
+            selectinload(StaffMember.assigned_appointments).selectinload(Appointment.customer),
+            selectinload(StaffMember.assigned_appointments).selectinload(Appointment.quote_request),
+        )
+    )
+    staff_member = db.session.scalar(statement)
+    if staff_member is None:
+        raise NotFound("Staff member not found.")
+    return staff_member
+
+
+def create_staff_member(
+    display_name: str,
+    phone: str | None = None,
+    email: str | None = None,
+    role_title: str | None = None,
+    worker_type: str = "employee",
+    status: str = "active",
+    notes: str | None = None,
+    service_ids: list[int] | None = None,
+) -> StaffMember:
+    cleaned_name = (display_name or "").strip()
+    if not cleaned_name:
+        raise BadRequest("Staff member name cannot be blank.")
+
+    staff_member = StaffMember(
+        display_name=cleaned_name,
+        phone=(phone or "").strip() or None,
+        email=(email or "").strip().lower() or None,
+        role_title=(role_title or "").strip() or None,
+        worker_type=worker_type,
+        status=status,
+        notes=(notes or "").strip() or None,
+    )
+    if service_ids:
+        staff_member.services = list(
+            ServiceOption.query.filter(ServiceOption.id.in_(service_ids)).order_by(ServiceOption.name).all()
+        )
+    db.session.add(staff_member)
+    db.session.commit()
+    return staff_member
+
+
+def update_staff_member(
+    staff_member_id: int,
+    display_name: str,
+    phone: str | None = None,
+    email: str | None = None,
+    role_title: str | None = None,
+    worker_type: str = "employee",
+    status: str = "active",
+    notes: str | None = None,
+    service_ids: list[int] | None = None,
+) -> StaffMember:
+    staff_member = db.session.get(StaffMember, staff_member_id)
+    if staff_member is None:
+        raise NotFound("Staff member not found.")
+
+    cleaned_name = (display_name or "").strip()
+    if not cleaned_name:
+        raise BadRequest("Staff member name cannot be blank.")
+
+    staff_member.display_name = cleaned_name
+    staff_member.phone = (phone or "").strip() or None
+    staff_member.email = (email or "").strip().lower() or None
+    staff_member.role_title = (role_title or "").strip() or None
+    staff_member.worker_type = worker_type
+    staff_member.status = status
+    staff_member.notes = (notes or "").strip() or None
+    if service_ids is not None:
+        staff_member.services = list(
+            ServiceOption.query.filter(ServiceOption.id.in_(service_ids)).order_by(ServiceOption.name).all()
+        )
+    db.session.commit()
+    return staff_member
+
+
+def set_appointment_staff_assignments(appointment_id: int, staff_ids: list[int] | None) -> Appointment:
+    appointment = get_appointment(appointment_id)
+    current_staff_ids = {assignment.staff_member_id for assignment in appointment.staff_assignments}
+    desired_staff_ids = set(staff_ids or [])
+
+    for assignment in list(appointment.staff_assignments):
+        if assignment.staff_member_id not in desired_staff_ids:
+            db.session.delete(assignment)
+
+    for staff_id in desired_staff_ids - current_staff_ids:
+        staff_member = db.session.get(StaffMember, staff_id)
+        if staff_member is None:
+            raise NotFound("Staff member not found.")
+        appointment.staff_assignments.append(AppointmentStaffAssignment(staff_member_id=staff_id))
+
+    db.session.commit()
+    return appointment
+
+
+def find_staff_for_service_options(service_option_ids: list[int]) -> list[StaffMember]:
+    if not service_option_ids:
+        return list_staff_members()
+
+    statement = (
+        select(StaffMember)
+        .join(StaffMember.services)
+        .where(ServiceOption.id.in_(service_option_ids))
+        .options(selectinload(StaffMember.services))
+        .order_by(StaffMember.display_name)
+        .distinct()
+    )
+    return list(db.session.scalars(statement))
+
+
+def get_staff_assignment_warnings(appointment: Appointment, staff_member: StaffMember) -> list[str]:
+    warnings: list[str] = []
+    if appointment.scheduled_date is None or appointment.start_time is None or appointment.end_time is None:
+        return warnings
+
+    weekday = appointment.scheduled_date.weekday()
+    available_windows = [
+        window
+        for window in staff_member.availability_windows
+        if window.day_of_week == weekday
+    ]
+    if not available_windows:
+        warnings.append(
+            f"{staff_member.display_name} has no availability on {appointment.scheduled_date.strftime('%A')}.")
+    else:
+        within_window = any(
+            window.start_time <= appointment.start_time and window.end_time >= appointment.end_time
+            for window in available_windows
+        )
+        if not within_window:
+            warnings.append(
+                f"{staff_member.display_name} is not available during {appointment.start_time.strftime('%H:%M')}–{appointment.end_time.strftime('%H:%M')} on {appointment.scheduled_date.strftime('%A')}."
+            )
+
+    for other in staff_member.assigned_appointments:
+        if other.id == appointment.id or other.scheduled_date is None or other.start_time is None or other.end_time is None:
+            continue
+        if other.status == "Cancelled":
+            continue
+        if other.scheduled_date != appointment.scheduled_date:
+            continue
+
+        start_a = appointment.start_time
+        end_a = appointment.end_time
+        start_b = other.start_time
+        end_b = other.end_time
+        if start_a < end_b and start_b < end_a:
+            warnings.append(
+                f"{staff_member.display_name} is already assigned to overlapping work (# {other.id}) on {other.scheduled_date.strftime('%b %d')}."
+            )
+            break
+
+    return warnings
+
+
+def add_staff_availability(
+    staff_member_id: int,
+    day_of_week: int,
+    start_time,
+    end_time,
+    notes: str | None = None,
+) -> StaffAvailability:
+    staff_member = db.session.get(StaffMember, staff_member_id)
+    if staff_member is None:
+        raise NotFound("Staff member not found.")
+    if day_of_week < 0 or day_of_week > 6:
+        raise BadRequest("Day of week must be between 0 and 6.")
+    if start_time is None or end_time is None:
+        raise BadRequest("Start and end times are required.")
+    if end_time <= start_time:
+        raise BadRequest("End time must be after start time.")
+
+    availability = StaffAvailability(
+        staff_member_id=staff_member_id,
+        day_of_week=day_of_week,
+        start_time=start_time,
+        end_time=end_time,
+        notes=(notes or "").strip() or None,
+    )
+    db.session.add(availability)
+    db.session.commit()
+    return availability
+
+
+def delete_staff_availability(staff_availability_id: int) -> None:
+    availability = db.session.get(StaffAvailability, staff_availability_id)
+    if availability is None:
+        raise NotFound("Staff availability not found.")
+    db.session.delete(availability)
+    db.session.commit()
 
 
 def create_scheduled_work(
@@ -483,6 +704,7 @@ def get_appointment(appointment_id: int) -> Appointment:
             selectinload(Appointment.recurring_work),
             selectinload(Appointment.previous_appointment),
             selectinload(Appointment.rescheduled_appointments),
+            selectinload(Appointment.staff_assignments).selectinload(AppointmentStaffAssignment.staff_member),
         )
     )
     appointment = db.session.scalar(statement)
@@ -725,20 +947,43 @@ def generate_recurring_appointments_for_customer(customer_id: int, days_ahead: i
     return total_created
 
 
-def list_scheduled_appointments(start_date: date, end_date: date) -> list[Appointment]:
-    statement = (
-        select(Appointment)
-        .where(
-            Appointment.scheduled_date >= start_date,
-            Appointment.scheduled_date <= end_date,
-            Appointment.status != "Cancelled",
-        )
-        .options(
-            selectinload(Appointment.quote_request),
-            selectinload(Appointment.customer),
-        )
-        .order_by(Appointment.scheduled_date, Appointment.start_time, Appointment.id)
+def list_scheduled_appointments(
+    start_date: date,
+    end_date: date,
+    status: str | None = None,
+    staff_id: int | None = None,
+    sort_by: str = "soonest",
+    exclude_cancelled: bool = True,
+) -> list[Appointment]:
+    statement = select(Appointment).where(
+        Appointment.scheduled_date >= start_date,
+        Appointment.scheduled_date <= end_date,
     )
+
+    if exclude_cancelled:
+        statement = statement.where(Appointment.status != "Cancelled")
+
+    if status and status != "all":
+        statement = statement.where(Appointment.status == status)
+
+    if staff_id and staff_id != 0:
+        statement = statement.where(Appointment.assigned_staff.any(StaffMember.id == staff_id))
+
+    order_clause = [Appointment.scheduled_date, Appointment.start_time, Appointment.id]
+    if sort_by == "latest":
+        order_clause = [Appointment.scheduled_date.desc(), Appointment.start_time.desc(), Appointment.id.desc()]
+    elif sort_by == "status":
+        order_clause = [Appointment.status, Appointment.scheduled_date, Appointment.start_time, Appointment.id]
+    elif sort_by == "customer":
+        statement = statement.outerjoin(Appointment.customer)
+        order_clause = [Customer.primary_name, Appointment.scheduled_date, Appointment.start_time, Appointment.id]
+
+    statement = statement.options(
+        selectinload(Appointment.quote_request),
+        selectinload(Appointment.customer),
+        selectinload(Appointment.assigned_staff),
+    ).order_by(*order_clause)
+
     return list(db.session.scalars(statement))
 
 

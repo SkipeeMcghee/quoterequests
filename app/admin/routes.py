@@ -1,4 +1,4 @@
-from calendar import month_name, monthcalendar
+from calendar import month_name, monthcalendar, monthrange
 from datetime import date, time, timedelta
 from flask import current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -21,30 +21,42 @@ from app.forms.admin import (
     MergeCustomerForm,
     NoteForm,
     RecurringWorkGenerationForm,
+    AppointmentStaffAssignmentForm,
     RescheduleAppointmentForm,
     SetPrimaryFieldForm,
+    StaffAvailabilityForm,
+    StaffMemberForm,
     StatusUpdateForm,
 )
+from app.models import APPOINTMENT_STATUSES
 from app.services.admin_requests import (
     add_customer_field,
     add_customer_note,
     add_request_note,
+    add_staff_availability,
     create_appointment,
     create_customer,
     create_scheduled_work,
     create_customer_from_quote_request,
+    create_staff_member,
     delete_request_note,
+    delete_staff_availability,
     find_customer_matches_for_request,
     get_appointment,
     get_customer,
     get_quote_request,
     get_recurring_work,
     get_request_note,
+    get_staff_assignment_warnings,
+    get_staff_member,
     list_customers,
     list_quote_requests,
     list_recurring_works,
+    list_staff_members,
     list_appointments_for_day,
     list_appointments_for_month,
+    list_scheduled_appointments,
+    set_appointment_staff_assignments,
     link_quote_request_to_customer,
     add_customer_address,
     generate_recurring_appointments_for_customer,
@@ -57,6 +69,7 @@ from app.services.admin_requests import (
     update_appointment_status,
     update_customer_billing,
     update_customer_info,
+    update_staff_member,
     upload_customer_photos,
     update_last_contacted_on,
     update_request_note,
@@ -79,7 +92,25 @@ def calendar_view():
 
     year = request.args.get("year", type=int)
     month = request.args.get("month", type=int)
+    view = request.args.get("view", "calendar")
+    show = request.args.get("show", "upcoming")
     today = date.today()
+    if view not in ("calendar", "list"):
+        view = "calendar"
+    if show not in ("upcoming", "all"):
+        show = "upcoming"
+
+    status = request.args.get("status", "all")
+    staff_id = request.args.get("staff_id", type=int, default=0)
+    sort_by = request.args.get("sort", "soonest")
+    valid_sort_values = ("soonest", "latest", "customer", "status")
+    if status not in ("all", *APPOINTMENT_STATUSES):
+        status = "all"
+    if staff_id is None:
+        staff_id = 0
+    if sort_by not in valid_sort_values:
+        sort_by = "soonest"
+
     if year is None or month is None:
         year = today.year
         month = today.month
@@ -93,6 +124,26 @@ def calendar_view():
     appointments_by_date = {}
     for appointment in appointments:
         appointments_by_date.setdefault(appointment.scheduled_date, []).append(appointment)
+
+    scheduled_appointments = []
+    if view == "list":
+        filter_status = None if status == "all" else status
+        if show == "all":
+            scheduled_appointments = list_scheduled_appointments(
+                date(1900, 1, 1),
+                date(9999, 12, 31),
+                status=filter_status,
+                staff_id=staff_id,
+                sort_by=sort_by,
+            )
+        else:
+            scheduled_appointments = list_scheduled_appointments(
+                today,
+                date(9999, 12, 31),
+                status=filter_status,
+                staff_id=staff_id,
+                sort_by=sort_by,
+            )
 
     prev_year, prev_month = (year, month - 1) if month > 1 else (year - 1, 12)
     next_year, next_month = (year, month + 1) if month < 12 else (year + 1, 1)
@@ -112,6 +163,20 @@ def calendar_view():
         next_month=next_month,
         day_names=day_names,
         date=date,
+        view=view,
+        show=show,
+        status=status,
+        staff_id=staff_id,
+        sort_by=sort_by,
+        sort_options=[
+            ("soonest", "Soonest first"),
+            ("latest", "Latest first"),
+            ("customer", "Customer A-Z"),
+            ("status", "Status"),
+        ],
+        statuses=APPOINTMENT_STATUSES,
+        staff_members=list_staff_members(),
+        scheduled_appointments=scheduled_appointments,
     )
 
 
@@ -340,10 +405,32 @@ def appointment_detail(appointment_id: int):
     calendar_year = appointment.scheduled_date.year if appointment.scheduled_date else date.today().year
     calendar_month = appointment.scheduled_date.month if appointment.scheduled_date else date.today().month
 
+    if current_app.config.get("ENABLE_SCHEDULING") and current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        assign_staff_form = AppointmentStaffAssignmentForm(
+            prefix="assign-staff",
+            staff_ids=[staff.id for staff in appointment.assigned_staff],
+        )
+
+        all_staff = list_staff_members()
+        required_service_ids = [service.id for service in appointment.quote_request.services] if appointment.quote_request else []
+        all_staff_info = [
+            {
+                "staff": staff,
+                "matches_request": bool({service.id for service in staff.services} & set(required_service_ids)),
+                "warnings": get_staff_assignment_warnings(appointment, staff),
+            }
+            for staff in all_staff
+        ]
+    else:
+        assign_staff_form = None
+        all_staff_info = []
+
     return render_template(
         "admin/appointment_detail.html",
         appointment=appointment,
         appointment_form=appointment_form,
+        assign_staff_form=assign_staff_form,
+        all_staff_info=all_staff_info,
         reschedule_form=reschedule_form,
         history=history,
         future_reschedules=future_reschedules,
@@ -351,6 +438,26 @@ def appointment_detail(appointment_id: int):
         calendar_month=calendar_month,
         today=date.today(),
     )
+
+
+@bp.post("/appointments/<int:appointment_id>/assign-staff")
+@login_required
+def assign_staff_to_appointment(appointment_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+
+    form = AppointmentStaffAssignmentForm(prefix="assign-staff")
+    if form.validate_on_submit():
+        try:
+            set_appointment_staff_assignments(appointment_id, form.staff_ids.data)
+            flash("Staff assignments updated.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Choose valid staff members before saving.", "error")
+
+    appointment = get_appointment(appointment_id)
+    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id))
 
 
 @bp.get("/requests/<int:request_id>")
@@ -610,6 +717,205 @@ def customer_list():
         return redirect(url_for("admin.dashboard"))
     customers = list_customers()
     return render_template("admin/customers.html", customers=customers)
+
+
+@bp.get("/staff")
+@login_required
+def staff_list():
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+    staff_members = list_staff_members()
+    today = date.today()
+    staff_rows = []
+    for staff_member in staff_members:
+        upcoming_count = sum(
+            1
+            for appt in staff_member.assigned_appointments
+            if appt.scheduled_date and appt.scheduled_date >= today and appt.status != "Cancelled"
+        )
+        staff_rows.append({"staff_member": staff_member, "upcoming_count": upcoming_count})
+    return render_template("admin/staff_list.html", staff_rows=staff_rows)
+
+
+@bp.route("/staff/new", methods=["GET", "POST"])
+@login_required
+def new_staff_member():
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+    form = StaffMemberForm(prefix="staff")
+    if request.method == "POST" and form.validate_on_submit():
+        try:
+            staff_member = create_staff_member(
+                display_name=form.display_name.data,
+                phone=form.phone.data,
+                email=form.email.data,
+                role_title=form.role_title.data,
+                worker_type=form.worker_type.data,
+                status=form.status.data,
+                notes=form.notes.data,
+                service_ids=form.services.data,
+            )
+            flash("Staff member created.", "success")
+            return redirect(url_for("admin.staff_detail", staff_member_id=staff_member.id))
+        except Exception as exc:
+            flash(str(exc), "error")
+    return render_template("admin/staff_form.html", form=form, is_new=True)
+
+
+@bp.get("/staff/<int:staff_member_id>")
+@login_required
+def staff_detail(staff_member_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+    staff_member = get_staff_member(staff_member_id)
+    today = date.today()
+    assigned_appointments = sorted(
+        [appt for appt in staff_member.assigned_appointments if appt.scheduled_date is not None],
+        key=lambda appt: (
+            appt.scheduled_date,
+            appt.start_time.strftime('%H:%M') if appt.start_time else "",
+        ),
+    )
+    upcoming_assignments = [
+        appt for appt in assigned_appointments
+        if appt.scheduled_date >= today and appt.status != "Cancelled"
+    ]
+    recent_completed = [
+        appt for appt in assigned_appointments
+        if appt.status == "Completed" and appt.scheduled_date <= today
+    ]
+
+    def calculate_hours(appointments, start_date=None, end_date=None):
+        minutes = 0
+        for appt in appointments:
+            if appt.status == "Cancelled" or not appt.start_time or not appt.end_time:
+                continue
+            if start_date and appt.scheduled_date < start_date:
+                continue
+            if end_date and appt.scheduled_date > end_date:
+                continue
+            minutes += (
+                appt.end_time.hour * 60 + appt.end_time.minute
+                - (appt.start_time.hour * 60 + appt.start_time.minute)
+            )
+        return minutes / 60
+
+    filter_start = request.args.get("start_date")
+    filter_end = request.args.get("end_date")
+    start_date = None
+    end_date = None
+    custom_hours = None
+    if filter_start:
+        try:
+            start_date = date.fromisoformat(filter_start)
+        except ValueError:
+            start_date = None
+    if filter_end:
+        try:
+            end_date = date.fromisoformat(filter_end)
+        except ValueError:
+            end_date = None
+
+    scheduled_hours = calculate_hours(assigned_appointments)
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    current_week_hours = calculate_hours(assigned_appointments, week_start, week_end)
+    month_start = date(today.year, today.month, 1)
+    month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
+    current_month_hours = calculate_hours(assigned_appointments, month_start, month_end)
+    if start_date is not None or end_date is not None:
+        custom_hours = calculate_hours(assigned_appointments, start_date, end_date)
+
+    availability_form = StaffAvailabilityForm(prefix="availability")
+    weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    return render_template(
+        "admin/staff_detail.html",
+        staff_member=staff_member,
+        availability_form=availability_form,
+        upcoming_assignments=upcoming_assignments,
+        recent_completed=recent_completed,
+        scheduled_hours=scheduled_hours,
+        current_week_hours=current_week_hours,
+        current_month_hours=current_month_hours,
+        custom_hours=custom_hours,
+        filter_start=filter_start,
+        filter_end=filter_end,
+        today=today,
+        weekday_names=weekday_names,
+    )
+
+
+@bp.route("/staff/<int:staff_member_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_staff_member(staff_member_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+    staff_member = get_staff_member(staff_member_id)
+    form = StaffMemberForm(
+        prefix="staff",
+        display_name=staff_member.display_name,
+        phone=staff_member.phone,
+        email=staff_member.email,
+        role_title=staff_member.role_title,
+        worker_type=staff_member.worker_type,
+        status=staff_member.status,
+        services=[service.id for service in staff_member.services],
+        notes=staff_member.notes,
+    )
+    if request.method == "POST" and form.validate_on_submit():
+        try:
+            update_staff_member(
+                staff_member_id=staff_member.id,
+                display_name=form.display_name.data,
+                phone=form.phone.data,
+                email=form.email.data,
+                role_title=form.role_title.data,
+                worker_type=form.worker_type.data,
+                status=form.status.data,
+                notes=form.notes.data,
+                service_ids=form.services.data,
+            )
+            flash("Staff member updated.", "success")
+            return redirect(url_for("admin.staff_detail", staff_member_id=staff_member.id))
+        except Exception as exc:
+            flash(str(exc), "error")
+    return render_template("admin/staff_form.html", form=form, is_new=False, staff_member=staff_member)
+
+
+@bp.post("/staff/<int:staff_member_id>/availability")
+@login_required
+def add_staff_availability_route(staff_member_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+    form = StaffAvailabilityForm(prefix="availability")
+    if form.validate_on_submit():
+        try:
+            add_staff_availability(
+                staff_member_id=staff_member_id,
+                day_of_week=form.day_of_week.data,
+                start_time=form.start_time.data,
+                end_time=form.end_time.data,
+                notes=form.notes.data,
+            )
+            flash("Availability added.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Correct the availability details before saving.", "error")
+    return redirect(url_for("admin.staff_detail", staff_member_id=staff_member_id, _anchor="availability"))
+
+
+@bp.post("/staff/<int:staff_member_id>/availability/<int:availability_id>/delete")
+@login_required
+def delete_staff_availability_route(staff_member_id: int, availability_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+    try:
+        delete_staff_availability(availability_id)
+        flash("Availability removed.", "success")
+    except Exception as exc:
+        flash(str(exc), "error")
+    return redirect(url_for("admin.staff_detail", staff_member_id=staff_member_id, _anchor="availability"))
 
 
 @bp.get("/recurring-work")

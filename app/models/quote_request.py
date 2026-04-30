@@ -31,6 +31,12 @@ class ServiceOption(db.Model):
         back_populates="services",
         order_by="QuoteRequest.id",
     )
+    staff_members = db.relationship(
+        "StaffMember",
+        secondary="staff_service_options",
+        back_populates="services",
+        order_by="StaffMember.display_name",
+    )
 
     def __str__(self) -> str:
         return self.name
@@ -130,6 +136,18 @@ class Appointment(db.Model):
         "RecurringWork",
         back_populates="appointments",
         foreign_keys=[recurring_work_id],
+    )
+    staff_assignments = db.relationship(
+        "AppointmentStaffAssignment",
+        back_populates="appointment",
+        cascade="all, delete-orphan",
+        order_by="AppointmentStaffAssignment.id",
+    )
+    assigned_staff = db.relationship(
+        "StaffMember",
+        secondary="appointment_staff_assignments",
+        back_populates="assigned_appointments",
+        viewonly=True,
     )
     previous_appointment = db.relationship(
         "Appointment",

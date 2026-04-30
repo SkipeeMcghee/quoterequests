@@ -1,8 +1,13 @@
-from app.models import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES
+from app.models import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, ServiceOption
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, MultipleFileField
-from wtforms import BooleanField, DateField, DecimalField, HiddenField, SelectField, StringField, SubmitField, TextAreaField, TimeField
+from wtforms import BooleanField, DateField, DecimalField, HiddenField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField, TimeField
 from wtforms.validators import DataRequired, Email, Length, NumberRange, Optional
+from wtforms.widgets import CheckboxInput, ListWidget
+
+
+class CheckboxInputWithoutRequired(CheckboxInput):
+    validation_attrs = ["disabled"]
 
 
 class StatusUpdateForm(FlaskForm):
@@ -102,6 +107,68 @@ class MergeCustomerForm(FlaskForm):
     target_customer_id = SelectField("Surviving customer", coerce=int, validators=[DataRequired()])
     confirm = BooleanField("I understand this will merge the source customer into the selected target", validators=[DataRequired()])
     submit = SubmitField("Merge customer")
+
+
+class StaffMemberForm(FlaskForm):
+    display_name = StringField("Name", validators=[DataRequired(), Length(max=255)])
+    phone = StringField("Phone", validators=[Optional(), Length(max=50)])
+    email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
+    role_title = StringField("Role / title", validators=[Optional(), Length(max=120)])
+    worker_type = SelectField(
+        "Worker type",
+        choices=[("employee", "Employee"), ("contractor", "Contractor")],
+        validators=[DataRequired()],
+    )
+    status = SelectField(
+        "Status",
+        choices=[("active", "Active"), ("inactive", "Inactive")],
+        validators=[DataRequired()],
+    )
+    services = SelectMultipleField(
+        "Services",
+        coerce=int,
+        validators=[Optional()],
+        widget=ListWidget(prefix_label=False),
+        option_widget=CheckboxInputWithoutRequired(),
+    )
+    notes = TextAreaField("Notes", validators=[Optional(), Length(max=2000)])
+    submit = SubmitField("Save staff member")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.services.choices = self._load_service_choices()
+
+    def _load_service_choices(self) -> list[tuple[int, str]]:
+        options = ServiceOption.query.order_by(ServiceOption.name).all()
+        return [(option.id, option.name) for option in options]
+
+
+class AppointmentStaffAssignmentForm(FlaskForm):
+    staff_ids = SelectMultipleField("Assigned staff", coerce=int, validators=[Optional()])
+    submit = SubmitField("Save staff assignments")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.staff_ids.choices = self._load_staff_choices()
+
+    def _load_staff_choices(self) -> list[tuple[int, str]]:
+        from app.models import StaffMember
+
+        staff_members = StaffMember.query.order_by(StaffMember.display_name).all()
+        return [(staff.id, staff.display_name) for staff in staff_members]
+
+
+class StaffAvailabilityForm(FlaskForm):
+    day_of_week = SelectField(
+        "Day of week",
+        choices=[(str(i), day) for i, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])],
+        coerce=int,
+        validators=[DataRequired()],
+    )
+    start_time = TimeField("Start time", validators=[DataRequired()])
+    end_time = TimeField("End time", validators=[DataRequired()])
+    notes = TextAreaField("Notes", validators=[Optional(), Length(max=2000)])
+    submit = SubmitField("Add availability")
 
 
 class CreateScheduledWorkForm(FlaskForm):

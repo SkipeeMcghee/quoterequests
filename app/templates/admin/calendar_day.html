@@ -43,6 +43,14 @@
                 </div>
                 <div class="agenda-event-title">{{ appt.customer.primary_name or appt.quote_request.full_name or 'Customer' }}</div>
                 <div class="agenda-event-subtitle">{{ appt.display_title }}</div>
+                {% if enable_staff_management and appt.assigned_staff %}
+                  <div class="agenda-event-staff">
+                    Assigned to
+                    {% for staff in appt.assigned_staff %}
+                      <a class="agenda-event-staff-link" href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}">{{ staff.display_name }}</a>{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  </div>
+                {% endif %}
                 {% if appt.recurring_work_id %}
                   <div class="agenda-event-note">Recurring work #{{ appt.recurring_work_id }}</div>
                 {% endif %}
@@ -69,6 +77,13 @@
               </div>
               <div class="stacked-content">
                 <p><strong>{{ appointment.display_title }}</strong></p>
+                {% if enable_staff_management and appointment.assigned_staff %}
+                  <p class="subtle-text">Assigned to
+                    {% for staff in appointment.assigned_staff %}
+                      <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}">{{ staff.display_name }}</a>{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  </p>
+                {% endif %}
                 {% if appointment.quote_request_id %}
                   <p><a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">View request #{{ appointment.quote_request_id }}</a></p>
                 {% endif %}
@@ -80,4 +95,21 @@
     </div>
   </section>
 </main>
+{% endblock %}
+{% block scripts %}
+<style>
+.agenda-event-staff {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: #102a43;
+}
+.agenda-event-staff-link {
+  color: #005b94;
+  text-decoration: underline;
+}
+.agenda-event-staff-link:hover,
+.agenda-event-staff-link:focus-visible {
+  text-decoration: none;
+}
+</style>
 {% endblock %}

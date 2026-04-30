@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Staff{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>Staff</h1>
+      <p class="subtle-text">Manage staff and contractors, their skills, and upcoming assigned work.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button button-primary" href="{{ url_for('admin.new_staff_member') }}">Add staff member</a>
+    </div>
+  </section>
+
+  <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Staff directory</h2>
+        <p class="subtle-text">Manage staff and contractors, their skills, and upcoming assigned work.</p>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Contact</th>
+            <th>Services</th>
+            <th>Upcoming work</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in staff_rows %}
+            {% set staff_member = row.staff_member %}
+            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.staff_detail', staff_member_id=staff_member.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.staff_detail', staff_member_id=staff_member.id) }}'">
+              <td>
+                <strong class="row-title">{{ staff_member.display_name }}</strong>
+                <div class="subtle-text">{{ staff_member.role_title or staff_member.worker_type.title() }}</div>
+              </td>
+              <td>{{ staff_member.worker_type.title() }}</td>
+              <td>{{ staff_member.status.title() }}</td>
+              <td>
+                {% if staff_member.phone %}<div>{{ staff_member.phone }}</div>{% endif %}
+                {% if staff_member.email %}<div>{{ staff_member.email }}</div>{% endif %}
+                {% if not staff_member.phone and not staff_member.email %}<div class="subtle-text">No contact info</div>{% endif %}
+              </td>
+              <td>
+                {% if staff_member.services %}
+                  <div class="tag-list">
+                    {% for service in staff_member.services %}
+                      <span class="tag-pill">{{ service.name }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="subtle-text">No services assigned</span>
+                {% endif %}
+              </td>
+              <td>{{ row.upcoming_count }}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="empty-state">No staff members found.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+{% endblock %}

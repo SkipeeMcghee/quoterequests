@@ -3,4 +3,5 @@ Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
 }
 $env:FLASK_APP = 'run.py'
 $env:FLASK_ENV = 'development'
+$env:DATABASE_URL = 'postgresql+psycopg://quote_requests:quote_requests@localhost:5432/quote_requests'
 Start-Process -FilePath "$PWD\.venv\Scripts\python.exe" -ArgumentList '-m flask run --host=127.0.0.1 --port=5000' -NoNewWindow

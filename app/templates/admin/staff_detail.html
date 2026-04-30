@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}{{ staff_member.display_name }}{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  <section class="section-intro split-intro">
+    <div>
+      <p class="eyebrow">Admin</p>
+      {% include "admin/nav_buttons.html" %}
+      <h1>{{ staff_member.display_name }}</h1>
+      <p class="subtle-text">Staff detail and upcoming work assignments.</p>
+    </div>
+    <div class="detail-actions">
+      <a class="button button-secondary" href="{{ url_for('admin.staff_list') }}">Back to staff</a>
+      <a class="button button-primary" href="{{ url_for('admin.edit_staff_member', staff_member_id=staff_member.id) }}">Edit staff</a>
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <div class="detail-grid">
+      <article class="summary-card">
+        <div class="section-bar compact-bar">
+          <h2>Contact & status</h2>
+        </div>
+        <div class="stacked-content">
+          <p><strong>{{ staff_member.display_name }}</strong></p>
+          <p>{{ staff_member.role_title or "No role specified" }}</p>
+          <p>{{ staff_member.worker_type.title() }} · {{ staff_member.status.title() }}</p>
+          <p>{% if staff_member.phone %}<strong>Phone:</strong> {{ staff_member.phone }}<br>{% endif %}{% if staff_member.email %}<strong>Email:</strong> {{ staff_member.email }}{% endif %}</p>
+          {% if staff_member.notes %}
+            <p><strong>Notes</strong></p>
+            <p>{{ staff_member.notes }}</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="summary-card">
+        <div class="section-bar compact-bar">
+          <h2>Services</h2>
+        </div>
+        <div class="stacked-content">
+          {% if staff_member.services %}
+            <div class="tag-list">
+              {% for service in staff_member.services %}
+                <span class="tag">{{ service.name }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="subtle-text">No services assigned.</p>
+          {% endif %}
+        </div>
+      </article>
+
+      <article class="summary-card">
+        <div class="section-bar compact-bar">
+          <h2>Scheduled hours</h2>
+        </div>
+        <div class="stacked-content">
+          <p><strong>{{ scheduled_hours|round(2) }}</strong> total scheduled hours</p>
+          <p><strong>{{ current_week_hours|round(2) }}</strong> current week</p>
+          <p><strong>{{ current_month_hours|round(2) }}</strong> current month</p>
+          {% if custom_hours is not none %}
+            <p><strong>{{ custom_hours|round(2) }}</strong> filtered scheduled hours</p>
+          {% endif %}
+        </div>
+        <div class="section-bar compact-bar">
+          <h3>Filter date range</h3>
+        </div>
+        <form method="get" class="stacked-form">
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Start date</span>
+              <input type="date" name="start_date" value="{{ filter_start or '' }}" class="input" />
+            </label>
+            <label class="form-field">
+              <span>End date</span>
+              <input type="date" name="end_date" value="{{ filter_end or '' }}" class="input" />
+            </label>
+          </div>
+          <button type="submit" class="button button-secondary">Apply filter</button>
+        </form>
+      </article>
+    </div>
+
+    <div class="detail-grid">
+      <article class="summary-card" id="availability">
+        <div class="section-bar compact-bar">
+          <h2>Weekly availability</h2>
+        </div>
+        {% if staff_member.availability_windows %}
+          <ul class="summary-list">
+            {% for availability in staff_member.availability_windows %}
+              <li>
+                <strong>{{ weekday_names[availability.day_of_week] }}</strong> · {{ availability.start_time.strftime('%H:%M') }} – {{ availability.end_time.strftime('%H:%M') }}
+                {% if availability.notes %}
+                  <div class="subtle-text">{{ availability.notes }}</div>
+                {% endif %}
+                <form method="post" action="{{ url_for('admin.delete_staff_availability_route', staff_member_id=staff_member.id, availability_id=availability.id) }}" class="inline-form">
+                  <button type="submit" class="button button-small button-secondary">Delete</button>
+                </form>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="subtle-text">No availability windows added.</p>
+        {% endif %}
+        <div class="section-bar compact-bar">
+          <h3>Add availability</h3>
+        </div>
+        <form method="post" action="{{ url_for('admin.add_staff_availability_route', staff_member_id=staff_member.id) }}" class="stacked-form">
+          {{ availability_form.hidden_tag() }}
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Day of week</span>
+              {{ availability_form.day_of_week(class_="select") }}
+              {% for error in availability_form.day_of_week.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span>Start time</span>
+              {{ availability_form.start_time(class_="input") }}
+              {% for error in availability_form.start_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span>End time</span>
+              {{ availability_form.end_time(class_="input") }}
+              {% for error in availability_form.end_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+          </div>
+          <label class="form-field">
+            <span>Notes</span>
+            {{ availability_form.notes(class_="textarea") }}
+            {% for error in availability_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          {{ availability_form.submit(class_="button button-secondary") }}
+        </form>
+      </article>
+    </div>
+  </section>
+
+  <section class="summary-grid">
+    <div class="detail-grid">
+      <article class="summary-card">
+        <div class="section-bar compact-bar">
+          <h2>Upcoming assignments</h2>
+        </div>
+        {% if upcoming_assignments %}
+          <ul class="summary-list">
+            {% for appointment in upcoming_assignments %}
+              <li>
+                <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}"><strong>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</strong></a>
+                <div>{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'No time' }} – {{ appointment.end_time.strftime('%H:%M') if appointment.end_time else 'No time' }}</div>
+                <div>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</div>
+                <div class="subtle-text">{{ appointment.display_title }} · {{ appointment.status }}</div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="subtle-text">No upcoming assigned work.</p>
+        {% endif %}
+      </article>
+
+      <article class="summary-card">
+        <div class="section-bar compact-bar">
+          <h2>Recent completed work</h2>
+        </div>
+        {% if recent_completed %}
+          <ul class="summary-list">
+            {% for appointment in recent_completed %}
+              <li>
+                <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}"><strong>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</strong></a>
+                <div>{{ appointment.display_title }}</div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="subtle-text">No recently completed work.</p>
+        {% endif %}
+      </article>
+    </div>
+  </section>
+</main>
+{% endblock %}
