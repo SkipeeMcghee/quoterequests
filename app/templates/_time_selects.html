@@ -1,0 +1,14 @@
+{% macro render_time_select(hour_field, minute_field, label, wrapper_class="form-field", required=false) -%}
+  <label class="{{ wrapper_class }}">
+    {% if required %}
+      <span class="field-label-row">{{ label }} <span class="required-pill">Required</span></span>
+    {% else %}
+      <span>{{ label }}</span>
+    {% endif %}
+    <div class="time-select-row">
+      {{ hour_field(class_="select") }}
+      {{ minute_field(class_="select") }}
+    </div>
+    {% for error in hour_field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+  </label>
+{%- endmacro %}

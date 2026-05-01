@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 from app.extensions import db
 from app.models import Appointment, Customer, QuoteRequest, RecurringWork
@@ -27,7 +27,7 @@ def test_create_appointment_and_link_to_quote_request(app):
         appointment = create_appointment(
             quote_request.id,
             requested_date,
-            requested_time_window="9am - 12pm",
+            requested_time=time(9, 0),
             customer_notes="Preferred morning window.",
             internal_notes="Call before arrival.",
         )
@@ -36,7 +36,7 @@ def test_create_appointment_and_link_to_quote_request(app):
         assert appointment.quote_request_id == quote_request.id
         assert appointment.status == "Requested"
         assert appointment.requested_date == requested_date
-        assert appointment.requested_time_window == "9am - 12pm"
+        assert appointment.requested_time == time(9, 0)
         assert appointment.customer_notes == "Preferred morning window."
         assert appointment.internal_notes == "Call before arrival."
         assert quote_request.current_appointment == appointment
@@ -53,7 +53,7 @@ def test_reschedule_appointment_creates_new_linked_record(app):
         original = create_appointment(
             quote_request.id,
             first_date,
-            requested_time_window="10am - 12pm",
+            requested_time=time(10, 0),
             customer_notes="Initial requested slot.",
             internal_notes="First appointment.",
         )
@@ -62,7 +62,7 @@ def test_reschedule_appointment_creates_new_linked_record(app):
         rescheduled = reschedule_appointment(
             original.id,
             requested_date=second_date,
-            requested_time_window="11am - 1pm",
+            requested_time=time(11, 0),
             internal_notes="Rescheduled to next day.",
         )
 
@@ -134,7 +134,7 @@ def test_rescheduled_recurring_work_keeps_recurring_work_id(app):
         rescheduled = reschedule_appointment(
             appointment.id,
             requested_date=date.today() + timedelta(days=7),
-            requested_time_window="9am - 12pm",
+            requested_time=time(9, 0),
             internal_notes="Moved to next week.",
         )
 
@@ -151,7 +151,7 @@ def test_update_appointment_status(app):
         appointment = create_appointment(
             quote_request.id,
             date.today() + timedelta(days=1),
-            requested_time_window="1pm - 3pm",
+            requested_time=time(13, 0),
         )
 
         updated = update_appointment_status(appointment.id, "Scheduled")

@@ -7,7 +7,8 @@ from sqlalchemy import ForeignKey, Time
 from app.extensions import db
 
 
-QUOTE_REQUEST_STATUSES = ("New", "Contacted", "Quoted", "Won", "Lost")
+QUOTE_REQUEST_STATUSES = ("New", "Viewed", "Contacted", "Quoted", "Accepted", "Rejected", "Scheduled")
+REQUEST_QUOTE_DECISIONS = ("Pending", "Accepted", "Rejected")
 REQUEST_TYPES = ("Quote request", "Work request")
 
 APPOINTMENT_STATUSES = ("Requested", "Scheduled", "Completed", "Cancelled", "Rescheduled", "No Show")
@@ -70,6 +71,7 @@ class QuoteRequest(db.Model):
     request_type = db.Column(db.String(32), nullable=False, default="Quote request")
     additional_notes = db.Column(db.Text, nullable=True)
     last_contacted_on = db.Column(db.Date, nullable=True)
+    first_viewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     customer_id = db.Column(db.Integer, db.ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
 
@@ -97,6 +99,12 @@ class QuoteRequest(db.Model):
         cascade="all, delete-orphan",
         order_by="RequestNote.created_at.desc()",
     )
+    quotes = db.relationship(
+        "RequestQuote",
+        back_populates="quote_request",
+        cascade="all, delete-orphan",
+        order_by="RequestQuote.created_at.desc()",
+    )
     customer = db.relationship("Customer", back_populates="quote_requests")
 
     @property
@@ -106,6 +114,33 @@ class QuoteRequest(db.Model):
     @property
     def current_appointment(self) -> "Appointment | None":
         return self.appointments[0] if self.appointments else None
+
+    @property
+    def derived_status(self) -> str:
+        current_appointment = self.current_appointment
+        if current_appointment and current_appointment.scheduled_date and current_appointment.status != "Cancelled":
+            return "Scheduled"
+
+        quote_decisions = [quote.decision for quote in self.quotes]
+        if "Accepted" in quote_decisions:
+            return "Accepted"
+        if quote_decisions and all(decision == "Rejected" for decision in quote_decisions):
+            return "Rejected"
+        if quote_decisions:
+            return "Quoted"
+
+        # Preserve legacy quoted outcomes until historical data has explicit quote rows.
+        if self.status in {"Quoted", "Accepted", "Rejected"}:
+            return self.status
+
+        if self.last_contacted_on:
+            return "Contacted"
+        if self.first_viewed_at:
+            return "Viewed"
+        return "New"
+
+    def sync_status(self) -> None:
+        self.status = self.derived_status
 
 
 class Appointment(db.Model):
@@ -120,9 +155,9 @@ class Appointment(db.Model):
     start_time = db.Column(Time, nullable=True)
     end_time = db.Column(Time, nullable=True)
     requested_date = db.Column(db.Date, nullable=True)
-    requested_time_window = db.Column(db.String(120), nullable=True)
+    requested_time = db.Column(Time, nullable=True)
     confirmed_date = db.Column(db.Date, nullable=True)
-    confirmed_time_window = db.Column(db.String(120), nullable=True)
+    confirmed_time = db.Column(Time, nullable=True)
     customer_notes = db.Column(db.Text, nullable=True)
     internal_notes = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(32), nullable=False, default="Requested")
@@ -194,3 +229,31 @@ class RequestNote(db.Model):
 
     quote_request = db.relationship("QuoteRequest", back_populates="notes")
     author = db.relationship("User", back_populates="notes")
+
+
+class RequestQuote(db.Model):
+    __tablename__ = "request_quotes"
+
+    DECISIONS = REQUEST_QUOTE_DECISIONS
+
+    id = db.Column(db.Integer, primary_key=True)
+    quote_request_id = db.Column(db.Integer, ForeignKey("quote_requests.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+    decision = db.Column(db.String(16), nullable=False, default="Pending")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    quote_request = db.relationship("QuoteRequest", back_populates="quotes")
+
+    @property
+    def formatted_amount(self) -> str:
+        return f"${self.amount:,.2f}"
+
+    def __repr__(self) -> str:
+        return f"<RequestQuote {self.id} request={self.quote_request_id} amount={self.amount} decision={self.decision}>"

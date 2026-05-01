@@ -1,20 +1,23 @@
 {% extends "base.html" %}
+{% from "_time_selects.html" import render_time_select %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Appointment #{{ appointment.id }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
+  {% set location = appointment.quote_request.city if appointment.quote_request and appointment.quote_request.city else appointment.customer.primary_city if appointment.customer and appointment.customer.primary_city else None %}
   {% call render_admin_page_header(
     title='Scheduled Event',
     description='View or edit this scheduled job.',
     nav_mode='sub',
-    return_url=url_for('admin.calendar_view'),
-    return_label='Back to Schedule',
+    return_url=appointment_return_url,
+    return_label=appointment_return_label,
     meta='#' ~ appointment.id ~ ' · ' ~ appointment.display_title
   ) %}
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view') }}">Month View</a>
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=calendar_year, month=calendar_month, day=appointment.scheduled_date.day if appointment.scheduled_date else today.day) }}">Daily Agenda</a>
+      <a class="btn btn-secondary" href="{{ appointment_calendar_url }}">Calendar View</a>
+      <a class="btn btn-secondary" href="{{ appointment_list_url }}">List View</a>
+      <a class="btn btn-secondary" href="{{ appointment_day_url }}">Day Agenda</a>
       {% if appointment.customer %}
         <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id) }}">View Customer</a>
       {% endif %}
@@ -23,11 +26,82 @@
       {% endif %}
   {% endcall %}
 
+  <section class="summary-card appointment-overview-card">
+    <div class="appointment-overview-card__header">
+      <div>
+        <p class="eyebrow">Scheduled event</p>
+        <h2>{{ appointment.title or appointment.display_title }}</h2>
+        <p class="subtle-text">
+          {% if appointment.customer %}
+            <a href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id) }}">{{ appointment.customer.primary_name or 'Customer' }}</a>
+          {% else %}
+            No customer linked
+          {% endif %}
+          {% if appointment.quote_request_id %}
+            · <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">Request #{{ appointment.quote_request_id }}</a>
+          {% endif %}
+        </p>
+      </div>
+      <div class="appointment-overview-card__status">
+        <span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span>
+        <span class="subtle-text">Event #{{ appointment.id }}</span>
+      </div>
+    </div>
+
+    <div class="appointment-overview-grid">
+      <article>
+        <strong>Date</strong>
+        <span>{{ appointment.scheduled_date.strftime('%A, %b %d, %Y') if appointment.scheduled_date else 'Not set' }}</span>
+      </article>
+      <article>
+        <strong>Time</strong>
+        <span>
+          {% if appointment.start_time and appointment.end_time %}
+            {{ appointment.start_time.strftime('%H:%M') }} – {{ appointment.end_time.strftime('%H:%M') }}
+          {% elif appointment.start_time %}
+            Starts at {{ appointment.start_time.strftime('%H:%M') }}
+          {% else %}
+            No time set
+          {% endif %}
+        </span>
+      </article>
+      <article>
+        <strong>Customer</strong>
+        <span>{% if appointment.customer %}{{ appointment.customer.primary_name or 'Customer' }}{% else %}Not linked{% endif %}</span>
+      </article>
+      <article>
+        <strong>Work title or service</strong>
+        <span>{{ appointment.title or appointment.display_title }}</span>
+      </article>
+      <article>
+        <strong>Assigned staff</strong>
+        <span>
+          {% if appointment.assigned_staff %}
+            {% for staff in appointment.assigned_staff %}
+              {{ staff.display_name }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          {% else %}
+            Unassigned
+          {% endif %}
+        </span>
+      </article>
+      <article>
+        <strong>Location</strong>
+        <span>{{ location or 'Not specified' }}</span>
+      </article>
+    </div>
+
+    <div class="appointment-overview-links">
+      <a class="btn btn-secondary" href="{{ appointment_calendar_url }}">Open Calendar View</a>
+      <a class="btn btn-secondary" href="{{ appointment_list_url }}">Open List View</a>
+      <a class="btn btn-secondary" href="{{ appointment_day_url }}">Open Day Agenda</a>
+    </div>
+  </section>
 
   <section class="detail-grid">
     <article class="summary-card">
       <div class="section-bar compact-bar">
-        <h2>Appointment details</h2>
+        <h2>Event details</h2>
       </div>
       <dl class="detail-list vertical-list">
         <div>
@@ -49,10 +123,7 @@
         </div>
         <div>
           <dt>Location</dt>
-          <dd>
-            {% set location = appointment.quote_request.city if appointment.quote_request and appointment.quote_request.city else appointment.customer.primary_city if appointment.customer and appointment.customer.primary_city else None %}
-            {{ location or 'Not specified' }}
-          </dd>
+          <dd>{{ location or 'Not specified' }}</dd>
         </div>
         <div>
           <dt>Customer</dt>
@@ -78,7 +149,7 @@
           <dt>Recurring work</dt>
           <dd>
             {% if appointment.recurring_work %}
-              Recurring work #{{ appointment.recurring_work.id }}
+              <a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=appointment.recurring_work.id) }}">Recurring work #{{ appointment.recurring_work.id }}</a>
             {% else %}
               None
             {% endif %}
@@ -108,70 +179,154 @@
     {% if enable_staff_management %}
       <article class="summary-card">
         <div class="section-bar compact-bar">
-          <h2>Assigned staff</h2>
+          <div>
+            <h2>Staff assignment</h2>
+            <p class="subtle-text">Assign staff directly from this event and review service fit, weekly availability, and planning conflicts before saving.</p>
+          </div>
         </div>
-        {% if appointment.assigned_staff %}
-          <ul class="summary-list">
-            {% for staff in appointment.assigned_staff %}
-              <li>
-                <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}">{{ staff.display_name }}</a>
-                <div class="subtle-text">{{ staff.worker_type.title() }} · {{ staff.status.title() }}</div>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p class="subtle-text">No staff assigned yet.</p>
+        <div class="assignment-current-summary">
+          <strong>Assigned now</strong>
+          {% if appointment.assigned_staff %}
+            <div class="tag-list assignment-current-summary__tags">
+              {% for staff in appointment.assigned_staff %}
+                <a class="tag-pill" href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}">{{ staff.display_name }}</a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="subtle-text">No staff assigned yet.</p>
+          {% endif %}
+        </div>
+
+        {% if required_service_names %}
+          <div class="assignment-service-summary">
+            <strong>Requested services</strong>
+            <div class="tag-list">
+              {% for service_name in required_service_names %}
+                <span class="tag-pill">{{ service_name }}</span>
+              {% endfor %}
+            </div>
+          </div>
         {% endif %}
 
         <div class="section-bar compact-bar">
-          <h3>Assign staff</h3>
+          <h3>Edit assignment</h3>
         </div>
-        <form method="post" action="{{ url_for('admin.assign_staff_to_appointment', appointment_id=appointment.id) }}" class="stacked-form">
+        <form method="post" action="{{ assign_staff_url }}" class="stacked-form">
           {{ assign_staff_form.hidden_tag() }}
 
-          <label class="form-field">
-            <span>Assigned staff</span>
-            {{ assign_staff_form.staff_ids(class_="select", multiple=True) }}
-            {% for error in assign_staff_form.staff_ids.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
-
-          {% if appointment.quote_request and appointment.quote_request.services %}
-            <p class="subtle-text">Request services:
-              {% for service in appointment.quote_request.services %}
-                <span class="tag-pill">{{ service.name }}</span>
-              {% endfor %}
-            </p>
+          {% if matching_staff_info %}
+            <section class="assignment-group">
+              <div class="section-bar compact-bar">
+                <div>
+                  <h4>Can perform requested services</h4>
+                  <p class="subtle-text">Best-fit staff appear first, with planning warnings shown inline.</p>
+                </div>
+              </div>
+              <div class="checkbox-grid assignment-checkbox-grid">
+                {% for info in matching_staff_info %}
+                  <label class="checkbox-card assignment-card">
+                    <input class="checkbox-input" type="checkbox" name="{{ assign_staff_form.staff_ids.name }}" value="{{ info.staff.id }}" {% if info.is_assigned %}checked{% endif %}>
+                    <div class="assignment-card__body">
+                      <div class="assignment-card__header">
+                        <div>
+                          <strong>{{ info.staff.display_name }}</strong>
+                          <div class="subtle-text">{{ info.staff.role_title or info.staff.worker_type.title() }} · {{ info.staff.status.title() }}</div>
+                        </div>
+                        {% if info.is_assigned %}
+                          <span class="tag-pill">Assigned now</span>
+                        {% endif %}
+                      </div>
+                      <div class="assignment-card__meta">
+                        <span class="assignment-fit-badge assignment-fit-badge--match">{{ info.capability_label }}</span>
+                        <span class="subtle-text">Weekly availability: {{ info.availability_summary }}</span>
+                      </div>
+                      {% if info.service_names %}
+                        <div class="tag-list">
+                          {% for service_name in info.service_names %}
+                            <span class="tag">{{ service_name }}</span>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <div class="subtle-text">No services are assigned on this staff record yet.</div>
+                      {% endif %}
+                      <div class="button-row assignment-card__actions">
+                        <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=info.staff.id) }}">Open Staff Record</a>
+                        <a class="btn btn-secondary btn-small" href="{{ info.schedule_url }}">View Schedule</a>
+                      </div>
+                      {% if info.warnings %}
+                        <ul class="assignment-warning-list">
+                          {% for warning in info.warnings %}
+                            <li>{{ warning }}</li>
+                          {% endfor %}
+                        </ul>
+                      {% endif %}
+                    </div>
+                  </label>
+                {% endfor %}
+              </div>
+            </section>
           {% endif %}
 
-          <div class="staff-capabilities">
-            <h4>Staff capability preview</h4>
-            <ul class="summary-list">
-              {% for info in all_staff_info %}
-                <li>
-                  <strong>{{ info.staff.display_name }}</strong>
-                  {% if info.staff.services %}
-                    <div class="tag-list">
-                      {% for service in info.staff.services %}
-                        <span class="tag">{{ service.name }}</span>
-                      {% endfor %}
+          {% if other_staff_info %}
+            <section class="assignment-group">
+              <div class="section-bar compact-bar">
+                <div>
+                  <h4>Other staff</h4>
+                  <p class="subtle-text">These staff records do not list the requested service, but they can still be assigned if needed.</p>
+                </div>
+              </div>
+              <div class="checkbox-grid assignment-checkbox-grid">
+                {% for info in other_staff_info %}
+                  <label class="checkbox-card assignment-card assignment-card--secondary">
+                    <input class="checkbox-input" type="checkbox" name="{{ assign_staff_form.staff_ids.name }}" value="{{ info.staff.id }}" {% if info.is_assigned %}checked{% endif %}>
+                    <div class="assignment-card__body">
+                      <div class="assignment-card__header">
+                        <div>
+                          <strong>{{ info.staff.display_name }}</strong>
+                          <div class="subtle-text">{{ info.staff.role_title or info.staff.worker_type.title() }} · {{ info.staff.status.title() }}</div>
+                        </div>
+                        {% if info.is_assigned %}
+                          <span class="tag-pill">Assigned now</span>
+                        {% endif %}
+                      </div>
+                      <div class="assignment-card__meta">
+                        <span class="assignment-fit-badge">{{ info.capability_label }}</span>
+                        <span class="subtle-text">Weekly availability: {{ info.availability_summary }}</span>
+                      </div>
+                      {% if info.service_names %}
+                        <div class="tag-list">
+                          {% for service_name in info.service_names %}
+                            <span class="tag">{{ service_name }}</span>
+                          {% endfor %}
+                        </div>
+                      {% else %}
+                        <div class="subtle-text">No services are assigned on this staff record yet.</div>
+                      {% endif %}
+                      <div class="button-row assignment-card__actions">
+                        <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=info.staff.id) }}">Open Staff Record</a>
+                        <a class="btn btn-secondary btn-small" href="{{ info.schedule_url }}">View Schedule</a>
+                      </div>
+                      {% if info.warnings %}
+                        <ul class="assignment-warning-list">
+                          {% for warning in info.warnings %}
+                            <li>{{ warning }}</li>
+                          {% endfor %}
+                        </ul>
+                      {% endif %}
                     </div>
-                  {% else %}
-                    <div class="subtle-text">No service capabilities assigned.</div>
-                  {% endif %}
-                  {% if appointment.quote_request and appointment.quote_request.services %}
-                    <div class="subtle-text">{% if info.matches_request %}Matches request services{% else %}Does not match request services{% endif %}</div>
-                  {% endif %}
-                  {% if info.warnings %}
-                    <ul class="summary-list subtle-text">
-                      {% for warning in info.warnings %}
-                        <li class="field-error">{{ warning }}</li>
-                      {% endfor %}
-                    </ul>
-                  {% endif %}
-                </li>
-              {% endfor %}
-            </ul>
-          </div>
+                  </label>
+                {% endfor %}
+              </div>
+            </section>
+          {% endif %}
+
+          {% if not matching_staff_info and not other_staff_info %}
+            <p class="subtle-text">No staff records are available for assignment yet.</p>
+          {% endif %}
+
+          {% for error in assign_staff_form.staff_ids.errors %}
+            <small class="field-error">{{ error }}</small>
+          {% endfor %}
 
           {{ assign_staff_form.submit(class_="btn btn-primary") }}
         </form>
@@ -182,7 +337,7 @@
       <div class="section-bar compact-bar">
         <h2>Edit scheduling</h2>
       </div>
-      <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
+      <form method="post" action="{{ edit_appointment_url }}" class="stacked-form">
         {{ appointment_form.hidden_tag() }}
         <label class="form-field">
           <span>Work title / summary</span>
@@ -194,14 +349,8 @@
             <span>Scheduled date</span>
             {{ appointment_form.scheduled_date(class_="input") }}
           </label>
-          <label class="form-field">
-            <span>Start time</span>
-            {{ appointment_form.start_time(class_="input") }}
-          </label>
-          <label class="form-field">
-            <span>End time</span>
-            {{ appointment_form.end_time(class_="input") }}
-          </label>
+          {{ render_time_select(appointment_form.start_time_hour, appointment_form.start_time_minute, "Start time") }}
+          {{ render_time_select(appointment_form.end_time_hour, appointment_form.end_time_minute, "End time") }}
         </div>
         <div class="form-grid">
           <label class="form-field">
@@ -227,17 +376,14 @@
       <div class="section-bar compact-bar">
         <h2>Reschedule</h2>
       </div>
-      <form method="post" action="{{ url_for('admin.reschedule_appointment_route', appointment_id=appointment.id) }}" class="stacked-form">
+      <form method="post" action="{{ reschedule_appointment_url }}" class="stacked-form">
         {{ reschedule_form.hidden_tag() }}
         <div class="form-grid">
           <label class="form-field">
             <span>New requested date</span>
             {{ reschedule_form.requested_date(class_="input") }}
           </label>
-          <label class="form-field">
-            <span>New time window</span>
-            {{ reschedule_form.requested_time_window(class_="input") }}
-          </label>
+          {{ render_time_select(reschedule_form.requested_time_hour, reschedule_form.requested_time_minute, "New requested time") }}
         </div>
         <label class="form-field">
           <span>Internal notes</span>

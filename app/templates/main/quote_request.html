@@ -67,7 +67,7 @@
           <span>Project photos</span>
           {{ form.photos(class_="file-input", id="photos", multiple=true) }}
           <div class="field-help">
-            <small>Accepted types: JPG, PNG, GIF, and WebP. Upload up to 20 photos (300 MB max total).</small>
+            <small>Accepted types: JPG, PNG, GIF, and WebP. Upload up to 20 photos (100 MB max total).</small>
             <small id="photo-preview" class="subtle-text">No files selected.</small>
           </div>
           {% for error in form.photos.errors %}<small class="field-error">{{ error }}</small>{% endfor %}

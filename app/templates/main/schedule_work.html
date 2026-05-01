@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_time_selects.html" import render_time_select %}
 
 {% block title %}Schedule Some Work{% endblock %}
 
@@ -49,11 +50,7 @@
           {% for error in form.preferred_date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
 
-        <label class="form-field field-span-2">
-          <span>Preferred time window</span>
-          {{ form.preferred_time_window(class_="input", placeholder="e.g. 9am - 12pm") }}
-          {% for error in form.preferred_time_window.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
+        {{ render_time_select(form.preferred_time_hour, form.preferred_time_minute, "Preferred time", wrapper_class="form-field field-span-2") }}
 
         <label class="form-field field-span-2">
           <span>Additional Notes</span>
@@ -79,7 +76,7 @@
           <span>Project photos</span>
           {{ form.photos(class_="file-input", id="photos", multiple=true) }}
           <div class="field-help">
-            <small>Accepted types: JPG, PNG, GIF, and WebP. Upload up to 20 photos (300 MB max total).</small>
+            <small>Accepted types: JPG, PNG, GIF, and WebP. Upload up to 20 photos (100 MB max total).</small>
             <small id="photo-preview" class="subtle-text">No files selected.</small>
           </div>
           {% for error in form.photos.errors %}<small class="field-error">{{ error }}</small>{% endfor %}

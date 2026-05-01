@@ -530,6 +530,17 @@ textarea {
   font-weight: 600;
 }
 
+.time-select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.45rem;
+}
+
+.time-select-row .select {
+  margin-top: 0;
+}
+
 .field-span-2 {
   grid-column: span 2;
 }
@@ -566,6 +577,10 @@ textarea {
   margin: 0;
 }
 
+.request-status-display .status-badge {
+  margin-top: 0;
+}
+
 .input:focus,
 .textarea:focus,
 .select:focus,
@@ -594,6 +609,30 @@ textarea {
 .note-item {
   display: grid;
   gap: 0.75rem;
+}
+
+.request-quote-list {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.request-quote-item {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(23, 77, 56, 0.05);
+}
+
+.request-quote-item__header,
+.request-quote-item__actions {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .note-header {
@@ -796,10 +835,319 @@ thead th {
     border: 1px solid var(--line);
   }
 
+.schedule-view-panel {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.schedule-view-panel__header,
+.schedule-view-panel__footer,
+.calendar-nav,
+.schedule-view-toggle,
+.schedule-list-scope,
+.filter-actions,
+.button-group {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.schedule-view-panel__header,
+.schedule-view-panel__footer {
+  align-items: start;
+  justify-content: space-between;
+}
+
+.schedule-view-panel__footer {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.schedule-view-note {
+  max-width: 32rem;
+  margin: 0;
+}
+
+.calendar-nav .btn,
+.schedule-view-toggle .btn,
+.schedule-list-scope .btn,
+.calendar-nav .button,
+.schedule-view-toggle .button,
+.schedule-list-scope .button {
+  margin: 0;
+}
+
+.schedule-list-card {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.filter-toolbar {
+  padding: 0.75rem 0 0;
+}
+
+.table-filters {
+  width: 100%;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(165px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.filter-row--list {
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+.filter-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.filter-field span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.filter-field select {
+  width: 100%;
+  min-width: 0;
+  border-radius: 14px;
+  border: 1px solid rgba(23, 77, 56, 0.16);
+  background: #fff;
+  padding: 0.85rem 0.9rem;
+}
+
+.filter-actions {
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.actions-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.button-group {
+  justify-content: flex-end;
+}
+
+.button-group .btn,
+.button-group .button {
+  min-width: 90px;
+}
+
+.schedule-list-date {
+  min-width: 9rem;
+}
+
+.schedule-day-link {
+  display: grid;
+  gap: 0.2rem;
+  color: var(--accent-strong);
+  text-decoration: none;
+}
+
+.schedule-day-link:hover,
+.schedule-day-link:focus-visible {
+  text-decoration: underline;
+}
+
+.schedule-day-link strong {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.schedule-day-link span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.schedule-calendar-scroll {
+  padding-bottom: 0.25rem;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(138px, 1fr));
+  gap: 0.75rem;
+  min-width: 980px;
+}
+
+.calendar-cell {
+  border: 1px solid var(--line);
+  padding: 0.75rem;
+  min-height: 185px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 20px;
+}
+
+.calendar-cell--header {
+  min-height: auto;
+  background: rgba(23, 77, 56, 0.08);
+  font-weight: 700;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar-cell--empty {
+  background: rgba(23, 77, 56, 0.03);
+  border-style: dashed;
+}
+
+.calendar-cell--day {
+  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.calendar-cell--day:hover,
+.calendar-cell--day:focus-visible {
+  background: rgba(23, 77, 56, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(23, 77, 56, 0.1);
+}
+
+.calendar-cell--day:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.calendar-cell--today {
+  border-color: var(--accent-strong);
+  box-shadow: inset 0 0 0 2px rgba(77, 23, 23, 0.24);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.calendar-cell__top {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.calendar-day-meta {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.calendar-day-label {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.calendar-day-count,
+.calendar-day-cta,
+.calendar-time {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.calendar-day-count,
+.calendar-time {
+  padding: 0.2rem 0.55rem;
+}
+
+.calendar-day-count {
+  background: rgba(23, 77, 56, 0.08);
+  color: var(--accent);
+}
+
+.calendar-day-count--empty {
+  background: rgba(77, 23, 23, 0.08);
+  color: var(--accent-strong);
+}
+
+.calendar-day-cta {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.calendar-appointments {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+  height: 100%;
+}
+
+.calendar-empty-day {
+  margin-top: auto;
+}
+
+.calendar-appointment-preview {
+  display: grid;
+   grid-template-columns: minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: start;
+  padding: 0.55rem 0.6rem;
+  border-radius: 16px;
+  background: var(--card-solid);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+   min-width: 0;
+   overflow: hidden;
+ }
+
+ .calendar-time {
+   background: rgba(77, 23, 23, 0.08);
+   color: var(--accent-strong);
+   font-weight: 700;
+   width: 100%;
+   max-width: 100%;
+   min-width: 0;
+   box-sizing: border-box;
+   justify-content: center;
+   overflow: hidden;
+   text-overflow: ellipsis;
+   white-space: nowrap;
+}
+
+.calendar-more {
+  margin-top: auto;
+}
+
 .agenda-page {
   display: grid;
   grid-template-columns: 96px 1fr;
   gap: 1rem;
+}
+
+.agenda-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.agenda-snapshot-card {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.agenda-snapshot-card strong {
+  color: var(--accent-strong);
+  font-size: 1.7rem;
+}
+
+.agenda-snapshot-card span {
+  color: var(--muted);
 }
 
 .agenda-sidebar {
@@ -852,6 +1200,11 @@ thead th {
   background: rgba(23, 77, 56, 0.12);
 }
 
+.agenda-event:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
 .agenda-event-row {
   display: flex;
   justify-content: space-between;
@@ -877,6 +1230,22 @@ thead th {
   color: var(--muted);
 }
 
+.agenda-event-staff {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.agenda-event-staff-link {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.agenda-event-staff-link:hover,
+.agenda-event-staff-link:focus-visible {
+  text-decoration: none;
+}
+
 .agenda-empty {
   position: absolute;
   inset: 0;
@@ -893,8 +1262,102 @@ thead th {
   margin-top: 1rem;
 }
 
+.agenda-list-card {
+  margin-top: 1rem;
+}
+
+.agenda-quick-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.agenda-quick-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.9rem;
+  align-items: center;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--card-solid);
+  color: inherit;
+  text-decoration: none;
+}
+
+.agenda-quick-item:hover,
+.agenda-quick-item:focus-visible {
+  background: rgba(23, 77, 56, 0.08);
+}
+
+.agenda-quick-item:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.agenda-quick-item__time {
+  color: var(--accent-strong);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.agenda-quick-item__copy {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.agenda-quick-item__copy span {
+  color: var(--muted);
+}
+
 .calendar-day-nav {
   gap: 0.75rem;
+}
+
+.appointment-overview-card {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.appointment-overview-card__header,
+.appointment-overview-links {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.appointment-overview-card__header h2 {
+  margin: 0;
+}
+
+.appointment-overview-card__status {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: end;
+}
+
+.appointment-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.appointment-overview-grid article {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: var(--card-solid);
+  border: 1px solid var(--line);
+}
+
+.appointment-overview-grid strong {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 
@@ -920,6 +1383,535 @@ thead th {
 .summary-grid {
   grid-template-columns: 1.2fr 0.8fr;
   align-items: start;
+}
+
+.customer-workflow-overview,
+.customer-media-grid,
+.customer-record-layout {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.customer-workflow-overview {
+  grid-template-columns: 1.15fr 0.85fr;
+}
+
+.customer-primary-card__content {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.customer-primary-card__identity {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.customer-primary-card__identity h3 {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 1.8rem;
+}
+
+.customer-primary-card__contact a,
+.customer-workflow-links--text a,
+.customer-recurring-item__body a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.customer-primary-card__contact a:hover,
+.customer-primary-card__contact a:focus-visible,
+.customer-workflow-links--text a:hover,
+.customer-workflow-links--text a:focus-visible,
+.customer-recurring-item__body a:hover,
+.customer-recurring-item__body a:focus-visible {
+  text-decoration: none;
+}
+
+.customer-highlight-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.customer-highlight-metrics div {
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  background: rgba(23, 77, 56, 0.06);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+}
+
+.customer-highlight-metrics dt {
+  margin-bottom: 0.35rem;
+  color: var(--muted);
+}
+
+.customer-highlight-metrics dd {
+  margin: 0;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.customer-workflow-card {
+  align-content: start;
+}
+
+.customer-workflow-links {
+  gap: 0.65rem;
+}
+
+.customer-workflow-links--text {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.customer-media-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.customer-record-layout {
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: start;
+}
+
+.customer-record-layout__main,
+.customer-record-layout__side,
+.customer-recurring-list,
+.customer-tool-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.customer-list-toolbar {
+  align-items: end;
+}
+
+.customer-list-filter {
+  width: min(360px, 100%);
+}
+
+.customer-list-count {
+  margin: 0.25rem 0 0;
+}
+
+.customer-table-meta {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.customer-aux-group {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.customer-aux-group + .customer-aux-group {
+  margin-top: 1rem;
+}
+
+.customer-aux-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.customer-aux-item,
+.customer-recurring-item,
+.customer-billing-summary,
+.customer-recurring-empty {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(23, 77, 56, 0.05);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+}
+
+.customer-aux-item__content,
+.customer-recurring-item__body {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.customer-recurring-item__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.customer-billing-summary,
+.customer-recurring-empty {
+  display: grid;
+}
+
+.customer-billing-summary p,
+.customer-recurring-empty p {
+  margin: 0.35rem 0 0;
+}
+
+.customer-recurring-guidance {
+  margin-top: 1rem;
+}
+
+.schedule-form-card,
+.schedule-context-card {
+  align-content: start;
+}
+
+.recurring-work-builder {
+  grid-template-columns: 1.15fr 0.85fr;
+  align-items: start;
+}
+
+.recurring-work-form-card,
+.recurring-work-context-card,
+.recurring-plan-overview,
+.recurring-generated-card {
+  align-content: start;
+}
+
+.recurring-choice-grid,
+.recurring-plan-metrics,
+.recurring-context-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.recurring-choice-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recurring-context-list article,
+.recurring-plan-metrics article {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: var(--card-solid);
+  border: 1px solid var(--line);
+}
+
+.recurring-context-list article p,
+.recurring-generated-summary p {
+  margin: 0;
+}
+
+.recurring-plan-overview {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.recurring-plan-overview__header,
+.recurring-plan-links,
+.recurring-generated-summary {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.recurring-plan-overview__header h2 {
+  margin: 0;
+}
+
+.recurring-plan-overview__status {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: end;
+}
+
+.recurring-plan-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recurring-plan-metrics strong {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.recurring-generated-link,
+.recurring-day-link {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.recurring-generated-link:hover,
+.recurring-generated-link:focus-visible,
+.recurring-day-link:hover,
+.recurring-day-link:focus-visible {
+  text-decoration: none;
+}
+
+.recurring-list-generated {
+  min-width: 10rem;
+}
+
+.recurring-generated-summary {
+  margin-bottom: 1rem;
+}
+
+.staff-directory-note {
+  max-width: 28rem;
+  margin: 0;
+}
+
+.staff-directory-meta,
+.staff-directory-hours,
+.staff-overview-grid,
+.staff-hours-grid,
+.staff-assignment-sections,
+.staff-availability-grid,
+.assignment-card__body,
+.assignment-card__meta,
+.assignment-warning-list,
+.assignment-current-summary,
+.assignment-service-summary {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.staff-directory-meta a,
+.staff-availability-window a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.staff-directory-meta a:hover,
+.staff-directory-meta a:focus-visible,
+.staff-availability-window a:hover,
+.staff-availability-window a:focus-visible {
+  text-decoration: none;
+}
+
+.staff-directory-hours strong {
+  color: var(--accent-strong);
+}
+
+.staff-overview-card {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.staff-overview-card__header,
+.staff-overview-card__badges,
+.assignment-current-summary__tags,
+.assignment-card__header,
+.assignment-card__actions {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.staff-overview-card__header h2 {
+  margin: 0;
+}
+
+.staff-overview-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.staff-overview-grid article,
+.staff-hours-card,
+.staff-availability-day,
+.assignment-current-summary,
+.assignment-service-summary {
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(23, 77, 56, 0.05);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+}
+
+.staff-overview-grid strong,
+.staff-hours-card strong {
+  color: var(--accent-strong);
+}
+
+.staff-detail-grid,
+.staff-assignment-sections {
+  margin-bottom: 1rem;
+}
+
+.staff-service-list {
+  margin-top: 0.5rem;
+}
+
+.staff-hours-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.staff-hours-card {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.staff-hours-card strong {
+  font-size: 1.5rem;
+}
+
+.staff-availability-grid {
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.staff-availability-day {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.staff-availability-day__windows {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.staff-availability-window {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+  background: var(--card-solid);
+  border: 1px solid var(--line);
+}
+
+.assignment-group + .assignment-group {
+  margin-top: 1rem;
+}
+
+.assignment-checkbox-grid {
+  margin-top: 0;
+}
+
+.assignment-card {
+  align-items: start;
+  border-radius: 18px;
+}
+
+.assignment-card--secondary {
+  border-color: rgba(32, 52, 99, 0.16);
+  background: rgba(32, 52, 99, 0.04);
+}
+
+.assignment-card__body {
+  flex: 1;
+}
+
+.assignment-card__header strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.assignment-card__meta {
+  gap: 0.45rem;
+}
+
+.assignment-fit-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.28rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(32, 52, 99, 0.08);
+  color: #203463;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.assignment-fit-badge--match {
+  background: rgba(23, 77, 56, 0.12);
+  color: var(--accent-strong);
+}
+
+.assignment-warning-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--danger);
+}
+
+.assignment-warning-list li {
+  margin: 0;
+}
+
+.field-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.required-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(77, 23, 23, 0.12);
+  color: var(--danger);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.schedule-details {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(23, 77, 56, 0.03);
+  padding: 0.85rem 1rem;
+}
+
+.schedule-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.schedule-details__content {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.9rem;
+}
+
+.schedule-context-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.schedule-context-item,
+.schedule-context-actions,
+.schedule-next-step-card {
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: rgba(23, 77, 56, 0.06);
+  border: 1px solid rgba(23, 77, 56, 0.14);
+}
+
+.schedule-context-item p,
+.schedule-context-actions p,
+.schedule-next-step-card p {
+  margin: 0.35rem 0 0;
+}
+
+.schedule-next-step-card {
+  display: grid;
+  gap: 0.85rem;
 }
 
 .detail-card,
@@ -974,6 +1966,19 @@ thead th {
     grid-template-columns: 1fr;
   }
 
+  .customer-workflow-overview,
+  .customer-media-grid,
+  .customer-record-layout,
+  .customer-primary-card__content,
+  .customer-highlight-metrics,
+  .recurring-work-builder,
+  .recurring-choice-grid,
+  .recurring-plan-metrics,
+  .staff-overview-grid,
+  .staff-hours-grid {
+    grid-template-columns: 1fr;
+  }
+
   .field-span-2 {
     grid-column: auto;
   }
@@ -981,6 +1986,49 @@ thead th {
   .shell {
     margin: 2rem auto;
     padding: 1.25rem;
+  }
+
+  .schedule-view-panel__header,
+  .schedule-view-panel__footer {
+    align-items: stretch;
+  }
+
+  .schedule-view-panel__footer,
+  .filter-actions {
+    justify-content: flex-start;
+  }
+
+  .agenda-snapshot-grid,
+  .appointment-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agenda-quick-item {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .recurring-plan-overview__status {
+    justify-items: start;
+  }
+
+  .appointment-overview-card__status {
+    justify-items: start;
+  }
+
+  .filter-row,
+  .filter-row--list {
+    grid-template-columns: 1fr;
+  }
+
+  .actions-cell {
+    width: auto;
+  }
+
+  .staff-availability-window,
+  .assignment-card__header,
+  .assignment-card__actions {
+    align-items: stretch;
   }
 
   .site-header,

@@ -5,53 +5,69 @@
 
 {% block content %}
 <main class="shell dashboard-shell">
+  {% set list_sort = 'soonest' %}
   {% call render_admin_page_header(
     title='Schedule',
     description='View and manage scheduled work.',
     nav_mode='main'
   ) %}
       {% if enable_scheduling %}
-        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', date=date(year, month, 1).isoformat()) }}">Add Work</a>
+        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', source='calendar', year=year, month=month, view=view, show=show, status=status, staff_id=staff_id, sort=sort_by) }}">Add Work</a>
       {% endif %}
   {% endcall %}
 
-  <section class="calendar-toolbar section-bar" id="calendar">
-    <div>
-      <h2>{{ month_name }} {{ year }}</h2>
+  <section class="summary-card schedule-view-panel" id="schedule-view">
+    <div class="schedule-view-panel__header">
+      <div>
+        <p class="eyebrow">Schedule overview</p>
+        <h2>{% if view == 'calendar' %}Calendar View{% else %}List View{% endif %}</h2>
+        <p class="subtle-text">
+          {% if view == 'calendar' %}
+            Open any day to review the full agenda for {{ month_name }} {{ year }}.
+          {% else %}
+            Upcoming events are listed in chronological order so the next stop is always first.
+          {% endif %}
+        </p>
+      </div>
+      <div class="schedule-view-toggle" role="tablist" aria-label="Schedule views">
+        <a class="btn btn-secondary btn-toggle{% if view == 'calendar' %} active{% endif %}"{% if view == 'calendar' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='calendar') }}#schedule-view">Calendar View</a>
+        <a class="btn btn-secondary btn-toggle{% if view == 'list' %} active{% endif %}"{% if view == 'list' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">List View</a>
+      </div>
     </div>
-    <div class="calendar-nav">
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show) }}#calendar">Previous</a>
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view=view, show=show) }}#calendar">This Month</a>
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show) }}#calendar">Next</a>
-    </div>
-    <div class="schedule-view-toggle">
-      <a class="btn btn-secondary btn-toggle{% if view == 'calendar' %} active{% endif %}"{% if view == 'calendar' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='calendar', show=show) }}#calendar">Calendar View</a>
-      <a class="btn btn-secondary btn-toggle{% if view == 'list' %} active{% endif %}"{% if view == 'list' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=sort_by) }}#calendar">List View</a>
+
+    <div class="schedule-view-panel__footer">
+      <div class="calendar-nav" aria-label="Schedule month navigation">
+        <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">Previous</a>
+        <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">This Month</a>
+        <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">Next</a>
+      </div>
+      <p class="subtle-text schedule-view-note">
+        {% if view == 'calendar' %}
+          Days show compact previews and an obvious path into the Day Agenda.
+        {% else %}
+          Keep filters light: range, status, and staff only.
+        {% endif %}
+      </p>
     </div>
   </section>
 
   {% if view == 'list' %}
-  <section class="table-card">
+  <section class="table-card schedule-list-card">
     <div class="section-bar">
       <div>
-        <h2>Scheduled events</h2>
+        <p class="eyebrow">List view</p>
+        <h2>{% if show == 'all' %}All scheduled events{% else %}Upcoming scheduled events{% endif %}</h2>
         <p class="subtle-text">
-          {% if show == 'all' %}
-            Showing all scheduled events.
-          {% else %}
-            Showing upcoming scheduled events.
-          {% endif %}
-          {% if sort_by != 'soonest' %}
-            Sorted by {{ sort_options | selectattr('0','equalto', sort_by) | map(attribute='1') | first | default('') }}.
+          Sorted from soonest to latest by default.
+          {% if status != 'all' %} Showing only {{ status|lower }} events.{% endif %}
+          {% if enable_staff_management and staff_id != 0 %}
+            Staff filter is active.
           {% endif %}
         </p>
       </div>
-      <div class="detail-actions">
-        {% if show == 'upcoming' %}
-          <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='all', status=status, staff_id=staff_id, sort=sort_by) }}#calendar">View All Events</a>
-        {% else %}
-          <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='upcoming', status=status, staff_id=staff_id, sort=sort_by) }}#calendar">View Upcoming Only</a>
-        {% endif %}
+      <div class="schedule-list-scope">
+        <a class="btn btn-secondary btn-toggle{% if show == 'upcoming' %} active{% endif %}"{% if show == 'upcoming' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='upcoming', status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">Upcoming</a>
+        <a class="btn btn-secondary btn-toggle{% if show == 'all' %} active{% endif %}"{% if show == 'all' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='all', status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">All Events</a>
       </div>
     </div>
     <div class="section-bar section-bar--compact filter-toolbar">
@@ -60,15 +76,8 @@
         <input type="hidden" name="year" value="{{ year }}">
         <input type="hidden" name="month" value="{{ month }}">
         <input type="hidden" name="show" value="{{ show }}">
-        <div class="filter-row">
-          <label class="filter-field">
-            <span>Sort by</span>
-            <select name="sort">
-              {% for value, label in sort_options %}
-                <option value="{{ value }}" {% if sort_by == value %}selected{% endif %}>{{ label }}</option>
-              {% endfor %}
-            </select>
-          </label>
+        <input type="hidden" name="sort" value="{{ list_sort }}">
+        <div class="filter-row filter-row--list">
           <label class="filter-field">
             <span>Status</span>
             <select name="status">
@@ -90,12 +99,15 @@
           </label>
           {% endif %}
           <div class="filter-actions">
-            <button class="btn btn-secondary btn-small" type="submit">Apply</button>
+            <button class="btn btn-secondary btn-small" type="submit">Update List</button>
+            {% if status != 'all' or (enable_staff_management and staff_id != 0) %}
+              <a class="btn btn-secondary btn-small" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status='all', staff_id=0, sort=list_sort) }}#schedule-view">Clear</a>
+            {% endif %}
           </div>
         </div>
       </form>
     </div>
-    <div class="table-scroll">
+    <div class="table-scroll schedule-list-table">
       <table>
         <thead>
           <tr>
@@ -111,8 +123,13 @@
         <tbody>
           {% for appointment in scheduled_appointments %}
             {% set customer = appointment.customer if appointment.customer else (appointment.quote_request.customer if appointment.quote_request and appointment.quote_request.customer else None) %}
-            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}'">
-              <td>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</td>
+            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='calendar', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=list_sort) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='calendar', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=list_sort) }}'">
+              <td class="schedule-list-date">
+                <a class="schedule-day-link" href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">
+                  <strong>{{ appointment.scheduled_date.strftime('%a') }}</strong>
+                  <span>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</span>
+                </a>
+              </td>
               <td>
                 {% if appointment.start_time and appointment.end_time %}
                   {{ appointment.start_time.strftime('%H:%M') }}-{{ appointment.end_time.strftime('%H:%M') }}
@@ -129,14 +146,17 @@
                 {% endif %}
               </td>
               <td>
-                {% if appointment.quote_request and appointment.quote_request.service_list_display %}
+                <strong class="row-title">{{ appointment.title or appointment.display_title }}</strong>
+                {% if appointment.quote_request and appointment.quote_request.service_list_display and appointment.quote_request.service_list_display != (appointment.title or appointment.display_title) %}
+                  <div class="subtle-text">{{ appointment.quote_request.service_list_display }}</div>
+                {% elif appointment.quote_request and appointment.quote_request.service_list_display %}
                   <div class="tag-list">
                     {% for service in appointment.quote_request.service_list_display.split(', ') %}
                       <span class="tag-pill">{{ service }}</span>
                     {% endfor %}
                   </div>
                 {% else %}
-                  <span class="subtle-text">No services</span>
+                  <span class="subtle-text">No additional service details</span>
                 {% endif %}
               </td>
               <td><span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span></td>
@@ -153,7 +173,7 @@
               </td>
               <td class="actions-cell">
                 <div class="button-group">
-                  <a class="btn btn-secondary btn-small" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">View Details</a>
+                  <a class="btn btn-secondary btn-small" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='calendar', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=list_sort) }}">View Details</a>
                   {% if customer %}
                     <a class="btn btn-secondary btn-small" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">View Customer</a>
                   {% endif %}
@@ -172,235 +192,50 @@
   {% endif %}
 
   {% if view == 'calendar' %}
-  <section class="calendar-grid">
-    {% for name in day_names %}
-      <div class="calendar-cell calendar-cell--header">{{ name }}</div>
-    {% endfor %}
-
-    {% for week in month_matrix %}
-      {% for day in week %}
-        {% if day %}
-          {% set cell_date = date(year, month, day) %}
-          <a class="calendar-cell calendar-cell--day {% if cell_date == today %}calendar-cell--today{% endif %}" href="{{ url_for('admin.calendar_day_view', year=year, month=month, day=day) }}" title="View schedule for {{ cell_date.strftime('%B %d, %Y') }}" aria-label="View schedule for {{ cell_date.strftime('%B %d, %Y') }}">
-            <div class="calendar-day-label">{{ day }}</div>
-            <div class="calendar-appointments">
-              {% for appointment in appointments_by_date.get(cell_date, [])[:3] %}
-                <article class="calendar-appointment-preview">
-                  <span class="calendar-time">{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'All day' }}</span>
-                  <strong>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</strong>
-                  <div class="subtle-text">{{ appointment.display_title }}</div>
-                  {% if enable_staff_management and appointment.assigned_staff %}
-                    <div class="calendar-staff-list">
-                      {% for staff in appointment.assigned_staff[:2] %}
-                        <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}" class="calendar-staff-pill" title="{{ staff.display_name }}">{{ staff.display_name.split(' ')[0] }}</a>
-                      {% endfor %}
-                      {% if appointment.assigned_staff|length > 2 %}
-                        <span class="calendar-staff-pill">+{{ appointment.assigned_staff|length - 2 }}</span>
-                      {% endif %}
-                    </div>
-                  {% endif %}
-                </article>
-              {% endfor %}
-              {% if appointments_by_date.get(cell_date, [])|length > 3 %}
-                <div class="calendar-more">+{{ appointments_by_date.get(cell_date, [])|length - 3 }} more</div>
-              {% endif %}
-            </div>
-          </a>
-        {% else %}
-          <div class="calendar-cell calendar-cell--empty"></div>
-        {% endif %}
+  <div class="table-scroll schedule-calendar-scroll">
+    <section class="calendar-grid" aria-label="Monthly schedule calendar">
+      {% for name in day_names %}
+        <div class="calendar-cell calendar-cell--header">{{ name }}</div>
       {% endfor %}
-    {% endfor %}
-  </section>
+
+      {% for week in month_matrix %}
+        {% for day in week %}
+          {% if day %}
+            {% set cell_date = date(year, month, day) %}
+            {% set day_appointments = appointments_by_date.get(cell_date, []) %}
+            <a class="calendar-cell calendar-cell--day {% if cell_date == today %}calendar-cell--today{% endif %}" href="{{ url_for('admin.calendar_day_view', year=year, month=month, day=day) }}" title="View schedule for {{ cell_date.strftime('%B %d, %Y') }}" aria-label="View schedule for {{ cell_date.strftime('%B %d, %Y') }}">
+              <div class="calendar-cell__top">
+                <div class="calendar-day-meta">
+                  <span class="calendar-day-label">{{ day }}</span>
+                  {% if day_appointments %}
+                    <span class="calendar-day-count">
+                      {{ day_appointments|length }} {{ 'event' if day_appointments|length == 1 else 'events' }}
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="calendar-appointments">
+                {% if day_appointments %}
+                  {% set first_appointment = day_appointments|first %}
+                  {% set last_appointment = day_appointments|last %}
+                  <article class="calendar-appointment-preview">
+                    <span class="calendar-time">
+                      {{ first_appointment.start_time.strftime('%H:%M') if first_appointment.start_time else 'All day' }} – {{ last_appointment.end_time.strftime('%H:%M') if last_appointment.end_time else 'All day' }}
+                    </span>
+                  </article>
+                {% endif %}
+                {% if day_appointments|length > 2 %}
+                  <div class="calendar-more">+{{ day_appointments|length - 2 }} more scheduled</div>
+                {% endif %}
+              </div>
+            </a>
+          {% else %}
+            <div class="calendar-cell calendar-cell--empty"></div>
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    </section>
+  </div>
   {% endif %}
 </main>
-{% endblock %}
-
-{% block scripts %}
-<style>
-.calendar-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-.calendar-nav,
-.schedule-view-toggle {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-.calendar-nav .btn,
-.schedule-view-toggle .btn,
-.calendar-nav .button,
-.schedule-view-toggle .button {
-  margin: 0;
-}
-.schedule-view-toggle {
-  margin-top: 0.5rem;
-}
-.filter-toolbar {
-  padding: 0.75rem 0 0;
-}
-.table-filters {
-  width: 100%;
-}
-.filter-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(165px, 1fr));
-  gap: 0.75rem;
-  align-items: end;
-}
-.filter-field {
-  display: grid;
-  gap: 0.35rem;
-}
-.filter-field span {
-  color: #5f6c72;
-  font-size: 0.82rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-.filter-field select {
-  width: 100%;
-  min-width: 0;
-  border-radius: 14px;
-  border: 1px solid rgba(23, 77, 56, 0.16);
-  background: #fff;
-  padding: 0.85rem 0.9rem;
-}
-.filter-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-.actions-cell {
-  width: 1%;
-  white-space: nowrap;
-}
-.button-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-.button-group .btn,
-.button-group .button {
-  min-width: 90px;
-}
-.calendar-grid {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-.calendar-cell {
-  border: 1px solid #d3d3d3;
-  padding: 0.75rem;
-  min-height: 150px;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  text-decoration: none;
-  color: inherit;
-}
-.calendar-cell--header {
-  background: #f4f4f4;
-  font-weight: 700;
-  text-align: center;
-}
-.calendar-cell--empty {
-  background: #fafafa;
-  border-color: transparent;
-}
-.calendar-cell--day {
-  transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  cursor: pointer;
-  border-color: #d3d3d3;
-}
-.calendar-cell--day:hover,
-.calendar-cell--day:focus-visible {
-  background: #eef7ff;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(0, 91, 148, 0.08);
-}
-.calendar-cell--day:focus-visible {
-  outline: 2px solid #005b94;
-  outline-offset: 2px;
-}
-.calendar-cell--today {
-  border-color: #005b94;
-  background: #e6f2ff;
-}
-.calendar-day-label {
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-.calendar-appointment-preview {
-  margin-bottom: 0.5rem;
-  padding: 0.45rem 0.5rem;
-  border-radius: 5px;
-  background: #f8f8f8;
-}
-.calendar-appointment-preview strong {
-  display: block;
-  margin-bottom: 0.25rem;
-}
-.calendar-staff-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-top: 0.35rem;
-}
-.calendar-staff-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.1rem 0.35rem;
-  border-radius: 999px;
-  background: #e8f4ff;
-  color: #005b94;
-  text-decoration: none;
-  font-size: 0.75rem;
-}
-.calendar-staff-pill:hover,
-.calendar-staff-pill:focus-visible {
-  text-decoration: underline;
-}
-.calendar-time {
-  display: inline-block;
-  margin-bottom: 0.25rem;
-  font-size: 0.85rem;
-  color: #303030;
-}
-.calendar-more {
-  margin-top: auto;
-  font-size: 0.9rem;
-  color: #666;
-}
-@media (max-width: 860px) {
-  .calendar-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .calendar-nav,
-  .schedule-view-toggle {
-    justify-content: flex-start;
-    width: 100%;
-  }
-
-  .filter-row {
-    grid-template-columns: 1fr;
-  }
-
-  .filter-actions {
-    justify-content: flex-start;
-  }
-
-  .actions-cell {
-    width: auto;
-  }
-}
-</style>
 {% endblock %}

@@ -7,14 +7,22 @@
 <main class="shell dashboard-shell">
   {{ render_admin_page_header(
     title='Customers',
-    description='View customer records, contact details, and work history.',
+    description='Scan customer records quickly, then move into notes, history, billing, or scheduling.',
     nav_mode='main'
   ) }}
 
   <section class="table-card">
-    <div class="section-bar">
+    <div class="section-bar customer-list-toolbar">
       <div>
-        <h2>Customers</h2>
+        <h2>Customer directory</h2>
+        <p class="subtle-text">Search by name, phone, email, city, or billing text to narrow the list without leaving the page.</p>
+      </div>
+      <div class="customer-list-filter">
+        <label class="form-field">
+          <span>Search customers</span>
+          <input class="input" id="customer-filter-input" type="search" placeholder="Search name, phone, email, city, billing" autocomplete="off">
+        </label>
+        <p class="subtle-text customer-list-count" id="customer-filter-count">{{ customers|length }} customer record{% if customers|length != 1 %}s{% endif %}</p>
       </div>
     </div>
 
@@ -22,47 +30,82 @@
       <table>
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Phone</th>
-            <th>Email</th>
-            <th>City</th>
+            <th>Customer</th>
+            <th>Primary contact</th>
             <th>Billing</th>
             <th>Last activity</th>
           </tr>
         </thead>
         <tbody>
           {% for customer in customers %}
-            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.customer_detail', customer_id=customer.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.customer_detail', customer_id=customer.id) }}'">
-              <td>{{ customer.primary_name or 'Unnamed' }}</td>
-              <td>{{ customer.primary_phone or '—' }}</td>
-              <td>{{ customer.primary_email or '—' }}</td>
-              <td>{{ customer.primary_city or '—' }}</td>
+            <tr class="clickable-row" data-customer-row tabindex="0" onclick="window.location.href='{{ url_for('admin.customer_detail', customer_id=customer.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.customer_detail', customer_id=customer.id) }}'">
+              <td>
+                <strong class="row-title">{{ customer.primary_name or 'Unnamed' }}</strong>
+                <div class="subtle-text">{{ customer.primary_city or 'No city on file' }}</div>
+              </td>
+              <td>
+                <div class="contact-block">
+                  <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ customer.primary_phone or '—' }}</span></div>
+                  <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ customer.primary_email or '—' }}</span></div>
+                </div>
+              </td>
               <td>
                 {% if customer.billing_amount is not none %}
                   {{ customer.billing_amount }}
                 {% else %}
-                  —
+                  Not set
                 {% endif %}
                 {% if customer.billing_frequency %}
                   <span class="subtle-text">/{{ customer.billing_frequency }}</span>
                 {% endif %}
               </td>
-              <td>
-                {% if customer.last_activity %}
-                  {{ customer.last_activity.strftime('%b %d, %Y') }}
-                {% else %}
-                  —
-                {% endif %}
-              </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="6" class="empty-state">No customers created yet.</td>
+              <td colspan="4" class="empty-state">No customers created yet.</td>
             </tr>
           {% endfor %}
+          <tr id="customer-filter-empty" hidden>
+            <td colspan="4" class="empty-state">No customers match the current search.</td>
+          </tr>
         </tbody>
       </table>
     </div>
   </section>
 </main>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const input = document.getElementById('customer-filter-input');
+  const rows = Array.from(document.querySelectorAll('[data-customer-row]'));
+  const count = document.getElementById('customer-filter-count');
+  const emptyRow = document.getElementById('customer-filter-empty');
+
+  if (!input || !rows.length || !count || !emptyRow) {
+    return;
+  }
+
+  const total = rows.length;
+  const update = function () {
+    const query = input.value.trim().toLowerCase();
+    let visible = 0;
+
+    rows.forEach((row) => {
+      const matches = !query || row.textContent.toLowerCase().includes(query);
+      row.hidden = !matches;
+      if (matches) {
+        visible += 1;
+      }
+    });
+
+    emptyRow.hidden = visible !== 0;
+    count.textContent = query
+      ? visible + ' matching customer' + (visible === 1 ? '' : 's')
+      : total + ' customer record' + (total === 1 ? '' : 's');
+  };
+
+  input.addEventListener('input', update);
+})();
+</script>
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_time_selects.html" import render_time_select %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Recurring work #{{ work.id }}{% endblock %}
@@ -7,21 +8,94 @@
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Recurring Work',
-    description='Review this repeat job and its generated scheduled work.',
+    description='Edit this repeating service plan and generate upcoming scheduled events from it.',
     nav_mode='sub',
-    return_url=url_for('admin.recurring_work_list'),
-    return_label='Back to Recurring Work',
+    return_url=recurring_return_url,
+    return_label=recurring_return_label,
     meta='#' ~ work.id ~ ((' · ' ~ (work.customer.primary_name or 'Unnamed customer')) if work.customer else '')
   ) %}
       {% if work.customer %}
         <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">View Customer</a>
       {% endif %}
+      {% if recurring_calendar_url %}
+        <a class="btn btn-secondary" href="{{ recurring_calendar_url }}">Calendar View</a>
+      {% endif %}
+      {% if recurring_list_url %}
+        <a class="btn btn-secondary" href="{{ recurring_list_url }}">List View</a>
+      {% endif %}
   {% endcall %}
 
-  <section class="summary-grid">
+  <section class="summary-card recurring-plan-overview">
+    <div class="recurring-plan-overview__header">
+      <div>
+        <p class="eyebrow">Recurring plan</p>
+        <h2>{{ work.title or 'Recurring work' }}</h2>
+        <p class="subtle-text">
+          {% if work.customer %}
+            <a href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">{{ work.customer.primary_name or 'Customer' }}</a>
+          {% else %}
+            No linked customer
+          {% endif %}
+        </p>
+      </div>
+      <div class="recurring-plan-overview__status">
+        <span class="status-badge">{{ work.status|capitalize }}</span>
+        <span class="subtle-text">{{ generated_count }} generated appointment{% if generated_count != 1 %}s{% endif %}</span>
+      </div>
+    </div>
+
+    <div class="recurring-plan-metrics">
+      <article>
+        <strong>Customer</strong>
+        <span>{% if work.customer %}{{ work.customer.primary_name or 'Customer' }}{% else %}Not linked{% endif %}</span>
+      </article>
+      <article>
+        <strong>Frequency</strong>
+        <span>{{ work.frequency|capitalize }}</span>
+      </article>
+      <article>
+        <strong>Default time</strong>
+        <span>
+          {% if work.start_time and work.end_time %}
+            {{ work.start_time.strftime('%H:%M') }} – {{ work.end_time.strftime('%H:%M') }}
+          {% elif work.start_time %}
+            Starts {{ work.start_time.strftime('%H:%M') }}
+          {% else %}
+            No default time
+          {% endif %}
+        </span>
+      </article>
+      <article>
+        <strong>Start date</strong>
+        <span>{{ work.starts_on.strftime('%b %d, %Y') }}</span>
+      </article>
+      <article>
+        <strong>End date</strong>
+        <span>{{ work.ends_on.strftime('%b %d, %Y') if work.ends_on else 'No end date' }}</span>
+      </article>
+      <article>
+        <strong>Upcoming generated</strong>
+        <span>{{ upcoming_generated_count }}</span>
+      </article>
+    </div>
+
+    <div class="recurring-plan-links">
+      {% if work.customer %}
+        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id, _anchor='recurring-work') }}">Back to Customer Record</a>
+      {% endif %}
+      {% if recurring_calendar_url %}
+        <a class="btn btn-secondary" href="{{ recurring_calendar_url }}">Open Calendar View</a>
+      {% endif %}
+      {% if recurring_list_url %}
+        <a class="btn btn-secondary" href="{{ recurring_list_url }}">Open List View</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="detail-grid">
     <article class="summary-card">
       <div class="section-bar compact-bar">
-        <h2>Recurring schedule</h2>
+        <h2>Plan details</h2>
       </div>
       <dl class="detail-list vertical-list">
         <div>
@@ -33,6 +107,10 @@
               None
             {% endif %}
           </dd>
+        </div>
+        <div>
+          <dt>Service or work title</dt>
+          <dd>{{ work.title or 'Recurring work' }}</dd>
         </div>
         <div>
           <dt>Frequency</dt>
@@ -82,38 +160,176 @@
 
     <article class="summary-card">
       <div class="section-bar compact-bar">
-        <h2>Generated appointments</h2>
+        <div>
+          <h2>Generate upcoming appointments</h2>
+          <p class="subtle-text">Create scheduled events from this recurring plan for the selected time window.</p>
+        </div>
       </div>
-      <div class="table-scroll">
+      <form method="post" action="{{ generate_recurring_work_url }}" class="stacked-form">
+        {{ generate_recurring_appointments_form.hidden_tag() }}
+        <label class="form-field">
+          <span>Generate appointments for</span>
+          {{ generate_recurring_appointments_form.days_ahead(class_='select') }}
+          {% for error in generate_recurring_appointments_form.days_ahead.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <div class="button-row">
+          {{ generate_recurring_appointments_form.submit(class_='btn btn-primary') }}
+          {% if recurring_calendar_url %}
+            <a class="btn btn-secondary" href="{{ recurring_calendar_url }}">Calendar View</a>
+          {% endif %}
+          {% if recurring_list_url %}
+            <a class="btn btn-secondary" href="{{ recurring_list_url }}">List View</a>
+          {% endif %}
+        </div>
+      </form>
+    </article>
+  </section>
+
+  <section class="summary-card">
+    <div class="section-bar compact-bar">
+      <div>
+        <h2>Edit recurring plan</h2>
+        <p class="subtle-text">Keep the customer, cadence, default time, and active status visible while updating the plan.</p>
+      </div>
+    </div>
+    <form method="post" action="{{ edit_recurring_work_url }}" class="stacked-form">
+      {{ recurring_work_form.hidden_tag() }}
+      <label class="form-field">
+        <span class="field-label-row">Service or work title <span class="required-pill">Required</span></span>
+        {{ recurring_work_form.title(class_='input', required=true) }}
+        {% for error in recurring_work_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+      <div class="form-grid recurring-choice-grid">
+        <label class="form-field">
+          <span class="field-label-row">Frequency <span class="required-pill">Required</span></span>
+          {{ recurring_work_form.frequency(class_='select') }}
+          {% for error in recurring_work_form.frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <label class="form-field">
+          <span>Weekly day</span>
+          {{ recurring_work_form.day_of_week(class_='select') }}
+          <small class="field-help">Use this when the frequency is weekly.</small>
+          {% for error in recurring_work_form.day_of_week.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <label class="form-field">
+          <span>Monthly day</span>
+          {{ recurring_work_form.day_of_month(class_='select') }}
+          <small class="field-help">Use this when the frequency is monthly.</small>
+          {% for error in recurring_work_form.day_of_month.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+      </div>
+      <div class="form-grid recurring-choice-grid">
+        <label class="form-field">
+          <span class="field-label-row">Start date <span class="required-pill">Required</span></span>
+          {{ recurring_work_form.starts_on(class_='input', required=true) }}
+          {% for error in recurring_work_form.starts_on.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <label class="form-field">
+          <span>End date</span>
+          {{ recurring_work_form.ends_on(class_='input') }}
+          {% for error in recurring_work_form.ends_on.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <label class="form-field">
+          <span>Status</span>
+          {{ recurring_work_form.status(class_='select') }}
+          {% for error in recurring_work_form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+      </div>
+      <div class="form-grid recurring-choice-grid">
+        {{ render_time_select(recurring_work_form.start_time_hour, recurring_work_form.start_time_minute, "Default start time") }}
+        {{ render_time_select(recurring_work_form.end_time_hour, recurring_work_form.end_time_minute, "Default end time") }}
+      </div>
+      <label class="form-field">
+        <span>Notes</span>
+        {{ recurring_work_form.notes(class_='textarea') }}
+        {% for error in recurring_work_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+      {{ recurring_work_form.submit(class_='btn btn-primary') }}
+    </form>
+  </section>
+
+  <section class="table-card recurring-generated-card" id="generated-appointments">
+    <div class="recurring-generated-summary">
+      <div>
+        <h2>Generated appointments</h2>
+        <p class="subtle-text">Open each scheduled event, jump into the matching day agenda, or return to the customer record from here.</p>
+      </div>
+      <p class="subtle-text">{{ generated_count }} total · {{ upcoming_generated_count }} upcoming</p>
+    </div>
+    <div class="table-scroll">
         <table>
           <thead>
             <tr>
-              <th>ID</th>
+              <th>Event</th>
               <th>Scheduled</th>
+              <th>Day agenda</th>
               <th>Customer</th>
               <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {% for appointment in work.appointments %}
-              <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}'">
-                <td>{{ appointment.id }}</td>
+            {% for appointment in generated_appointments %}
+              {% if appointment.scheduled_date %}
+                {% set day_agenda_url = url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) %}
+                {% set appointment_detail_url = url_for('admin.appointment_detail', appointment_id=appointment.id, source='day', date=appointment.scheduled_date.isoformat(), year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) %}
+              {% else %}
+                {% set day_agenda_url = None %}
+                {% set appointment_detail_url = url_for('admin.appointment_detail', appointment_id=appointment.id) %}
+              {% endif %}
+              <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ appointment_detail_url }}'">
+                <td>
+                  <div class="customer-table-meta">
+                    <a class="recurring-generated-link" href="{{ appointment_detail_url }}">Event #{{ appointment.id }}</a>
+                    <span class="subtle-text">{{ appointment.title or appointment.display_title }}</span>
+                  </div>
+                </td>
                 <td>
                   {{ appointment.scheduled_date.strftime('%b %d, %Y') if appointment.scheduled_date else 'No date' }}
-                  {% if appointment.start_time and appointment.end_time %} · {{ appointment.start_time.strftime('%H:%M') }}{% endif %}
+                  <div class="subtle-text">
+                    {% if appointment.start_time and appointment.end_time %}
+                      {{ appointment.start_time.strftime('%H:%M') }} – {{ appointment.end_time.strftime('%H:%M') }}
+                    {% elif appointment.start_time %}
+                      {{ appointment.start_time.strftime('%H:%M') }}
+                    {% else %}
+                      No time set
+                    {% endif %}
+                  </div>
                 </td>
-                <td>{{ appointment.customer.primary_name or 'Customer' }}</td>
-                <td>{{ appointment.status }}</td>
+                <td>
+                  {% if day_agenda_url and enable_calendar %}
+                    <a class="recurring-day-link" href="{{ day_agenda_url }}">Open Day Agenda</a>
+                  {% else %}
+                    <span class="subtle-text">No day agenda link</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if appointment.customer %}
+                    <a class="recurring-generated-link" href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id, _anchor='recurring-work') }}">{{ appointment.customer.primary_name or 'Customer' }}</a>
+                  {% elif work.customer %}
+                    <a class="recurring-generated-link" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id, _anchor='recurring-work') }}">{{ work.customer.primary_name or 'Customer' }}</a>
+                  {% else %}
+                    <span class="subtle-text">No linked customer</span>
+                  {% endif %}
+                </td>
+                <td><span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span></td>
+                <td class="actions-cell">
+                  <div class="button-group">
+                    <a class="btn btn-secondary btn-small" href="{{ appointment_detail_url }}">Open Event</a>
+                    {% if day_agenda_url and enable_calendar %}
+                      <a class="btn btn-secondary btn-small" href="{{ day_agenda_url }}">Day Agenda</a>
+                    {% endif %}
+                  </div>
+                </td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="4" class="empty-state">No generated appointments yet.</td>
+                <td colspan="6" class="empty-state">No generated appointments yet. Save the plan, then use Generate Upcoming Appointments to place it on the schedule.</td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-    </article>
   </section>
 </main>
 {% endblock %}

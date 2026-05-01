@@ -14,13 +14,12 @@
     meta='#' ~ quote_request.id ~ ' · ' ~ quote_request.full_name ~ ' · Submitted ' ~ quote_request.created_at.strftime('%b %d, %Y %I:%M %p')
   ) %}
       {% if enable_scheduling and not quote_request.current_appointment %}
-        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', request_id=quote_request.id) }}">Schedule This Work</a>
+        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', request_id=quote_request.id, source='request') }}">Schedule This Work</a>
       {% endif %}
-      <form method="post" action="{{ url_for('admin.update_status', request_id=quote_request.id) }}" class="status-form" id="status-form">
-        {{ status_form.hidden_tag() }}
+      <div class="status-form request-status-display">
         <span class="status-label subtle-text">Request status</span>
-        {{ status_form.status(class_="select", id="status-select") }}
-      </form>
+        <span class="status-badge status-{{ quote_request.status|lower|replace(' ', '-') }}">{{ quote_request.status }}</span>
+      </div>
   {% endcall %}
 
   {% if enable_customer_records %}
@@ -179,10 +178,68 @@
     </div>
 
     <div class="detail-grid">
+      <article class="summary-card" id="quotes">
+        <div class="section-bar compact-bar">
+          <div>
+            <h2>Quote tracking</h2>
+            <p class="subtle-text">Request status now updates automatically from review, contact, quote, acceptance, rejection, and scheduling activity.</p>
+          </div>
+        </div>
+
+        <form method="post" action="{{ url_for('admin.create_request_quote_route', request_id=quote_request.id) }}" class="stacked-form">
+          {{ request_quote_form.hidden_tag() }}
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Quote amount</span>
+              {{ request_quote_form.amount(class_="input") }}
+              {% for error in request_quote_form.amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field field-span-2">
+              <span>Quote details</span>
+              {{ request_quote_form.description(class_="input", placeholder="Optional: scope, option, or package name") }}
+              {% for error in request_quote_form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+          </div>
+          {{ request_quote_form.submit(class_="btn btn-primary") }}
+        </form>
+
+        <div class="request-quote-list">
+          {% for request_quote in quote_request.quotes %}
+            <article class="request-quote-item">
+              <div class="request-quote-item__header">
+                <div>
+                  <strong>{{ request_quote.formatted_amount }}</strong>
+                  <div class="subtle-text">Added {{ request_quote.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+                </div>
+                <div class="request-quote-item__actions button-row">
+                  <span class="status-badge status-{{ request_quote.decision|lower|replace(' ', '-') }}">{{ request_quote.decision }}</span>
+                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id, decision='accepted') }}" class="inline-form">
+                    {{ quote_decision_forms[request_quote.id].hidden_tag() }}
+                    <button type="submit" class="btn btn-secondary btn-small">Accept</button>
+                  </form>
+                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id, decision='rejected') }}" class="inline-form">
+                    {{ quote_decision_forms[request_quote.id].hidden_tag() }}
+                    <button type="submit" class="btn btn-secondary btn-small">Reject</button>
+                  </form>
+                </div>
+              </div>
+              {% if request_quote.description %}
+                <p>{{ request_quote.description }}</p>
+              {% endif %}
+            </article>
+          {% else %}
+            <div class="empty-state">No quotes have been recorded for this request yet.</div>
+          {% endfor %}
+        </div>
+      </article>
+
       {% if enable_scheduling %}
         <article class="summary-card" id="scheduling">
           <div class="section-bar compact-bar">
-            <h2>Scheduling</h2>
+            <div>
+              <h2>Scheduling</h2>
+              <p class="subtle-text">Start all admin scheduling from the shared Create Scheduled Event flow.</p>
+            </div>
           </div>
 
           {% if quote_request.current_appointment %}
@@ -219,47 +276,18 @@
               {% endif %}
               <div>
                 <dt>Appointment</dt>
-                <dd><a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">View appointment #{{ appointment.id }}</a></dd>
+                <dd><a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">View scheduled event #{{ appointment.id }}</a></dd>
               </div>
             </dl>
-
-            <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id) }}" class="stacked-form" id="confirmed-details-form">
-              {{ appointment_form.hidden_tag() }}
-              <div class="form-grid">
-                <label class="form-field">
-                  <span>Scheduled date</span>
-                  {{ appointment_form.scheduled_date(class_="input") }}
-                </label>
-                <label class="form-field">
-                  <span>Start time</span>
-                  {{ appointment_form.start_time(class_="input") }}
-                </label>
-                <label class="form-field">
-                  <span>End time</span>
-                  {{ appointment_form.end_time(class_="input") }}
-                </label>
-              </div>
-              <div class="form-grid">
-                <label class="form-field">
-                  <span>Status</span>
-                  {{ appointment_form.status(class_="select") }}
-                </label>
-              </div>
-              <label class="form-field">
-                <span>Internal notes</span>
-                {{ appointment_form.internal_notes(class_="textarea") }}
-              </label>
-              {{ appointment_form.submit(class_="btn btn-primary") }}
-            </form>
-
-            <form method="post" action="{{ url_for('admin.update_appointment_status_route', appointment_id=appointment.id) }}" class="stacked-form">
-              {{ appointment_status_form.hidden_tag() }}
-              <label class="form-field">
-                <span>Appointment state</span>
-                {{ appointment_status_form.status(class_="select") }}
-              </label>
-              {{ appointment_status_form.submit(class_="btn btn-primary") }}
-            </form>
+            <div class="button-row">
+              <a class="btn btn-primary" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">Open Scheduled Event</a>
+              {% if appointment.scheduled_date %}
+                <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open Day Agenda</a>
+              {% endif %}
+              {% if quote_request.customer %}
+                <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=quote_request.customer.id) }}">View Customer</a>
+              {% endif %}
+            </div>
 
             {% if quote_request.appointments|length > 1 %}
               <div class="appointment-history">
@@ -279,51 +307,20 @@
               </div>
             {% endif %}
           {% else %}
-            {% if quote_request.customer %}
-              <form method="post" action="{{ url_for('admin.create_appointment_route', request_id=quote_request.id) }}" class="stacked-form">
-                {{ appointment_form.hidden_tag() }}
-                {{ appointment_form.customer_id(type="hidden") }}
-                <div class="form-grid">
-                  <label class="form-field">
-                    <span>Scheduled date</span>
-                    {{ appointment_form.scheduled_date(class_="input") }}
-                  </label>
-                  <label class="form-field">
-                    <span>Start time</span>
-                    {{ appointment_form.start_time(class_="input") }}
-                  </label>
-                  <label class="form-field">
-                    <span>End time</span>
-                    {{ appointment_form.end_time(class_="input") }}
-                  </label>
-                </div>
-                <div class="form-grid">
-                  <label class="form-field">
-                    <span>Status</span>
-                    {{ appointment_form.status(class_="select") }}
-                  </label>
-                </div>
-                <label class="form-field">
-                  <span>Internal notes</span>
-                  {{ appointment_form.internal_notes(class_="textarea") }}
-                </label>
-                {{ appointment_form.submit(class_="btn btn-primary", value="Schedule Work") }}
-              </form>
-            {% else %}
-              <div class="notice-card">
-                <p class="subtle-text">This request is not linked to a customer. Link an existing customer or create a new customer before scheduling work.</p>
-                <div class="button-row">
-                  <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="inline-form">
-                    {{ link_customer_form.hidden_tag() }}
-                    <button type="submit" class="btn btn-secondary btn-small">Link Customer</button>
-                  </form>
-                  <form method="post" action="{{ url_for('admin.create_customer_route', request_id=quote_request.id) }}" class="inline-form">
-                    {{ create_customer_form.hidden_tag() }}
-                    <button type="submit" class="btn btn-primary btn-small">Add Customer</button>
-                  </form>
-                </div>
+            <div class="notice-card schedule-next-step-card">
+              <strong>Create the scheduled event in one place.</strong>
+              {% if quote_request.customer %}
+                <p class="subtle-text">This request is already linked to {{ quote_request.customer.primary_name or 'the customer' }}. Continue in the shared Create Scheduled Event page.</p>
+              {% else %}
+                <p class="subtle-text">This request is not linked to a customer yet. Open Create Scheduled Event to choose an existing customer or create a new one without leaving the scheduling workflow.</p>
+              {% endif %}
+              <div class="button-row">
+                <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', request_id=quote_request.id, source='request') }}">Open Create Scheduled Event</a>
+                {% if quote_request.customer %}
+                  <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=quote_request.customer.id) }}">View Customer</a>
+                {% endif %}
               </div>
-            {% endif %}
+            </div>
           {% endif %}
         </article>
       {% endif %}
@@ -388,14 +385,6 @@
 {% block scripts %}
 <script>
 (function () {
-  const statusForm = document.getElementById('status-form');
-  const statusSelect = document.getElementById('status-select');
-  if (statusForm && statusSelect) {
-    statusSelect.addEventListener('change', function () {
-      statusForm.submit();
-    });
-  }
-
   const lastContactedForm = document.getElementById('last-contacted-form');
   const lastContactedInput = document.getElementById('last-contacted-on');
   if (lastContactedForm && lastContactedInput) {
@@ -404,27 +393,6 @@
     });
   }
 
-  const confirmedDetailsForm = document.getElementById('confirmed-details-form');
-  const confirmedDate = document.getElementById('confirmed-date');
-  const confirmedTimeWindow = document.getElementById('confirmed-time-window');
-  const confirmedDetails = document.getElementById('confirmed-details');
-  if (confirmedDetailsForm) {
-    const submitConfirmed = function () {
-      confirmedDetailsForm.submit();
-    };
-
-    if (confirmedDate) {
-      confirmedDate.addEventListener('change', submitConfirmed);
-    }
-
-    if (confirmedTimeWindow) {
-      confirmedTimeWindow.addEventListener('change', submitConfirmed);
-    }
-
-    if (confirmedDetails) {
-      confirmedDetails.addEventListener('blur', submitConfirmed);
-    }
-  }
 })();
 </script>
 {% endblock %}

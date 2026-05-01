@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
@@ -21,6 +21,7 @@ from app.models import (
     QuoteRequest,
     RecurringWork,
     RequestNote,
+    RequestQuote,
     ServiceOption,
     StaffAvailability,
     StaffMember,
@@ -47,6 +48,7 @@ def get_quote_request(request_id: int) -> QuoteRequest:
             selectinload(QuoteRequest.services),
             selectinload(QuoteRequest.notes).selectinload(RequestNote.author),
             selectinload(QuoteRequest.appointments),
+            selectinload(QuoteRequest.quotes),
             selectinload(QuoteRequest.customer),
         )
     )
@@ -201,7 +203,16 @@ def create_customer(
 
 
 def list_staff_members() -> list[StaffMember]:
-    statement = select(StaffMember).options(selectinload(StaffMember.services)).order_by(StaffMember.display_name)
+    statement = (
+        select(StaffMember)
+        .options(
+            selectinload(StaffMember.services),
+            selectinload(StaffMember.availability_windows),
+            selectinload(StaffMember.assigned_appointments).selectinload(Appointment.customer),
+            selectinload(StaffMember.assigned_appointments).selectinload(Appointment.quote_request),
+        )
+        .order_by(StaffMember.display_name)
+    )
     return list(db.session.scalars(statement))
 
 
@@ -334,8 +345,7 @@ def get_staff_assignment_warnings(appointment: Appointment, staff_member: StaffM
         if window.day_of_week == weekday
     ]
     if not available_windows:
-        warnings.append(
-            f"{staff_member.display_name} has no availability on {appointment.scheduled_date.strftime('%A')}.")
+        warnings.append(f"No weekly availability is set for {appointment.scheduled_date.strftime('%A')}.")
     else:
         within_window = any(
             window.start_time <= appointment.start_time and window.end_time >= appointment.end_time
@@ -343,7 +353,7 @@ def get_staff_assignment_warnings(appointment: Appointment, staff_member: StaffM
         )
         if not within_window:
             warnings.append(
-                f"{staff_member.display_name} is not available during {appointment.start_time.strftime('%H:%M')}–{appointment.end_time.strftime('%H:%M')} on {appointment.scheduled_date.strftime('%A')}."
+                f"Scheduled outside the saved availability window on {appointment.scheduled_date.strftime('%A')} ({appointment.start_time.strftime('%H:%M')}–{appointment.end_time.strftime('%H:%M')})."
             )
 
     for other in staff_member.assigned_appointments:
@@ -360,7 +370,7 @@ def get_staff_assignment_warnings(appointment: Appointment, staff_member: StaffM
         end_b = other.end_time
         if start_a < end_b and start_b < end_a:
             warnings.append(
-                f"{staff_member.display_name} is already assigned to overlapping work (# {other.id}) on {other.scheduled_date.strftime('%b %d')}."
+                f"Already assigned to Event #{other.id} on {other.scheduled_date.strftime('%b %d')} during an overlapping time."
             )
             break
 
@@ -421,6 +431,10 @@ def create_scheduled_work(
 ) -> Appointment:
     if status not in APPOINTMENT_STATUSES:
         raise BadRequest("Choose a valid appointment status.")
+    if start_time is None or end_time is None:
+        raise BadRequest("Start and end times are required.")
+    if end_time <= start_time:
+        raise BadRequest("End time must be after the start time.")
 
     quote_request = None
     if request_id is not None:
@@ -460,6 +474,7 @@ def create_scheduled_work(
     db.session.add(appointment)
     if quote_request is not None:
         quote_request.appointments.append(appointment)
+        quote_request.sync_status()
 
     db.session.commit()
     return appointment
@@ -716,11 +731,11 @@ def get_appointment(appointment_id: int) -> Appointment:
 def create_appointment(
     request_id: int,
     requested_date,
-    requested_time_window: str | None = None,
+    requested_time=None,
     customer_notes: str | None = None,
     internal_notes: str | None = None,
     confirmed_date=None,
-    confirmed_time_window: str | None = None,
+    confirmed_time=None,
     title: str | None = None,
     scheduled_date=None,
     start_time=None,
@@ -730,6 +745,8 @@ def create_appointment(
 ) -> Appointment:
     if status not in APPOINTMENT_STATUSES:
         raise BadRequest("Choose a valid appointment status.")
+    if start_time is not None and end_time is not None and end_time <= start_time:
+        raise BadRequest("End time must be after the start time.")
 
     quote_request = get_quote_request(request_id)
     appointment = Appointment(
@@ -740,15 +757,16 @@ def create_appointment(
         start_time=start_time,
         end_time=end_time,
         requested_date=requested_date,
-        requested_time_window=requested_time_window,
+        requested_time=requested_time,
         confirmed_date=confirmed_date,
-        confirmed_time_window=confirmed_time_window,
+        confirmed_time=confirmed_time,
         customer_notes=customer_notes,
         internal_notes=internal_notes,
         status=status,
         previous_appointment_id=previous_appointment_id,
     )
     quote_request.appointments.append(appointment)
+    quote_request.sync_status()
     db.session.commit()
     return appointment
 
@@ -756,7 +774,7 @@ def create_appointment(
 def reschedule_appointment(
     appointment_id: int,
     requested_date,
-    requested_time_window: str | None = None,
+    requested_time=None,
     internal_notes: str | None = None,
     scheduled_date=None,
     start_time=None,
@@ -765,6 +783,8 @@ def reschedule_appointment(
     appointment = get_appointment(appointment_id)
     if appointment.status in ("Cancelled", "Completed", "No Show"):
         raise BadRequest("Cannot reschedule a closed appointment.")
+    if start_time is not None and end_time is not None and end_time <= start_time:
+        raise BadRequest("End time must be after the start time.")
 
     appointment.status = "Rescheduled"
     reschedule = Appointment(
@@ -776,25 +796,28 @@ def reschedule_appointment(
         start_time=start_time,
         end_time=end_time,
         requested_date=requested_date,
-        requested_time_window=requested_time_window,
+        requested_time=requested_time,
         confirmed_date=None,
-        confirmed_time_window=None,
+        confirmed_time=None,
         customer_notes=appointment.customer_notes,
         internal_notes=internal_notes or appointment.internal_notes,
         status="Requested",
         previous_appointment_id=appointment.id,
     )
     db.session.add(reschedule)
+    if appointment.quote_request is not None:
+        appointment.quote_request.sync_status()
     db.session.commit()
     return reschedule
 
 
 def update_appointment(
     appointment_id: int,
-    requested_date,
-    requested_time_window: str | None = None,
+    requested_date=None,
+    title: str | None = None,
+    requested_time=None,
     confirmed_date=None,
-    confirmed_time_window: str | None = None,
+    confirmed_time=None,
     customer_notes: str | None = None,
     internal_notes: str | None = None,
     scheduled_date=None,
@@ -803,10 +826,14 @@ def update_appointment(
     status: str | None = None,
 ) -> Appointment:
     appointment = get_appointment(appointment_id)
+    if start_time is not None and end_time is not None and end_time <= start_time:
+        raise BadRequest("End time must be after the start time.")
+
+    appointment.title = title
     appointment.requested_date = requested_date
-    appointment.requested_time_window = requested_time_window
+    appointment.requested_time = requested_time
     appointment.confirmed_date = confirmed_date
-    appointment.confirmed_time_window = confirmed_time_window
+    appointment.confirmed_time = confirmed_time
     appointment.customer_notes = customer_notes
     appointment.internal_notes = internal_notes
     appointment.scheduled_date = scheduled_date
@@ -816,6 +843,8 @@ def update_appointment(
         if status not in APPOINTMENT_STATUSES:
             raise BadRequest("Choose a valid appointment status.")
         appointment.status = status
+    if appointment.quote_request is not None:
+        appointment.quote_request.sync_status()
     db.session.commit()
     return appointment
 
@@ -826,6 +855,8 @@ def update_appointment_status(appointment_id: int, status: str) -> Appointment:
 
     appointment = get_appointment(appointment_id)
     appointment.status = status
+    if appointment.quote_request is not None:
+        appointment.quote_request.sync_status()
     db.session.commit()
     return appointment
 
@@ -854,6 +885,137 @@ def get_recurring_work(recurring_work_id: int) -> RecurringWork:
     recurring_work = db.session.scalar(statement)
     if recurring_work is None:
         raise NotFound("Recurring work not found.")
+    return recurring_work
+
+
+def _normalize_recurring_work_values(
+    *,
+    title: str,
+    frequency: str,
+    day_of_week: int | None,
+    day_of_month: int | None,
+    starts_on,
+    ends_on=None,
+    start_time=None,
+    end_time=None,
+    status: str = "active",
+    notes: str | None = None,
+) -> dict[str, object]:
+    cleaned_title = (title or "").strip()
+    if not cleaned_title:
+        raise BadRequest("Enter a service or work title.")
+
+    if frequency not in RecurringWork.FREQUENCIES:
+        raise BadRequest("Choose a valid recurring frequency.")
+
+    cleaned_day_of_week = day_of_week
+    cleaned_day_of_month = day_of_month
+    if frequency == "weekly":
+        if cleaned_day_of_week is None or cleaned_day_of_week < 0 or cleaned_day_of_week > 6:
+            raise BadRequest("Choose a weekday for weekly recurring work.")
+        cleaned_day_of_month = None
+    if frequency == "monthly":
+        if cleaned_day_of_month is None or cleaned_day_of_month < 1 or cleaned_day_of_month > 31:
+            raise BadRequest("Choose a day of month for monthly recurring work.")
+        cleaned_day_of_week = None
+
+    if starts_on is None:
+        raise BadRequest("Choose a start date for recurring work.")
+    if ends_on is not None and ends_on < starts_on:
+        raise BadRequest("End date must be on or after the start date.")
+    if start_time is not None and end_time is not None and end_time <= start_time:
+        raise BadRequest("Default end time must be after the default start time.")
+
+    if status not in RecurringWork.STATUSES:
+        raise BadRequest("Choose a valid recurring work status.")
+
+    return {
+        "title": cleaned_title,
+        "frequency": frequency,
+        "day_of_week": cleaned_day_of_week,
+        "day_of_month": cleaned_day_of_month,
+        "starts_on": starts_on,
+        "ends_on": ends_on,
+        "start_time": start_time,
+        "end_time": end_time,
+        "status": status,
+        "notes": (notes or "").strip() or None,
+    }
+
+
+def create_recurring_work(
+    customer_id: int,
+    *,
+    title: str,
+    frequency: str,
+    day_of_week: int | None,
+    day_of_month: int | None,
+    starts_on,
+    ends_on=None,
+    start_time=None,
+    end_time=None,
+    status: str = "active",
+    notes: str | None = None,
+) -> RecurringWork:
+    customer = get_customer(customer_id)
+    values = _normalize_recurring_work_values(
+        title=title,
+        frequency=frequency,
+        day_of_week=day_of_week,
+        day_of_month=day_of_month,
+        starts_on=starts_on,
+        ends_on=ends_on,
+        start_time=start_time,
+        end_time=end_time,
+        status=status,
+        notes=notes,
+    )
+
+    recurring_work = RecurringWork(customer_id=customer.id, **values)
+    db.session.add(recurring_work)
+    db.session.commit()
+    return recurring_work
+
+
+def update_recurring_work(
+    recurring_work_id: int,
+    *,
+    title: str,
+    frequency: str,
+    day_of_week: int | None,
+    day_of_month: int | None,
+    starts_on,
+    ends_on=None,
+    start_time=None,
+    end_time=None,
+    status: str = "active",
+    notes: str | None = None,
+) -> RecurringWork:
+    recurring_work = get_recurring_work(recurring_work_id)
+    values = _normalize_recurring_work_values(
+        title=title,
+        frequency=frequency,
+        day_of_week=day_of_week,
+        day_of_month=day_of_month,
+        starts_on=starts_on,
+        ends_on=ends_on,
+        start_time=start_time,
+        end_time=end_time,
+        status=status,
+        notes=notes,
+    )
+
+    recurring_work.title = values["title"]
+    recurring_work.frequency = values["frequency"]
+    recurring_work.day_of_week = values["day_of_week"]
+    recurring_work.day_of_month = values["day_of_month"]
+    recurring_work.starts_on = values["starts_on"]
+    recurring_work.ends_on = values["ends_on"]
+    recurring_work.start_time = values["start_time"]
+    recurring_work.end_time = values["end_time"]
+    recurring_work.status = values["status"]
+    recurring_work.notes = values["notes"]
+    db.session.commit()
     return recurring_work
 
 
@@ -1001,19 +1163,75 @@ def list_appointments_for_day(year: int, month: int, day: int) -> list[Appointme
 def update_last_contacted_on(request_id: int, last_contacted_on) -> QuoteRequest:
     quote_request = get_quote_request(request_id)
     quote_request.last_contacted_on = last_contacted_on
+    quote_request.sync_status()
     db.session.commit()
     return quote_request
 
 
-def update_request_status(request_id: int, status: str) -> QuoteRequest:
-    if status not in QUOTE_REQUEST_STATUSES:
-        raise BadRequest("Choose a valid status.")
-
+def mark_quote_request_viewed(request_id: int) -> QuoteRequest:
     quote_request = get_quote_request(request_id)
-    quote_request.status = status
-    quote_request.last_contacted_on = date.today()
-    db.session.commit()
+    has_changes = False
+    if quote_request.first_viewed_at is None:
+        quote_request.first_viewed_at = datetime.now(timezone.utc)
+        has_changes = True
+
+    previous_status = quote_request.status
+    quote_request.sync_status()
+    if quote_request.status != previous_status:
+        has_changes = True
+
+    if has_changes:
+        db.session.commit()
+
     return quote_request
+
+
+def get_request_quote(quote_id: int) -> RequestQuote:
+    request_quote = db.session.get(RequestQuote, quote_id)
+    if request_quote is None:
+        raise NotFound("Quote not found.")
+    return request_quote
+
+
+def create_request_quote(request_id: int, amount, description: str | None = None) -> RequestQuote:
+    quote_request = get_quote_request(request_id)
+    if amount is None:
+        raise BadRequest("Enter a quote amount before saving.")
+
+    try:
+        amount = Decimal(str(amount))
+    except (InvalidOperation, ValueError):
+        raise BadRequest("Enter a valid quote amount.")
+
+    if amount < 0:
+        raise BadRequest("Quote amount cannot be negative.")
+
+    if quote_request.first_viewed_at is None:
+        quote_request.first_viewed_at = datetime.now(timezone.utc)
+
+    request_quote = RequestQuote(
+        quote_request_id=quote_request.id,
+        amount=amount,
+        description=(description or "").strip() or None,
+        decision="Pending",
+    )
+    db.session.add(request_quote)
+    quote_request.quotes.append(request_quote)
+    quote_request.sync_status()
+    db.session.commit()
+    return request_quote
+
+
+def update_request_quote_decision(quote_id: int, decision: str) -> RequestQuote:
+    normalized_decision = (decision or "").strip().capitalize()
+    if normalized_decision not in RequestQuote.DECISIONS:
+        raise BadRequest("Choose a valid quote decision.")
+
+    request_quote = get_request_quote(quote_id)
+    request_quote.decision = normalized_decision
+    request_quote.quote_request.sync_status()
+    db.session.commit()
+    return request_quote
 
 
 def get_request_note(note_id: int) -> RequestNote:

@@ -1,11 +1,12 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, MultipleFileField
 from sqlalchemy.exc import SQLAlchemyError
-from wtforms import DateField, EmailField, ValidationError, SelectMultipleField, StringField, SubmitField, TextAreaField
+from wtforms import DateField, EmailField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField, ValidationError
 from wtforms.validators import DataRequired, Email, Length, Optional
 from wtforms.widgets import CheckboxInput, ListWidget
 
 from app.extensions import db
+from app.forms.time_selects import TimeSelectMixin
 from app.models import ServiceOption
 
 
@@ -27,13 +28,18 @@ SERVICE_CHOICES = [
 ]
 
 
-class QuoteRequestForm(FlaskForm):
+class QuoteRequestForm(TimeSelectMixin, FlaskForm):
+    TIME_FIELD_CONFIG = {
+        "preferred_time": {"label": "preferred time"},
+    }
+
     full_name = StringField("Name", validators=[DataRequired(), Length(max=255)])
     phone = StringField("Phone", validators=[Optional(), Length(max=50)])
     email = EmailField("Email", validators=[Optional(), Length(max=255)])
     city = StringField("Location", validators=[DataRequired(), Length(max=255)])
     preferred_date = DateField("Preferred date", validators=[Optional()])
-    preferred_time_window = StringField("Preferred time window", validators=[Optional(), Length(max=120)])
+    preferred_time_hour = SelectField("Preferred time hour", validators=[Optional()])
+    preferred_time_minute = SelectField("Preferred time minute", validators=[Optional()])
     additional_notes = TextAreaField(
         "Additional Notes",
         validators=[Optional(), Length(max=2000)],
@@ -55,6 +61,7 @@ class QuoteRequestForm(FlaskForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._initialize_time_selects()
         self.services.choices = self._load_service_choices()
 
     def _load_service_choices(self) -> list[tuple[str, str]]:
@@ -69,7 +76,8 @@ class QuoteRequestForm(FlaskForm):
 
     def validate(self, extra_validators=None) -> bool:
         valid = super().validate(extra_validators=extra_validators)
-        if not valid:
+        time_valid = self.validate_time_selects()
+        if not valid or not time_valid:
             return False
 
         if self.photos.data and len(self.photos.data) > 20:

@@ -1,4 +1,4 @@
-from app.models.quote_request import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, Appointment, QuoteRequest, RequestNote, RequestPhoto, ServiceOption
+from app.models.quote_request import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, REQUEST_QUOTE_DECISIONS, Appointment, QuoteRequest, RequestNote, RequestPhoto, RequestQuote, ServiceOption
 from app.models.user import User
 from app.models.customer import Customer, CustomerField, CustomerAddress, CustomerNote, CustomerPhoto, RecurringWork
 from app.models.staff import AppointmentStaffAssignment, StaffAvailability, StaffMember, staff_service_options
@@ -6,6 +6,7 @@ from app.models.staff import AppointmentStaffAssignment, StaffAvailability, Staf
 __all__ = [
     "APPOINTMENT_STATUSES",
     "QUOTE_REQUEST_STATUSES",
+    "REQUEST_QUOTE_DECISIONS",
     "Appointment",
     "Customer",
     "CustomerAddress",
@@ -16,6 +17,7 @@ __all__ = [
     "QuoteRequest",
     "RequestNote",
     "RequestPhoto",
+    "RequestQuote",
     "ServiceOption",
     "StaffAvailability",
     "StaffMember",

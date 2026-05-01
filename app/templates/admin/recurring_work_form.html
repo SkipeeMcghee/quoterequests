@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% from "_time_selects.html" import render_time_select %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
+
+{% block title %}Add Recurring Work{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  {% call render_admin_page_header(
+    title='Add Recurring Work',
+    description='Create a repeating service plan for this customer without leaving the customer workflow.',
+    nav_mode='sub',
+    return_url=source_return_url,
+    return_label=source_return_label
+  ) %}
+      <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">View Customer</a>
+  {% endcall %}
+
+  <section class="summary-grid recurring-work-builder">
+    <article class="summary-card recurring-work-form-card">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Recurring work details</h2>
+          <p class="subtle-text">Start with the service title, cadence, and default time. After save you can generate upcoming appointments from the recurring plan.</p>
+        </div>
+      </div>
+      <form method="post" action="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}" class="stacked-form">
+        {{ form.hidden_tag() }}
+        <label class="form-field">
+          <span class="field-label-row">Service or work title <span class="required-pill">Required</span></span>
+          {{ form.title(class_='input', required=true) }}
+          {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+
+        <div class="form-grid recurring-choice-grid">
+          <label class="form-field">
+            <span class="field-label-row">Frequency <span class="required-pill">Required</span></span>
+            {{ form.frequency(class_='select') }}
+            {% for error in form.frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Weekly day</span>
+            {{ form.day_of_week(class_='select') }}
+            <small class="field-help">Use this when the frequency is weekly.</small>
+            {% for error in form.day_of_week.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Monthly day</span>
+            {{ form.day_of_month(class_='select') }}
+            <small class="field-help">Use this when the frequency is monthly.</small>
+            {% for error in form.day_of_month.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+        </div>
+
+        <div class="form-grid recurring-choice-grid">
+          <label class="form-field">
+            <span class="field-label-row">Start date <span class="required-pill">Required</span></span>
+            {{ form.starts_on(class_='input', required=true) }}
+            {% for error in form.starts_on.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>End date</span>
+            {{ form.ends_on(class_='input') }}
+            {% for error in form.ends_on.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Status</span>
+            {{ form.status(class_='select') }}
+            {% for error in form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+        </div>
+
+        <div class="form-grid recurring-choice-grid">
+          {{ render_time_select(form.start_time_hour, form.start_time_minute, "Default start time") }}
+          {{ render_time_select(form.end_time_hour, form.end_time_minute, "Default end time") }}
+        </div>
+
+        <label class="form-field">
+          <span>Notes</span>
+          {{ form.notes(class_='textarea') }}
+          {% for error in form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+
+        {{ form.submit(class_='btn btn-primary') }}
+      </form>
+    </article>
+
+    <article class="summary-card recurring-work-context-card">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Customer context</h2>
+          <p class="subtle-text">This recurring plan belongs to the current customer record, so the customer stays visible while you set up the cadence.</p>
+        </div>
+      </div>
+      <div class="recurring-context-list">
+        <article>
+          <strong>Customer</strong>
+          <p>{{ customer.primary_name or 'Customer' }}</p>
+          <p class="subtle-text">
+            {% if customer.primary_phone %}{{ customer.primary_phone }}{% endif %}
+            {% if customer.primary_phone and customer.primary_email %} · {% endif %}
+            {% if customer.primary_email %}{{ customer.primary_email }}{% endif %}
+            {% if (customer.primary_phone or customer.primary_email) and customer.primary_city %} · {% endif %}
+            {% if customer.primary_city %}{{ customer.primary_city }}{% endif %}
+          </p>
+        </article>
+        <article>
+          <strong>Existing recurring plans</strong>
+          <p>{{ customer.recurring_works|length }}</p>
+          <p class="subtle-text">After save, open the recurring plan detail page to edit it or generate upcoming appointments.</p>
+        </article>
+      </div>
+    </article>
+  </section>
+</main>
+{% endblock %}

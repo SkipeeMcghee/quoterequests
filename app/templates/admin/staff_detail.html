@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_time_selects.html" import render_time_select %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}{{ staff_member.display_name }}{% endblock %}
@@ -7,64 +8,141 @@
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Staff Record',
-    description='View this staff member\'s contact details, availability, and assigned work.',
+    description='Review contact details, service coverage, weekly availability, assigned scheduled work, and scheduled hours for planning.',
     nav_mode='sub',
     return_url=url_for('admin.staff_list'),
     return_label='Back to Staff',
     meta=staff_member.display_name ~ ((' · ' ~ staff_member.role_title) if staff_member.role_title else '')
   ) %}
+      <a class="btn btn-secondary" href="{{ staff_schedule_url }}">Scheduled Work</a>
       <a class="btn btn-primary" href="{{ url_for('admin.edit_staff_member', staff_member_id=staff_member.id) }}">Edit</a>
   {% endcall %}
 
-  <section class="summary-grid">
+  <section class="summary-card staff-overview-card">
+    <div class="staff-overview-card__header">
+      <div>
+        <p class="eyebrow">Staff record</p>
+        <h2>{{ staff_member.display_name }}</h2>
+        <p class="subtle-text">{{ staff_member.role_title or 'No role title set yet' }}</p>
+      </div>
+      <div class="staff-overview-card__badges">
+        <span class="tag-pill">{{ staff_member.worker_type.title() }}</span>
+        <span class="tag-pill">{{ staff_member.status.title() }}</span>
+      </div>
+    </div>
+
+    <div class="staff-overview-grid">
+      <article>
+        <strong>Contact info</strong>
+        <span>{{ staff_member.phone or 'No phone on file' }}</span>
+        <span>{{ staff_member.email or 'No email on file' }}</span>
+      </article>
+      <article>
+        <strong>Services they can perform</strong>
+        <span>{{ service_count }}</span>
+        <span class="subtle-text">{{ 'Service assigned' if service_count == 1 else 'Services assigned' }}</span>
+      </article>
+      <article>
+        <strong>Weekly availability</strong>
+        <span>{{ availability_window_count }}</span>
+        <span class="subtle-text">{{ availability_day_count }} day{% if availability_day_count != 1 %}s{% endif %} with saved availability</span>
+      </article>
+      <article>
+        <strong>Assigned scheduled work</strong>
+        <span>{{ upcoming_assignment_count }}</span>
+        <span class="subtle-text">{{ upcoming_scheduled_hours|round(2) }} upcoming scheduled hours</span>
+      </article>
+    </div>
+  </section>
+
+  <section class="summary-grid staff-detail-grid">
     <div class="detail-grid">
       <article class="summary-card">
         <div class="section-bar compact-bar">
-          <h2>Contact & status</h2>
+          <div>
+            <h2>Contact info</h2>
+            <p class="subtle-text">Keep contact details, worker type, and notes visible before editing assignments or availability.</p>
+          </div>
         </div>
-        <div class="stacked-content">
-          <p><strong>{{ staff_member.display_name }}</strong></p>
-          <p>{{ staff_member.role_title or "No role specified" }}</p>
-          <p>{{ staff_member.worker_type.title() }} · {{ staff_member.status.title() }}</p>
-          <p>{% if staff_member.phone %}<strong>Phone:</strong> {{ staff_member.phone }}<br>{% endif %}{% if staff_member.email %}<strong>Email:</strong> {{ staff_member.email }}{% endif %}</p>
-          {% if staff_member.notes %}
-            <p><strong>Notes</strong></p>
-            <p>{{ staff_member.notes }}</p>
-          {% endif %}
-        </div>
+        <dl class="detail-list vertical-list">
+          <div>
+            <dt>Name</dt>
+            <dd>{{ staff_member.display_name }}</dd>
+          </div>
+          <div>
+            <dt>Role / title</dt>
+            <dd>{{ staff_member.role_title or 'No role title set' }}</dd>
+          </div>
+          <div>
+            <dt>Worker type</dt>
+            <dd>{{ staff_member.worker_type.title() }}</dd>
+          </div>
+          <div>
+            <dt>Status</dt>
+            <dd>{{ staff_member.status.title() }}</dd>
+          </div>
+          <div>
+            <dt>Phone</dt>
+            <dd>{% if staff_member.phone %}<a href="tel:{{ staff_member.phone }}">{{ staff_member.phone }}</a>{% else %}Not provided{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Email</dt>
+            <dd>{% if staff_member.email %}<a href="mailto:{{ staff_member.email }}">{{ staff_member.email }}</a>{% else %}Not provided{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Notes</dt>
+            <dd>{{ staff_member.notes or 'No planning notes yet.' }}</dd>
+          </div>
+        </dl>
       </article>
 
       <article class="summary-card">
         <div class="section-bar compact-bar">
-          <h2>Services</h2>
+          <div>
+            <h2>Services they can perform</h2>
+            <p class="subtle-text">These services are used when matching staff to scheduled events.</p>
+          </div>
         </div>
-        <div class="stacked-content">
-          {% if staff_member.services %}
-            <div class="tag-list">
-              {% for service in staff_member.services %}
-                <span class="tag">{{ service.name }}</span>
-              {% endfor %}
-            </div>
-          {% else %}
-            <p class="subtle-text">No services assigned.</p>
-          {% endif %}
-        </div>
+        {% if staff_member.services %}
+          <div class="tag-list staff-service-list">
+            {% for service in staff_member.services %}
+              <span class="tag-pill">{{ service.name }}</span>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="subtle-text">No services assigned yet. Update the staff record before using service-based assignment matching.</p>
+        {% endif %}
       </article>
 
       <article class="summary-card">
         <div class="section-bar compact-bar">
-          <h2>Scheduled hours</h2>
+          <div>
+            <h2>Scheduled hours</h2>
+            <p class="subtle-text">Planning view only. These are scheduled hours from assigned events, not payroll, time clock, or invoicing data.</p>
+          </div>
         </div>
-        <div class="stacked-content">
-          <p><strong>{{ scheduled_hours|round(2) }}</strong> total scheduled hours</p>
-          <p><strong>{{ current_week_hours|round(2) }}</strong> current week</p>
-          <p><strong>{{ current_month_hours|round(2) }}</strong> current month</p>
+        <div class="staff-hours-grid">
+          <article class="staff-hours-card">
+            <strong>{{ scheduled_hours|round(2) }}</strong>
+            <span>Total scheduled hours</span>
+          </article>
+          <article class="staff-hours-card">
+            <strong>{{ current_week_hours|round(2) }}</strong>
+            <span>Scheduled hours this week</span>
+          </article>
+          <article class="staff-hours-card">
+            <strong>{{ current_month_hours|round(2) }}</strong>
+            <span>Scheduled hours this month</span>
+          </article>
           {% if custom_hours is not none %}
-            <p><strong>{{ custom_hours|round(2) }}</strong> filtered scheduled hours</p>
+            <article class="staff-hours-card">
+              <strong>{{ custom_hours|round(2) }}</strong>
+              <span>Scheduled hours in filtered range</span>
+            </article>
           {% endif %}
         </div>
         <div class="section-bar compact-bar">
-          <h3>Filter date range</h3>
+          <h3>Filter scheduled hours</h3>
         </div>
         <form method="get" class="stacked-form">
           <div class="form-grid">
@@ -77,7 +155,12 @@
               <input type="date" name="end_date" value="{{ filter_end or '' }}" class="input" />
             </label>
           </div>
-          <button type="submit" class="btn btn-secondary btn-small">Apply Filter</button>
+          <div class="button-row">
+            <button type="submit" class="btn btn-secondary btn-small">Update Scheduled Hours</button>
+            {% if filter_start or filter_end %}
+              <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=staff_member.id) }}">Clear</a>
+            {% endif %}
+          </div>
         </form>
       </article>
     </div>
@@ -85,27 +168,39 @@
     <div class="detail-grid">
       <article class="summary-card" id="availability">
         <div class="section-bar compact-bar">
-          <h2>Weekly availability</h2>
+          <div>
+            <h2>Weekly availability</h2>
+            <p class="subtle-text">Use weekly availability to guide scheduling conflicts and assignment decisions.</p>
+          </div>
         </div>
-        {% if staff_member.availability_windows %}
-          <ul class="summary-list">
-            {% for availability in staff_member.availability_windows %}
-              <li>
-                <strong>{{ weekday_names[availability.day_of_week] }}</strong> · {{ availability.start_time.strftime('%H:%M') }} – {{ availability.end_time.strftime('%H:%M') }}
-                {% if availability.notes %}
-                  <div class="subtle-text">{{ availability.notes }}</div>
-                {% endif %}
-                <form method="post" action="{{ url_for('admin.delete_staff_availability_route', staff_member_id=staff_member.id, availability_id=availability.id) }}" class="inline-form">
-                  <button type="submit" class="btn btn-danger btn-small">Delete</button>
-                </form>
-              </li>
+        {% if availability_by_day %}
+          <div class="staff-availability-grid">
+            {% for day in availability_by_day %}
+              <article class="staff-availability-day">
+                <strong>{{ day.day_name }}</strong>
+                <div class="staff-availability-day__windows">
+                  {% for availability in day.windows %}
+                    <div class="staff-availability-window">
+                      <div>
+                        <span>{{ availability.start_time.strftime('%H:%M') }} – {{ availability.end_time.strftime('%H:%M') }}</span>
+                        {% if availability.notes %}
+                          <div class="subtle-text">{{ availability.notes }}</div>
+                        {% endif %}
+                      </div>
+                      <form method="post" action="{{ url_for('admin.delete_staff_availability_route', staff_member_id=staff_member.id, availability_id=availability.id) }}" class="inline-form">
+                        <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                      </form>
+                    </div>
+                  {% endfor %}
+                </div>
+              </article>
             {% endfor %}
-          </ul>
+          </div>
         {% else %}
-          <p class="subtle-text">No availability windows added.</p>
+          <p class="subtle-text">No weekly availability has been saved yet.</p>
         {% endif %}
         <div class="section-bar compact-bar">
-          <h3>Add availability</h3>
+          <h3>Add weekly availability</h3>
         </div>
         <form method="post" action="{{ url_for('admin.add_staff_availability_route', staff_member_id=staff_member.id) }}" class="stacked-form">
           {{ availability_form.hidden_tag() }}
@@ -115,68 +210,113 @@
               {{ availability_form.day_of_week(class_="select") }}
               {% for error in availability_form.day_of_week.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </label>
-            <label class="form-field">
-              <span>Start time</span>
-              {{ availability_form.start_time(class_="input") }}
-              {% for error in availability_form.start_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-            <label class="form-field">
-              <span>End time</span>
-              {{ availability_form.end_time(class_="input") }}
-              {% for error in availability_form.end_time.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
+            {{ render_time_select(availability_form.start_time_hour, availability_form.start_time_minute, "Start time") }}
+            {{ render_time_select(availability_form.end_time_hour, availability_form.end_time_minute, "End time") }}
           </div>
           <label class="form-field">
             <span>Notes</span>
             {{ availability_form.notes(class_="textarea") }}
             {% for error in availability_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
-          {{ availability_form.submit(class_="btn btn-primary") }}
+          {{ availability_form.submit(class_="btn btn-primary", value="Add Availability") }}
         </form>
       </article>
     </div>
   </section>
 
-  <section class="summary-grid">
-    <div class="detail-grid">
-      <article class="summary-card">
-        <div class="section-bar compact-bar">
-          <h2>Upcoming assignments</h2>
+  <section class="detail-grid staff-assignment-sections">
+    <article class="summary-card">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Assigned scheduled work</h2>
+          <p class="subtle-text">Open an event, jump to the day agenda, or review the filtered schedule for this staff member.</p>
         </div>
-        {% if upcoming_assignments %}
-          <ul class="summary-list">
-            {% for appointment in upcoming_assignments %}
-              <li>
-                <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}"><strong>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</strong></a>
-                <div>{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'No time' }} – {{ appointment.end_time.strftime('%H:%M') if appointment.end_time else 'No time' }}</div>
-                <div>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</div>
-                <div class="subtle-text">{{ appointment.display_title }} · {{ appointment.status }}</div>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p class="subtle-text">No upcoming assigned work.</p>
-        {% endif %}
-      </article>
+        <a class="btn btn-secondary btn-small" href="{{ staff_schedule_url }}">View Schedule</a>
+      </div>
+      {% if upcoming_assignments %}
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Scheduled</th>
+                <th>Customer</th>
+                <th>Work</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for appointment in upcoming_assignments %}
+                <tr>
+                  <td>
+                    <strong>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</strong>
+                    <div class="subtle-text">{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'No time' }}{% if appointment.end_time %} – {{ appointment.end_time.strftime('%H:%M') }}{% endif %}</div>
+                  </td>
+                  <td>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</td>
+                  <td>{{ appointment.title or appointment.display_title }}</td>
+                  <td><span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span></td>
+                  <td class="actions-cell">
+                    <div class="button-group">
+                      <a class="btn btn-secondary btn-small" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='day', date=appointment.scheduled_date.isoformat(), year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open Event</a>
+                      {% if enable_calendar %}
+                        <a class="btn btn-secondary btn-small" href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Day Agenda</a>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="subtle-text">No upcoming assigned scheduled work.</p>
+      {% endif %}
+    </article>
 
-      <article class="summary-card">
-        <div class="section-bar compact-bar">
-          <h2>Recent completed work</h2>
+    <article class="summary-card">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Recently completed scheduled work</h2>
+          <p class="subtle-text">Review recent completions without mixing them into the active planning view.</p>
         </div>
-        {% if recent_completed %}
-          <ul class="summary-list">
-            {% for appointment in recent_completed %}
-              <li>
-                <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}"><strong>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</strong></a>
-                <div>{{ appointment.display_title }}</div>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p class="subtle-text">No recently completed work.</p>
-        {% endif %}
-      </article>
-    </div>
+      </div>
+      {% if recent_completed %}
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Completed</th>
+                <th>Customer</th>
+                <th>Work</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for appointment in recent_completed %}
+                <tr>
+                  <td>
+                    <strong>{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</strong>
+                    <div class="subtle-text">{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'No time' }}{% if appointment.end_time %} – {{ appointment.end_time.strftime('%H:%M') }}{% endif %}</div>
+                  </td>
+                  <td>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</td>
+                  <td>{{ appointment.title or appointment.display_title }}</td>
+                  <td class="actions-cell">
+                    <div class="button-group">
+                      <a class="btn btn-secondary btn-small" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='day', date=appointment.scheduled_date.isoformat(), year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open Event</a>
+                      {% if enable_calendar %}
+                        <a class="btn btn-secondary btn-small" href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Day Agenda</a>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="subtle-text">No recently completed scheduled work.</p>
+      {% endif %}
+    </article>
   </section>
 </main>
 {% endblock %}

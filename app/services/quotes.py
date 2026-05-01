@@ -32,12 +32,12 @@ def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorag
 
         if current_app.config.get("ENABLE_SCHEDULING") and request_type == "Work request":
             preferred_date = form.preferred_date.data
-            preferred_window = (form.preferred_time_window.data or "").strip() or None
-            if preferred_date or preferred_window or additional_notes:
+            preferred_time = form.time_value("preferred_time")
+            if preferred_date or preferred_time or additional_notes:
                 appointment = Appointment(
                     quote_request=quote_request,
                     requested_date=preferred_date,
-                    requested_time_window=preferred_window,
+                    requested_time=preferred_time,
                     customer_notes=None,
                     internal_notes=additional_notes,
                     status="Requested",

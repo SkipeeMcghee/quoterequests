@@ -5,25 +5,391 @@
 
 {% block content %}
 <main class="shell dashboard-shell">
+  {% set request_count = request_history|length %}
+  {% set appointment_count = appointments|length %}
+  {% set note_count = customer_notes|length %}
+  {% set photo_count = customer.photos|length %}
+  {% set recurring_count = recurring_works|length %}
   {% call render_admin_page_header(
     title='Customer Record',
-    description='View customer contact info, notes, requests, appointments, and recurring work.',
+    description='Start with the primary contact, then move into notes, history, images, scheduling, and recurring work.',
     nav_mode='sub',
     return_url=url_for('admin.customer_list'),
     return_label='Back to Customers',
     meta=(customer.primary_name or 'Unnamed customer') ~ ((' · ' ~ customer.primary_city) if customer.primary_city else '')
   ) %}
       {% if enable_scheduling %}
-        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', customer_id=customer.id) }}">Schedule Work</a>
+        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', customer_id=customer.id, source='customer') }}">Schedule Work</a>
       {% endif %}
-      <a class="btn btn-danger" href="{{ url_for('admin.customer_merge', customer_id=customer.id) }}">Merge Customer</a>
+      {% if enable_recurring_work %}
+        <a class="btn btn-secondary" href="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}">Add Recurring Work</a>
+      {% endif %}
+      <a class="btn btn-secondary" href="#notes">Add Note</a>
+      <a class="btn btn-secondary" href="#customer-edit">Edit Customer</a>
   {% endcall %}
 
-  <section class="summary-grid">
-    <div class="detail-grid">
-      <article class="summary-card" id="customer-info">
+  <section class="customer-workflow-overview">
+    <article class="summary-card customer-primary-card">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Primary contact</h2>
+          <p class="subtle-text">Confirm the main person and city before reviewing history or scheduling the next job.</p>
+        </div>
+      </div>
+      <div class="customer-primary-card__content">
+        <div class="customer-primary-card__identity">
+          <p class="eyebrow">Customer</p>
+          <h3>{{ customer.primary_name or 'Unnamed customer' }}</h3>
+          <div class="contact-block customer-primary-card__contact">
+            <div class="contact-row"><span class="contact-label">Phone:</span> <span>{% if customer.primary_phone %}<a href="tel:{{ customer.primary_phone }}">{{ customer.primary_phone }}</a>{% else %}Not provided{% endif %}</span></div>
+            <div class="contact-row"><span class="contact-label">Email:</span> <span>{% if customer.primary_email %}<a href="mailto:{{ customer.primary_email }}">{{ customer.primary_email }}</a>{% else %}Not provided{% endif %}</span></div>
+            <div class="contact-row"><span class="contact-label">City:</span> <span>{{ customer.primary_city or 'Not provided' }}</span></div>
+            <div class="contact-row"><span class="contact-label">Last activity:</span> <span>{% if customer.last_activity %}{{ customer.last_activity.strftime('%b %d, %Y') }}{% else %}No recent activity{% endif %}</span></div>
+          </div>
+        </div>
+        <dl class="customer-highlight-metrics">
+          <div>
+            <dt>Requests</dt>
+            <dd>{{ request_count }}</dd>
+          </div>
+          <div>
+            <dt>Scheduled events</dt>
+            <dd>{{ appointment_count }}</dd>
+          </div>
+          <div>
+            <dt>Notes</dt>
+            <dd>{{ note_count }}</dd>
+          </div>
+          <div>
+            <dt>Images</dt>
+            <dd>{{ photo_count }}</dd>
+          </div>
+          {% if enable_recurring_work %}
+          <div>
+            <dt>Recurring plans</dt>
+            <dd>{{ recurring_count }}</dd>
+          </div>
+          {% endif %}
+          <div>
+            <dt>Billing</dt>
+            <dd>
+              {% if customer.billing_amount is not none %}
+                {{ customer.billing_amount }}{% if customer.billing_frequency %}/{{ customer.billing_frequency }}{% endif %}
+              {% else %}
+                Not set
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </article>
+
+    <article class="summary-card customer-workflow-card">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Workflow shortcuts</h2>
+          <p class="subtle-text">Jump directly to the parts of the record used most often during follow-up and scheduling.</p>
+        </div>
+      </div>
+      <div class="button-row customer-workflow-links">
+        <a class="btn btn-secondary btn-small" href="#notes">Notes</a>
+        <a class="btn btn-secondary btn-small" href="#gallery">Images</a>
+        <a class="btn btn-secondary btn-small" href="#requests">Request History</a>
+        <a class="btn btn-secondary btn-small" href="#appointments">Scheduled Events</a>
+        {% if enable_recurring_work %}
+          <a class="btn btn-secondary btn-small" href="#recurring-work">Recurring Work</a>
+        {% endif %}
+        <a class="btn btn-secondary btn-small" href="#billing">Billing</a>
+      </div>
+      <div class="customer-workflow-links customer-workflow-links--text">
+        {% if enable_calendar and appointment_count %}
+          <a href="{{ url_for('admin.calendar_view', view='list') }}">Open the full schedule</a>
+        {% endif %}
+        {% if enable_recurring_work %}
+          <a href="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}">Add recurring work for this customer</a>
+          <a href="{{ url_for('admin.recurring_work_list') }}">Open the recurring work directory</a>
+        {% endif %}
+      </div>
+    </article>
+  </section>
+
+  <section class="customer-media-grid">
+    <article class="summary-card" id="notes">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Customer notes</h2>
+          <p class="subtle-text">Keep follow-up notes easy to scan without burying the rest of the record.</p>
+        </div>
+      </div>
+      <form method="post" action="{{ url_for('admin.add_customer_note_route', customer_id=customer.id) }}" class="stacked-form">
+        {{ note_form.hidden_tag() }}
+        <label class="form-field">
+          <span>Add note</span>
+          {{ note_form.note_text(class_="textarea") }}
+          {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        {{ note_form.submit(class_="btn btn-primary") }}
+      </form>
+
+      <div class="notes-list">
+        {% for note in customer_notes %}
+          <article class="note-item">
+            <div class="note-header">
+              <div>
+                <strong>{{ note.author.email if note.author else 'Unknown author' }}</strong>
+                <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+              </div>
+            </div>
+            <p>{{ note.note_text }}</p>
+          </article>
+        {% else %}
+          <div class="empty-state">No customer notes yet.</div>
+        {% endfor %}
+      </div>
+    </article>
+
+    <article class="summary-card" id="gallery">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Image gallery</h2>
+          <p class="subtle-text">Photos stay near notes so the team can review context before scheduling or follow-up.</p>
+        </div>
+      </div>
+      <div class="photo-grid">
+        {% for photo in customer.photos %}
+          {% if photo.file_path %}
+            <a class="photo-card" href="{{ url_for('static', filename=photo.file_path) }}" target="_blank" rel="noreferrer">
+              <img src="{{ url_for('static', filename=photo.file_path) }}" alt="Customer photo {{ loop.index }}">
+            </a>
+          {% else %}
+            <div class="photo-card empty-state">Missing photo reference</div>
+          {% endif %}
+        {% else %}
+          <div class="empty-state">No photos uploaded for this customer yet.</div>
+        {% endfor %}
+      </div>
+
+      <form method="post" action="{{ url_for('admin.upload_customer_photos_route', customer_id=customer.id) }}" enctype="multipart/form-data" class="stacked-form">
+        {{ photo_upload_form.hidden_tag() }}
+        <label class="form-field">
+          <span>Upload images</span>
+          {{ photo_upload_form.photos(class_="input", multiple="multiple") }}
+          {% for error in photo_upload_form.photos.errors %}
+            <small class="field-error">{{ error }}</small>
+          {% endfor %}
+        </label>
+        {{ photo_upload_form.submit(class_="btn btn-primary") }}
+      </form>
+    </article>
+  </section>
+
+  <section class="customer-record-layout">
+    <div class="customer-record-layout__main">
+      <article class="summary-card" id="requests">
         <div class="section-bar compact-bar">
-          <h2>Customer information</h2>
+          <div>
+            <h2>Request history</h2>
+            <p class="subtle-text">Review how this customer entered the pipeline and reopen any request details without leaving the record workflow.</p>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Request</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Submitted</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for request in request_history %}
+                <tr>
+                  <td><a href="{{ url_for('admin.request_detail', request_id=request.id) }}">#{{ request.id }}</a></td>
+                  <td>
+                    <div class="customer-table-meta">
+                      <strong>{{ request.request_type or 'Unknown' }}</strong>
+                      {% if request.service_list_display %}
+                        <span class="subtle-text">{{ request.service_list_display }}</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td>{{ request.status }}</td>
+                  <td>{{ request.created_at.strftime('%b %d, %Y') }}</td>
+                  <td class="actions-cell"><a class="btn btn-secondary btn-small" href="{{ url_for('admin.request_detail', request_id=request.id) }}">View Request</a></td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="5" class="empty-state">No linked quote or work requests.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="summary-card" id="appointments">
+        <div class="section-bar compact-bar">
+          <div>
+            <h2>Scheduled events</h2>
+            <p class="subtle-text">Move from this record into an event, the related request, or the day agenda without hunting through the calendar.</p>
+          </div>
+          {% if enable_calendar and appointment_count %}
+            <a class="btn btn-secondary btn-small" href="{{ url_for('admin.calendar_view', view='list') }}">View Schedule</a>
+          {% endif %}
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Event</th>
+                <th>Scheduled</th>
+                <th>Status</th>
+                <th>Assigned staff</th>
+                <th>Request</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for appointment in appointments %}
+                <tr>
+                  <td>
+                    <div class="customer-table-meta">
+                      <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">Event #{{ appointment.id }}</a>
+                      <span class="subtle-text">{{ appointment.display_title }}</span>
+                    </div>
+                  </td>
+                  <td>
+                    {% if appointment.scheduled_date %}
+                      {% if enable_calendar %}
+                        <a href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</a>
+                      {% else %}
+                        {{ appointment.scheduled_date.strftime('%b %d, %Y') }}
+                      {% endif %}
+                      <div class="subtle-text">
+                        {% if appointment.start_time and appointment.end_time %}
+                          {{ appointment.start_time.strftime('%H:%M') }} – {{ appointment.end_time.strftime('%H:%M') }}
+                        {% elif appointment.start_time %}
+                          {{ appointment.start_time.strftime('%H:%M') }}
+                        {% else %}
+                          No time set
+                        {% endif %}
+                      </div>
+                    {% else %}
+                      <span class="subtle-text">Not scheduled yet</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ appointment.status }}</td>
+                  <td>
+                    {% if enable_staff_management and appointment.assigned_staff %}
+                      <div class="tag-list">
+                        {% for staff in appointment.assigned_staff %}
+                          <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}" class="tag">{{ staff.display_name }}</a>
+                        {% endfor %}
+                      </div>
+                    {% else %}
+                      <span class="subtle-text">Unassigned</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if appointment.quote_request_id %}
+                      <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">Request #{{ appointment.quote_request_id }}</a>
+                    {% else %}
+                      <span class="subtle-text">None</span>
+                    {% endif %}
+                  </td>
+                  <td class="actions-cell"><a class="btn btn-secondary btn-small" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">View Event</a></td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="6" class="empty-state">No linked appointments.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      {% if enable_recurring_work %}
+      <article class="summary-card" id="recurring-work">
+        <div class="section-bar compact-bar">
+          <div>
+            <h2>Recurring work</h2>
+            <p class="subtle-text">Keep repeating service plans tied to this customer, then open a plan to edit it or generate upcoming scheduled events.</p>
+          </div>
+          <div class="button-row">
+            <a class="btn btn-secondary btn-small" href="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}">Add Recurring Work</a>
+            <a class="btn btn-secondary btn-small" href="{{ url_for('admin.recurring_work_list') }}">All Recurring Work</a>
+          </div>
+        </div>
+        {% if recurring_works %}
+          <div class="customer-recurring-list">
+            {% for recurring_work in recurring_works %}
+              <article class="customer-recurring-item">
+                <div class="customer-recurring-item__body">
+                  <div class="customer-recurring-item__header">
+                    <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id, source='customer', customer_id=customer.id) }}">{{ recurring_work.title or 'Recurring work' }}</a></strong>
+                    <span class="status-badge">{{ recurring_work.status|capitalize }}</span>
+                  </div>
+                  <div class="subtle-text">
+                    {% if recurring_work.frequency == 'weekly' %}
+                      {% if recurring_work.day_of_week is not none and 0 <= recurring_work.day_of_week < 7 %}
+                        Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][recurring_work.day_of_week] }}
+                      {% else %}
+                        Weekly schedule unavailable
+                      {% endif %}
+                    {% elif recurring_work.frequency == 'monthly' %}
+                      {% if recurring_work.day_of_month is not none %}
+                        Monthly on day {{ recurring_work.day_of_month }}
+                      {% else %}
+                        Monthly schedule unavailable
+                      {% endif %}
+                    {% else %}
+                      Schedule configuration unavailable
+                    {% endif %}
+                    · starts {{ recurring_work.starts_on.strftime('%b %d, %Y') }}
+                    {% if recurring_work.ends_on %} · ends {{ recurring_work.ends_on.strftime('%b %d, %Y') }}{% endif %}
+                  </div>
+                  <div class="subtle-text">
+                    {% if recurring_work.start_time and recurring_work.end_time %}
+                      Default time {{ recurring_work.start_time.strftime('%H:%M') }} – {{ recurring_work.end_time.strftime('%H:%M') }}
+                    {% else %}
+                      No default time set
+                    {% endif %}
+                    · {{ recurring_work.appointments|length }} generated appointment{% if recurring_work.appointments|length != 1 %}s{% endif %}
+                  </div>
+                </div>
+                <div class="button-row">
+                  <a class="btn btn-secondary btn-small" href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id, source='customer', customer_id=customer.id) }}">Open Plan</a>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+          <div class="notice-card customer-recurring-guidance">
+            <strong>Next step: open a recurring plan to generate upcoming appointments.</strong>
+            <p>Generation now happens on the recurring work detail page so it is always clear which plan is creating scheduled events.</p>
+          </div>
+        {% else %}
+          <div class="notice-card customer-recurring-empty">
+            <strong>No recurring work is configured for this customer yet.</strong>
+            <p>Create the first recurring plan here, then open it to edit the cadence and generate upcoming appointments.</p>
+            <div class="button-row">
+              <a class="btn btn-primary" href="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}">Add Recurring Work</a>
+            </div>
+          </div>
+        {% endif %}
+      </article>
+      {% endif %}
+    </div>
+
+    <div class="customer-record-layout__side">
+      <article class="summary-card" id="customer-edit">
+        <div class="section-bar compact-bar">
+          <div>
+            <h2>Edit customer</h2>
+            <p class="subtle-text">Keep primary customer information separate from notes and history so the record stays easy to scan.</p>
+          </div>
         </div>
         <form method="post" action="{{ url_for('admin.update_customer_info_route', customer_id=customer.id) }}" class="stacked-form">
           {{ customer_info_form.hidden_tag() }}
@@ -63,9 +429,72 @@
         </form>
       </article>
 
+      <article class="summary-card" id="fields">
+        <div class="section-bar compact-bar">
+          <div>
+            <h2>Additional contact details</h2>
+            <p class="subtle-text">Secondary names, phones, emails, and cities stay readable without overpowering the main contact card.</p>
+          </div>
+        </div>
+
+        {% set extra_fields = namespace(has_any=false) %}
+        {% for kind, fields in customer.fields_by_kind.items() %}
+          {% if fields %}
+            {% set extra_fields.has_any = true %}
+            <div class="field-group customer-aux-group">
+              <h3>{{ kind|capitalize }}{% if fields|length != 1 %}s{% endif %}</h3>
+              <div class="customer-aux-list">
+                {% for field in fields %}
+                  <article class="customer-aux-item">
+                    <div class="customer-aux-item__content">
+                      <strong>{{ field.value }}</strong>
+                      <span class="subtle-text">{% if field.is_primary %}Primary {{ kind }}{% else %}Additional {{ kind }}{% endif %}</span>
+                    </div>
+                    {% if field.is_primary %}
+                      <span class="status-badge status-billing">Primary</span>
+                    {% else %}
+                      <form method="post" action="{{ url_for('admin.set_primary_field_route', customer_id=customer.id) }}" class="inline-form">
+                        {{ set_primary_field_form.hidden_tag() }}
+                        {{ set_primary_field_form.field_id(value=field.id) }}
+                        {{ set_primary_field_form.submit(class_="btn btn-secondary btn-small", value="Set Primary") }}
+                      </form>
+                    {% endif %}
+                  </article>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
+        {% endfor %}
+
+        {% if not extra_fields.has_any %}
+          <p class="subtle-text">No additional contact details have been added yet.</p>
+        {% endif %}
+
+        <div class="section-bar compact-bar">
+          <h3>Add contact detail</h3>
+        </div>
+        <form method="post" action="{{ url_for('admin.add_customer_field_route', customer_id=customer.id) }}" class="stacked-form">
+          {{ add_field_form.hidden_tag() }}
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Type</span>
+              {{ add_field_form.kind(class_="select") }}
+            </label>
+            <label class="form-field">
+              <span>Value</span>
+              {{ add_field_form.value(class_="input") }}
+            </label>
+          </div>
+          {{ add_field_form.submit(class_="btn btn-primary") }}
+        </form>
+      </article>
+
       <article class="summary-card" id="customer-addresses">
         <div class="section-bar compact-bar">
-          <h2>Customer addresses</h2>
+          <div>
+            <h2>Addresses</h2>
+            <p class="subtle-text">Keep addresses separate from contact history and notes.</p>
+          </div>
         </div>
         {% if customer.addresses %}
           <div class="address-list">
@@ -128,7 +557,20 @@
 
       <article class="summary-card" id="billing">
         <div class="section-bar compact-bar">
-          <h2>Billing</h2>
+          <div>
+            <h2>Billing</h2>
+            <p class="subtle-text">Billing stays separate from request and appointment history.</p>
+          </div>
+        </div>
+        <div class="customer-billing-summary">
+          <strong>Current billing</strong>
+          <p class="subtle-text">
+            {% if customer.billing_amount is not none %}
+              {{ customer.billing_amount }}{% if customer.billing_frequency %} / {{ customer.billing_frequency }}{% endif %}
+            {% else %}
+              No billing details set yet.
+            {% endif %}
+          </p>
         </div>
         <form method="post" action="{{ url_for('admin.update_customer_billing_route', customer_id=customer.id) }}" class="stacked-form">
           {{ billing_form.hidden_tag() }}
@@ -144,254 +586,17 @@
           {{ billing_form.submit(class_="btn btn-primary") }}
         </form>
       </article>
-    </div>
 
-    <div class="detail-grid">
-      <article class="summary-card" id="gallery">
-        <div class="section-bar compact-bar">
-          <h2>Image gallery</h2>
-        </div>
-        <div class="photo-grid">
-          {% for photo in customer.photos %}
-            {% if photo.file_path %}
-              <a class="photo-card" href="{{ url_for('static', filename=photo.file_path) }}" target="_blank" rel="noreferrer">
-                <img src="{{ url_for('static', filename=photo.file_path) }}" alt="Customer photo {{ loop.index }}">
-              </a>
-            {% else %}
-              <div class="photo-card empty-state">Missing photo reference</div>
-            {% endif %}
-          {% else %}
-            <div class="empty-state">No photos uploaded for this customer yet.</div>
-          {% endfor %}
-        </div>
-
-        <form method="post" action="{{ url_for('admin.upload_customer_photos_route', customer_id=customer.id) }}" enctype="multipart/form-data" class="stacked-form">
-          {{ photo_upload_form.hidden_tag() }}
-          <label class="form-field">
-            <span>Upload images</span>
-            {{ photo_upload_form.photos(class_="input", multiple="multiple") }}
-            {% for error in photo_upload_form.photos.errors %}
-              <small class="field-error">{{ error }}</small>
-            {% endfor %}
-          </label>
-          {{ photo_upload_form.submit(class_="btn btn-primary") }}
-        </form>
-      </article>
-    </div>
-  </section>
-
-  <section class="summary-grid">
-    <div class="detail-grid">
-      <article class="summary-card" id="fields">
-        <div class="section-bar compact-bar">
-          <h2>Alternate contact values</h2>
-        </div>
-
-        {% for kind, fields in customer.fields_by_kind.items() %}
-          <div class="field-group">
-            <h3>{{ kind|capitalize }}s</h3>
-            {% if fields %}
-              <div class="tag-list">
-                {% for field in fields %}
-                  <article class="tag-pill tag-pill--interactive">
-                    <strong>{{ field.value }}</strong>
-                    {% if field.is_primary %}
-                      <span class="subtle-text">(primary)</span>
-                    {% else %}
-                      <form method="post" action="{{ url_for('admin.set_primary_field_route', customer_id=customer.id) }}" class="inline-form">
-                        {{ set_primary_field_form.hidden_tag() }}
-                        {{ set_primary_field_form.field_id(value=field.id) }}
-                        {{ set_primary_field_form.submit(class_="btn btn-secondary btn-small", value="Set Primary") }}
-                      </form>
-                    {% endif %}
-                  </article>
-                {% endfor %}
-              </div>
-            {% else %}
-              <p class="subtle-text">No alternate {{ kind }} values.</p>
-            {% endif %}
-          </div>
-        {% endfor %}
-
-        <div class="section-bar compact-bar">
-          <h3>Add alternate value</h3>
-        </div>
-        <form method="post" action="{{ url_for('admin.add_customer_field_route', customer_id=customer.id) }}" class="stacked-form">
-          {{ add_field_form.hidden_tag() }}
-          <div class="form-grid">
-            <label class="form-field">
-              <span>Type</span>
-              {{ add_field_form.kind(class_="select") }}
-            </label>
-            <label class="form-field">
-              <span>Value</span>
-              {{ add_field_form.value(class_="input") }}
-            </label>
-          </div>
-          {{ add_field_form.submit(class_="btn btn-primary") }}
-        </form>
-      </article>
-
-      <article class="summary-card" id="notes">
-        <div class="section-bar compact-bar">
-          <h2>Customer notes</h2>
-        </div>
-        <form method="post" action="{{ url_for('admin.add_customer_note_route', customer_id=customer.id) }}" class="stacked-form">
-          {{ note_form.hidden_tag() }}
-          <label class="form-field">
-            <span>Add note</span>
-            {{ note_form.note_text(class_="textarea") }}
-            {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
-          {{ note_form.submit(class_="btn btn-primary") }}
-        </form>
-
-        <div class="notes-list">
-          {% for note in customer.notes %}
-            <article class="note-item">
-              <div class="note-header">
-                <div>
-                  <strong>{{ note.author.email if note.author else 'Unknown author' }}</strong>
-                  <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
-                </div>
-              </div>
-              <p>{{ note.note_text }}</p>
-            </article>
-          {% else %}
-            <div class="empty-state">No customer notes yet.</div>
-          {% endfor %}
-        </div>
-      </article>
-    </div>
-
-    <div class="detail-grid">
-      <article class="summary-card" id="requests">
-        <div class="section-bar compact-bar">
-          <h2>Linked requests</h2>
-        </div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Submitted</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for request in customer.quote_requests %}
-                <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.request_detail', request_id=request.id) }}'">
-                  <td>{{ request.id }}</td>
-                  <td>{{ (request.request_type or 'Unknown')|replace(' request', '')|lower }}</td>
-                  <td>{{ request.status }}</td>
-                  <td>{{ request.created_at.strftime('%b %d, %Y') }}</td>
-                </tr>
-              {% else %}
-                <tr>
-                  <td colspan="4" class="empty-state">No linked quote/work requests.</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </article>
-
-      {% if enable_recurring_work %}
-      <article class="summary-card" id="recurring-work">
+      <article class="summary-card" id="customer-tools">
         <div class="section-bar compact-bar">
           <div>
-            <h2>Recurring work</h2>
+            <h2>Record tools</h2>
+            <p class="subtle-text">Keep destructive or administrative actions separate from the everyday customer workflow.</p>
           </div>
-          <a class="btn btn-secondary btn-small" href="{{ url_for('admin.recurring_work_list') }}">Back to Recurring Work</a>
         </div>
-        {% if customer.recurring_works %}
-          <ul class="recurring-list">
-            {% for recurring_work in customer.recurring_works %}
-              <li>
-                <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id) }}">{{ recurring_work.title or (recurring_work.frequency|capitalize) }}</a></strong>
-                <div class="subtle-text">
-                  {% if recurring_work.frequency == 'weekly' %}
-                    {% if recurring_work.day_of_week is not none and 0 <= recurring_work.day_of_week < 7 %}
-                      Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][recurring_work.day_of_week] }}
-                    {% else %}
-                      Weekly schedule unavailable
-                    {% endif %}
-                  {% elif recurring_work.frequency == 'monthly' %}
-                    {% if recurring_work.day_of_month is not none %}
-                      Monthly on day {{ recurring_work.day_of_month }}
-                    {% else %}
-                      Monthly schedule unavailable
-                    {% endif %}
-                  {% else %}
-                    Schedule configuration unavailable
-                  {% endif %}
-                  · starts {{ recurring_work.starts_on.strftime('%b %d, %Y') }}
-                  {% if recurring_work.ends_on %} · ends {{ recurring_work.ends_on.strftime('%b %d, %Y') }}{% endif %}
-                </div>
-              </li>
-            {% endfor %}
-          </ul>
-          <form method="post" action="{{ url_for('admin.generate_recurring_appointments_route', customer_id=customer.id) }}" class="stacked-form">
-            {{ generate_recurring_appointments_form.hidden_tag() }}
-            <label class="form-field">
-              <span>Generate appointments for</span>
-              {{ generate_recurring_appointments_form.days_ahead(class_="select") }}
-            </label>
-            {{ generate_recurring_appointments_form.submit(class_="btn btn-primary") }}
-          </form>
-        {% else %}
-          <p class="subtle-text">No recurring work configured for this customer.</p>
-        {% endif %}
-      </article>
-      {% endif %}
-
-      <article class="summary-card" id="appointments">
-        <div class="section-bar compact-bar">
-          <h2>Linked appointments</h2>
-        </div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Request</th>
-                <th>Status</th>
-                <th>Assigned staff</th>
-                <th>Requested</th>
-                <th>Confirmed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for appointment in appointments %}
-                <tr>
-                  <td>
-                    <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">#{{ appointment.id }}</a>
-                    {% if appointment.quote_request_id %}
-                      <div class="subtle-text">Request #{{ appointment.quote_request_id }}</div>
-                    {% endif %}
-                  </td>
-                  <td>{{ appointment.status }}</td>
-                  <td>
-                    {% if enable_staff_management and appointment.assigned_staff %}
-                      <div class="tag-list">
-                        {% for staff in appointment.assigned_staff %}
-                          <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}" class="tag">{{ staff.display_name }}</a>
-                        {% endfor %}
-                      </div>
-                    {% else %}
-                      <span class="subtle-text">None</span>
-                    {% endif %}
-                  </td>
-                  <td>{{ appointment.requested_date.strftime('%b %d, %Y') if appointment.requested_date else '—' }}</td>
-                  <td>{{ appointment.confirmed_date.strftime('%b %d, %Y') if appointment.confirmed_date else '—' }}</td>
-                </tr>
-              {% else %}
-                <tr>
-                  <td colspan="5" class="empty-state">No linked appointments.</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="customer-tool-list">
+          <p class="subtle-text">Merge this record only when you are certain another customer should survive as the source of truth.</p>
+          <a class="btn btn-danger" href="{{ url_for('admin.customer_merge', customer_id=customer.id) }}">Merge Customer</a>
         </div>
       </article>
     </div>

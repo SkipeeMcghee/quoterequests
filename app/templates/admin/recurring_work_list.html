@@ -7,42 +7,98 @@
 <main class="shell dashboard-shell">
   {{ render_admin_page_header(
     title='Recurring Work',
-    description='Manage repeat jobs and generate upcoming scheduled work.',
+    description='Review repeat service plans by customer and open a plan to edit it or generate upcoming scheduled events.',
     nav_mode='main'
   ) }}
 
   <section class="table-card">
+    <div class="section-bar compact-bar">
+      <div>
+        <h2>Recurring plans</h2>
+        <p class="subtle-text">Each plan belongs to a customer and stays focused on service cadence, not billing or payroll.</p>
+      </div>
+    </div>
     <div class="table-scroll">
       <table>
         <thead>
           <tr>
-            <th>ID</th>
             <th>Customer</th>
-            <th>Schedule</th>
-            <th>Starts</th>
+            <th>Recurring plan</th>
+            <th>Cadence</th>
+            <th>Default time</th>
+            <th>Date range</th>
             <th>Status</th>
+            <th>Generated</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody>
           {% for work in recurring_works %}
             <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.recurring_work_detail', recurring_work_id=work.id) }}'">
-              <td>{{ work.id }}</td>
-              <td>{{ work.customer.primary_name or 'Unnamed' }}</td>
               <td>
-                {% if work.frequency == 'weekly' %}
-                  Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][work.day_of_week] }}
+                {% if work.customer %}
+                  <div class="customer-table-meta">
+                    <a href="{{ url_for('admin.customer_detail', customer_id=work.customer.id, _anchor='recurring-work') }}">{{ work.customer.primary_name or 'Unnamed' }}</a>
+                    {% if work.customer.primary_city %}
+                      <span class="subtle-text">{{ work.customer.primary_city }}</span>
+                    {% endif %}
+                  </div>
                 {% else %}
-                  Monthly on day {{ work.day_of_month }}
+                  <span class="subtle-text">No linked customer</span>
                 {% endif %}
               </td>
-              <td>{{ work.starts_on.strftime('%b %d, %Y') }}</td>
-              <td>{{ work.status }}</td>
-              <td><a class="btn btn-secondary btn-small" href="{{ url_for('admin.recurring_work_detail', recurring_work_id=work.id) }}">View Details</a></td>
+              <td>
+                <div class="customer-table-meta">
+                  <strong>{{ work.title or 'Recurring work' }}</strong>
+                  <span class="subtle-text">Plan #{{ work.id }}</span>
+                </div>
+              </td>
+              <td>
+                {% if work.frequency == 'weekly' %}
+                  {% if work.day_of_week is not none and 0 <= work.day_of_week < 7 %}
+                    Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][work.day_of_week] }}
+                  {% else %}
+                    Weekly cadence needs a weekday
+                  {% endif %}
+                {% else %}
+                  {% if work.day_of_month is not none %}
+                    Monthly on day {{ work.day_of_month }}
+                  {% else %}
+                    Monthly cadence needs a day of month
+                  {% endif %}
+                {% endif %}
+              </td>
+              <td>
+                {% if work.start_time and work.end_time %}
+                  {{ work.start_time.strftime('%H:%M') }} – {{ work.end_time.strftime('%H:%M') }}
+                {% elif work.start_time %}
+                  Starts {{ work.start_time.strftime('%H:%M') }}
+                {% else %}
+                  <span class="subtle-text">No default time</span>
+                {% endif %}
+              </td>
+              <td>
+                {{ work.starts_on.strftime('%b %d, %Y') }}
+                <div class="subtle-text">
+                  {% if work.ends_on %}
+                    Ends {{ work.ends_on.strftime('%b %d, %Y') }}
+                  {% else %}
+                    No end date
+                  {% endif %}
+                </div>
+              </td>
+              <td><span class="status-badge">{{ work.status|capitalize }}</span></td>
+              <td>
+                <div class="customer-table-meta recurring-list-generated">
+                  <strong>{{ work.appointments|length }} generated</strong>
+                  <span class="subtle-text">{% if work.appointments %}Open the plan for schedule links.{% else %}No generated appointments yet.{% endif %}</span>
+                </div>
+              </td>
+              <td><a class="btn btn-secondary btn-small" href="{{ url_for('admin.recurring_work_detail', recurring_work_id=work.id) }}">Open Plan</a></td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="5" class="empty-state">No recurring work configured.</td>
+              <td colspan="7" class="empty-state">No recurring work configured.</td>
             </tr>
           {% endfor %}
         </tbody>

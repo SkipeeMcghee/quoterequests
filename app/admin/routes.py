@@ -21,12 +21,14 @@ from app.forms.admin import (
     MergeCustomerForm,
     NoteForm,
     RecurringWorkGenerationForm,
+    RecurringWorkForm,
+    RequestQuoteDecisionForm,
+    RequestQuoteForm,
     AppointmentStaffAssignmentForm,
     RescheduleAppointmentForm,
     SetPrimaryFieldForm,
     StaffAvailabilityForm,
     StaffMemberForm,
-    StatusUpdateForm,
 )
 from app.models import APPOINTMENT_STATUSES
 from app.services.admin_requests import (
@@ -36,7 +38,9 @@ from app.services.admin_requests import (
     add_staff_availability,
     create_appointment,
     create_customer,
+    create_request_quote,
     create_scheduled_work,
+    create_recurring_work,
     create_customer_from_quote_request,
     create_staff_member,
     delete_request_note,
@@ -47,8 +51,10 @@ from app.services.admin_requests import (
     get_quote_request,
     get_recurring_work,
     get_request_note,
+    get_request_quote,
     get_staff_assignment_warnings,
     get_staff_member,
+    generate_appointments_for_recurring_work,
     list_customers,
     list_quote_requests,
     list_recurring_works,
@@ -58,6 +64,7 @@ from app.services.admin_requests import (
     list_scheduled_appointments,
     set_appointment_staff_assignments,
     link_quote_request_to_customer,
+    mark_quote_request_viewed,
     add_customer_address,
     generate_recurring_appointments_for_customer,
     link_quote_request_to_customer,
@@ -69,12 +76,301 @@ from app.services.admin_requests import (
     update_appointment_status,
     update_customer_billing,
     update_customer_info,
+    update_recurring_work,
+    update_request_quote_decision,
     update_staff_member,
     upload_customer_photos,
     update_last_contacted_on,
     update_request_note,
-    update_request_status,
 )
+
+
+VALID_SCHEDULE_SOURCES = {"request", "customer", "calendar", "day"}
+VALID_RECURRING_SOURCES = {"customer"}
+WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _calculate_scheduled_hours(
+    appointments,
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> float:
+    minutes = 0
+    for appointment in appointments:
+        if appointment.status == "Cancelled" or not appointment.start_time or not appointment.end_time or not appointment.scheduled_date:
+            continue
+        if start_date and appointment.scheduled_date < start_date:
+            continue
+        if end_date and appointment.scheduled_date > end_date:
+            continue
+        minutes += (
+            appointment.end_time.hour * 60 + appointment.end_time.minute
+            - (appointment.start_time.hour * 60 + appointment.start_time.minute)
+        )
+    return minutes / 60
+
+
+def _build_staff_schedule_url(staff_member_id: int, reference_date: date | None = None) -> str:
+    target_date = reference_date or date.today()
+    return url_for(
+        "admin.calendar_view",
+        year=target_date.year,
+        month=target_date.month,
+        view="list",
+        show="upcoming",
+        status="all",
+        staff_id=staff_member_id,
+        sort="soonest",
+    )
+
+
+def _summarize_availability_days(staff_member) -> tuple[list[int], str]:
+    availability_days = sorted({window.day_of_week for window in staff_member.availability_windows})
+    if not availability_days:
+        return availability_days, "No weekly availability set"
+
+    labels = [WEEKDAY_NAMES[index][:3] for index in availability_days[:3]]
+    summary = ", ".join(labels)
+    if len(availability_days) > 3:
+        summary = f"{summary} +{len(availability_days) - 3} more"
+    return availability_days, summary
+
+
+def _build_schedule_source_args(
+    *,
+    source: str | None = None,
+    request_id: int | None = None,
+    customer_id: int | None = None,
+    date_value: date | str | None = None,
+    year: int | None = None,
+    month: int | None = None,
+    day: int | None = None,
+    view: str | None = None,
+    show: str | None = None,
+    status: str | None = None,
+    staff_id: int | None = None,
+    sort_by: str | None = None,
+) -> dict[str, object]:
+    args: dict[str, object] = {}
+
+    if source in VALID_SCHEDULE_SOURCES:
+        args["source"] = source
+    if request_id is not None:
+        args["request_id"] = request_id
+    if customer_id is not None:
+        args["customer_id"] = customer_id
+    if date_value is not None:
+        args["date"] = date_value.isoformat() if isinstance(date_value, date) else date_value
+    if year is not None:
+        args["year"] = year
+    if month is not None:
+        args["month"] = month
+    if day is not None:
+        args["day"] = day
+    if view in ("calendar", "list"):
+        args["view"] = view
+        if view == "list":
+            args["show"] = show if show in ("upcoming", "all") else "upcoming"
+            args["status"] = status or "all"
+            args["staff_id"] = 0 if staff_id is None else staff_id
+            args["sort"] = sort_by or "soonest"
+
+    return args
+
+
+def _schedule_source_args_from_request() -> dict[str, object]:
+    return _build_schedule_source_args(
+        source=request.args.get("source"),
+        request_id=request.args.get("request_id", type=int),
+        customer_id=request.args.get("customer_id", type=int),
+        date_value=request.args.get("date"),
+        year=request.args.get("year", type=int),
+        month=request.args.get("month", type=int),
+        day=request.args.get("day", type=int),
+        view=request.args.get("view"),
+        show=request.args.get("show"),
+        status=request.args.get("status"),
+        staff_id=request.args.get("staff_id", type=int),
+        sort_by=request.args.get("sort"),
+    )
+
+
+def _resolve_schedule_return(
+    *,
+    source: str | None,
+    quote_request=None,
+    customer=None,
+    scheduled_date: date | None = None,
+    year: int | None = None,
+    month: int | None = None,
+    day: int | None = None,
+    view: str | None = None,
+    show: str | None = None,
+    status: str | None = None,
+    staff_id: int | None = None,
+    sort_by: str | None = None,
+) -> tuple[str, str]:
+    if source == "request" and quote_request is not None:
+        return url_for("admin.request_detail", request_id=quote_request.id), "Back to Request"
+
+    if source == "customer" and customer is not None:
+        return url_for("admin.customer_detail", customer_id=customer.id), "Back to Customer"
+
+    context_date = scheduled_date
+    if context_date is None and year is not None and month is not None and day is not None:
+        try:
+            context_date = date(year, month, day)
+        except ValueError:
+            context_date = None
+
+    if source == "day" and context_date is not None:
+        return (
+            url_for(
+                "admin.calendar_day_view",
+                year=context_date.year,
+                month=context_date.month,
+                day=context_date.day,
+            ),
+            "Back to Day Agenda",
+        )
+
+    calendar_kwargs: dict[str, object] = {}
+    if year is not None and month is not None:
+        calendar_kwargs.update(year=year, month=month)
+    if view in ("calendar", "list"):
+        calendar_kwargs["view"] = view
+        if view == "list":
+            calendar_kwargs["show"] = show if show in ("upcoming", "all") else "upcoming"
+            calendar_kwargs["status"] = status or "all"
+            calendar_kwargs["staff_id"] = 0 if staff_id is None else staff_id
+            calendar_kwargs["sort"] = sort_by or "soonest"
+
+    return_label = "Back to Schedule"
+    if view == "calendar":
+        return_label = "Back to Calendar View"
+    elif view == "list":
+        return_label = "Back to List View"
+
+    return url_for("admin.calendar_view", **calendar_kwargs), return_label
+
+
+def _build_recurring_source_args(*, source: str | None = None, customer_id: int | None = None) -> dict[str, object]:
+    args: dict[str, object] = {}
+    if source in VALID_RECURRING_SOURCES and customer_id is not None:
+        args["source"] = source
+        args["customer_id"] = customer_id
+    return args
+
+
+def _recurring_source_args_from_request() -> dict[str, object]:
+    return _build_recurring_source_args(
+        source=request.args.get("source"),
+        customer_id=request.args.get("customer_id", type=int),
+    )
+
+
+def _resolve_recurring_return(*, source: str | None, customer=None) -> tuple[str, str]:
+    if source == "customer" and customer is not None:
+        return (
+            url_for("admin.customer_detail", customer_id=customer.id, _anchor="recurring-work"),
+            "Back to Customer",
+        )
+    return url_for("admin.recurring_work_list"), "Back to Recurring Work"
+
+
+def _validate_recurring_work_form(form: RecurringWorkForm) -> tuple[int | None, int | None, bool]:
+    selected_day_of_week = form.day_of_week.data if form.day_of_week.data is not None and form.day_of_week.data >= 0 else None
+    selected_day_of_month = form.day_of_month.data if form.day_of_month.data else None
+    is_valid = True
+
+    if form.frequency.data == "weekly":
+        if selected_day_of_week is None:
+            form.day_of_week.errors.append("Choose a weekday for weekly recurring work.")
+            is_valid = False
+        selected_day_of_month = None
+    if form.frequency.data == "monthly":
+        if selected_day_of_month is None:
+            form.day_of_month.errors.append("Choose a day of month for monthly recurring work.")
+            is_valid = False
+        selected_day_of_week = None
+
+    if form.ends_on.data and form.starts_on.data and form.ends_on.data < form.starts_on.data:
+        form.ends_on.errors.append("End date must be on or after the start date.")
+        is_valid = False
+    start_time = form.time_value("start_time")
+    end_time = form.time_value("end_time")
+    if start_time and end_time and end_time <= start_time:
+        form.end_time_hour.errors.append("Default end time must be after the default start time.")
+        is_valid = False
+
+    return selected_day_of_week, selected_day_of_month, is_valid
+
+
+def _render_recurring_work_detail_page(
+    *,
+    work,
+    recurring_work_form: RecurringWorkForm,
+    generate_recurring_appointments_form: RecurringWorkGenerationForm,
+    source_args: dict[str, object] | None = None,
+):
+    recurring_source_args = source_args or {}
+    recurring_return_url, recurring_return_label = _resolve_recurring_return(
+        source=recurring_source_args.get("source") if recurring_source_args else None,
+        customer=work.customer,
+    )
+    generated_appointments = sorted(
+        work.appointments,
+        key=lambda appointment: (
+            appointment.scheduled_date or date.max,
+            appointment.start_time or time.min,
+            appointment.id,
+        ),
+    )
+    today_value = date.today()
+    reference_date = next(
+        (appointment.scheduled_date for appointment in generated_appointments if appointment.scheduled_date),
+        work.starts_on or today_value,
+    )
+    recurring_calendar_url = None
+    recurring_list_url = None
+    if current_app.config.get("ENABLE_CALENDAR"):
+        recurring_calendar_url = url_for(
+            "admin.calendar_view",
+            year=reference_date.year,
+            month=reference_date.month,
+            view="calendar",
+        )
+        recurring_list_url = url_for(
+            "admin.calendar_view",
+            year=reference_date.year,
+            month=reference_date.month,
+            view="list",
+            show="upcoming",
+            status="all",
+            staff_id=0,
+            sort="soonest",
+        )
+
+    return render_template(
+        "admin/recurring_work_detail.html",
+        work=work,
+        recurring_work_form=recurring_work_form,
+        generate_recurring_appointments_form=generate_recurring_appointments_form,
+        generated_appointments=generated_appointments,
+        generated_count=len(generated_appointments),
+        upcoming_generated_count=sum(
+            1
+            for appointment in generated_appointments
+            if appointment.scheduled_date and appointment.scheduled_date >= today_value and appointment.status != "Cancelled"
+        ),
+        recurring_return_url=recurring_return_url,
+        recurring_return_label=recurring_return_label,
+        recurring_calendar_url=recurring_calendar_url,
+        recurring_list_url=recurring_list_url,
+        edit_recurring_work_url=url_for("admin.edit_recurring_work_route", recurring_work_id=work.id, **recurring_source_args),
+        generate_recurring_work_url=url_for("admin.generate_recurring_work_appointments_route", recurring_work_id=work.id, **recurring_source_args),
+    )
 
 
 @bp.get("/")
@@ -271,6 +567,21 @@ def new_scheduled_work():
     request_id = request.args.get("request_id", type=int)
     customer_id = request.args.get("customer_id", type=int)
     date_str = request.args.get("date")
+    source = request.args.get("source")
+    if source not in VALID_SCHEDULE_SOURCES:
+        source = None
+    calendar_year = request.args.get("year", type=int)
+    calendar_month = request.args.get("month", type=int)
+    calendar_day = request.args.get("day", type=int)
+    calendar_view = request.args.get("view", "calendar")
+    if calendar_view not in ("calendar", "list"):
+        calendar_view = "calendar"
+    calendar_show = request.args.get("show", "upcoming")
+    if calendar_show not in ("upcoming", "all"):
+        calendar_show = "upcoming"
+    calendar_status = request.args.get("status", "all")
+    calendar_staff_id = request.args.get("staff_id", type=int)
+    calendar_sort = request.args.get("sort", "soonest")
 
     quote_request = None
     customer = None
@@ -309,6 +620,56 @@ def new_scheduled_work():
         ],
     ]
 
+    form_action_url = url_for(
+        "admin.new_scheduled_work",
+        **_build_schedule_source_args(
+            source=source,
+            request_id=request_id,
+            customer_id=customer_id,
+            date_value=date_str,
+            year=calendar_year,
+            month=calendar_month,
+            day=calendar_day,
+            view=calendar_view if source == "calendar" else None,
+            show=calendar_show if source == "calendar" else None,
+            status=calendar_status if source == "calendar" else None,
+            staff_id=calendar_staff_id if source == "calendar" else None,
+            sort_by=calendar_sort if source == "calendar" else None,
+        ),
+    )
+
+    def render_scheduled_work_page():
+        active_customer = customer or (quote_request.customer if quote_request and quote_request.customer else None)
+        selected_context_date = form.scheduled_date.data or scheduled_date
+        return_url, return_label = _resolve_schedule_return(
+            source=source,
+            quote_request=quote_request,
+            customer=active_customer,
+            scheduled_date=selected_context_date,
+            year=calendar_year,
+            month=calendar_month,
+            day=calendar_day,
+            view=calendar_view if source == "calendar" else None,
+            show=calendar_show if source == "calendar" else None,
+            status=calendar_status if source == "calendar" else None,
+            staff_id=calendar_staff_id if source == "calendar" else None,
+            sort_by=calendar_sort if source == "calendar" else None,
+        )
+        return render_template(
+            "admin/scheduled_work_form.html",
+            form=form,
+            form_action_url=form_action_url,
+            quote_request=quote_request,
+            customer=active_customer,
+            scheduled_date=selected_context_date,
+            schedule_source=source,
+            schedule_source_year=calendar_year,
+            schedule_source_month=calendar_month,
+            schedule_source_view=calendar_view,
+            source_return_url=return_url,
+            source_return_label=return_label,
+        )
+
     if request.method == "GET":
         if quote_request:
             form.request_id.data = quote_request.id
@@ -332,15 +693,13 @@ def new_scheduled_work():
             form.customer_id.errors.append("Choose an existing customer or enter a new customer name.")
         if selected_customer_id is None and not (form.new_customer_city.data or "").strip():
             form.new_customer_city.errors.append("Enter a city for the new customer.")
+        start_time = form.time_value("start_time")
+        end_time = form.time_value("end_time")
+        if start_time and end_time and end_time <= start_time:
+            form.end_time_hour.errors.append("End time must be after the start time.")
 
         if form.errors:
-            return render_template(
-                "admin/scheduled_work_form.html",
-                form=form,
-                quote_request=quote_request,
-                customer=customer,
-                scheduled_date=scheduled_date,
-            )
+            return render_scheduled_work_page()
 
         try:
             appointment = create_scheduled_work(
@@ -352,32 +711,40 @@ def new_scheduled_work():
                 new_customer_city=form.new_customer_city.data,
                 title=form.title.data,
                 scheduled_date=form.scheduled_date.data,
-                start_time=form.start_time.data,
-                end_time=form.end_time.data,
+                start_time=start_time,
+                end_time=end_time,
                 status=form.status.data,
                 customer_notes=form.customer_notes.data,
                 internal_notes=form.internal_notes.data,
             )
         except Exception as exc:
             flash(str(exc), "error")
-            return render_template(
-                "admin/scheduled_work_form.html",
-                form=form,
-                quote_request=quote_request,
-                customer=customer,
-                scheduled_date=scheduled_date,
+            return render_scheduled_work_page()
+
+        flash("Scheduled event created.", "success")
+        active_customer = customer or appointment.customer or (quote_request.customer if quote_request and quote_request.customer else None)
+        return redirect(
+            url_for(
+                "admin.appointment_detail",
+                appointment_id=appointment.id,
+                **_build_schedule_source_args(
+                    source=source,
+                    request_id=quote_request.id if source == "request" and quote_request else None,
+                    customer_id=active_customer.id if source == "customer" and active_customer else None,
+                    date_value=form.scheduled_date.data,
+                    year=calendar_year,
+                    month=calendar_month,
+                    day=calendar_day or (form.scheduled_date.data.day if source == "day" and form.scheduled_date.data else None),
+                    view=calendar_view if source == "calendar" else None,
+                    show=calendar_show if source == "calendar" else None,
+                    status=calendar_status if source == "calendar" else None,
+                    staff_id=calendar_staff_id if source == "calendar" else None,
+                    sort_by=calendar_sort if source == "calendar" else None,
+                ),
             )
+        )
 
-        flash("Scheduled work created.", "success")
-        return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id))
-
-    return render_template(
-        "admin/scheduled_work_form.html",
-        form=form,
-        quote_request=quote_request,
-        customer=customer,
-        scheduled_date=scheduled_date,
-    )
+    return render_scheduled_work_page()
 
 
 @bp.get("/appointments/<int:appointment_id>")
@@ -402,8 +769,65 @@ def appointment_detail(appointment_id: int):
         key=lambda item: item.created_at,
     )
 
+    appointment_context_args = _schedule_source_args_from_request()
+    appointment_return_url, appointment_return_label = _resolve_schedule_return(
+        source=appointment_context_args.get("source") if appointment_context_args else None,
+        quote_request=appointment.quote_request,
+        customer=appointment.customer,
+        scheduled_date=appointment.scheduled_date,
+        year=appointment_context_args.get("year") if appointment_context_args else None,
+        month=appointment_context_args.get("month") if appointment_context_args else None,
+        day=appointment_context_args.get("day") if appointment_context_args else None,
+        view=appointment_context_args.get("view") if appointment_context_args else None,
+        show=appointment_context_args.get("show") if appointment_context_args else None,
+        status=appointment_context_args.get("status") if appointment_context_args else None,
+        staff_id=appointment_context_args.get("staff_id") if appointment_context_args else None,
+        sort_by=appointment_context_args.get("sort") if appointment_context_args else None,
+    )
+
+    today_value = date.today()
     calendar_year = appointment.scheduled_date.year if appointment.scheduled_date else date.today().year
     calendar_month = appointment.scheduled_date.month if appointment.scheduled_date else date.today().month
+    calendar_day = appointment.scheduled_date.day if appointment.scheduled_date else today_value.day
+
+    list_show = appointment_context_args.get("show") if appointment_context_args else None
+    if list_show not in ("upcoming", "all"):
+        list_show = "upcoming"
+
+    list_status = appointment_context_args.get("status") if appointment_context_args else None
+    if list_status not in ("all", *APPOINTMENT_STATUSES):
+        list_status = "all"
+
+    list_staff_id = appointment_context_args.get("staff_id") if appointment_context_args else None
+    if list_staff_id is None:
+        list_staff_id = 0
+
+    list_sort = appointment_context_args.get("sort") if appointment_context_args else None
+    if list_sort not in ("soonest", "latest", "customer", "status"):
+        list_sort = "soonest"
+
+    appointment_calendar_url = url_for(
+        "admin.calendar_view",
+        year=calendar_year,
+        month=calendar_month,
+        view="calendar",
+    )
+    appointment_list_url = url_for(
+        "admin.calendar_view",
+        year=calendar_year,
+        month=calendar_month,
+        view="list",
+        show=list_show,
+        status=list_status,
+        staff_id=list_staff_id,
+        sort=list_sort,
+    )
+    appointment_day_url = url_for(
+        "admin.calendar_day_view",
+        year=calendar_year,
+        month=calendar_month,
+        day=calendar_day,
+    )
 
     if current_app.config.get("ENABLE_SCHEDULING") and current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
         assign_staff_form = AppointmentStaffAssignmentForm(
@@ -412,31 +836,69 @@ def appointment_detail(appointment_id: int):
         )
 
         all_staff = list_staff_members()
-        required_service_ids = [service.id for service in appointment.quote_request.services] if appointment.quote_request else []
-        all_staff_info = [
-            {
+        required_service_ids = {
+            service.id
+            for service in appointment.quote_request.services
+        } if appointment.quote_request else set()
+        required_service_names = [service.name for service in appointment.quote_request.services] if appointment.quote_request else []
+        staff_assignment_info = []
+        for staff in all_staff:
+            warnings = get_staff_assignment_warnings(appointment, staff)
+            can_cover_services = not required_service_ids or bool({service.id for service in staff.services} & required_service_ids)
+            staff_info = {
                 "staff": staff,
-                "matches_request": bool({service.id for service in staff.services} & set(required_service_ids)),
-                "warnings": get_staff_assignment_warnings(appointment, staff),
+                "can_cover_services": can_cover_services,
+                "service_names": [service.name for service in staff.services],
+                "warnings": warnings,
+                "warning_count": len(warnings),
+                "is_assigned": any(assigned_staff.id == staff.id for assigned_staff in appointment.assigned_staff),
+                "availability_summary": _summarize_availability_days(staff)[1],
+                "schedule_url": _build_staff_schedule_url(staff.id, appointment.scheduled_date or today_value),
             }
-            for staff in all_staff
-        ]
+            if required_service_names:
+                staff_info["capability_label"] = "Can perform requested service" if can_cover_services else "No matching service listed"
+            else:
+                staff_info["capability_label"] = "Available for general assignment"
+            staff_assignment_info.append(staff_info)
+
+        staff_assignment_info.sort(
+            key=lambda info: (
+                not info["can_cover_services"],
+                info["staff"].status != "active",
+                info["warning_count"],
+                info["staff"].display_name.lower(),
+            )
+        )
+        matching_staff_info = [info for info in staff_assignment_info if info["can_cover_services"]]
+        other_staff_info = [info for info in staff_assignment_info if not info["can_cover_services"]]
     else:
         assign_staff_form = None
-        all_staff_info = []
+        required_service_names = []
+        matching_staff_info = []
+        other_staff_info = []
 
     return render_template(
         "admin/appointment_detail.html",
         appointment=appointment,
         appointment_form=appointment_form,
         assign_staff_form=assign_staff_form,
-        all_staff_info=all_staff_info,
+        matching_staff_info=matching_staff_info,
+        other_staff_info=other_staff_info,
+        required_service_names=required_service_names,
         reschedule_form=reschedule_form,
         history=history,
         future_reschedules=future_reschedules,
         calendar_year=calendar_year,
         calendar_month=calendar_month,
-        today=date.today(),
+        today=today_value,
+        appointment_return_url=appointment_return_url,
+        appointment_return_label=appointment_return_label,
+        appointment_calendar_url=appointment_calendar_url,
+        appointment_list_url=appointment_list_url,
+        appointment_day_url=appointment_day_url,
+        assign_staff_url=url_for("admin.assign_staff_to_appointment", appointment_id=appointment.id, **appointment_context_args),
+        edit_appointment_url=url_for("admin.edit_appointment_route", appointment_id=appointment.id, **appointment_context_args),
+        reschedule_appointment_url=url_for("admin.reschedule_appointment_route", appointment_id=appointment.id, **appointment_context_args),
     )
 
 
@@ -457,15 +919,19 @@ def assign_staff_to_appointment(appointment_id: int):
         flash("Choose valid staff members before saving.", "error")
 
     appointment = get_appointment(appointment_id)
-    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id))
+    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
 
 
 @bp.get("/requests/<int:request_id>")
 @login_required
 def request_detail(request_id: int):
-    quote_request = get_quote_request(request_id)
-    status_form = StatusUpdateForm(status=quote_request.status)
+    quote_request = mark_quote_request_viewed(request_id)
     note_form = NoteForm()
+    request_quote_form = RequestQuoteForm(prefix="request-quote")
+    quote_decision_forms = {
+        quote.id: RequestQuoteDecisionForm(prefix=f"quote-decision-{quote.id}")
+        for quote in quote_request.quotes
+    }
     last_contacted_form = LastContactedForm(obj=quote_request)
     appointment_form = None
     appointment_status_form = None
@@ -525,8 +991,9 @@ def request_detail(request_id: int):
     return render_template(
         "admin/request_detail.html",
         quote_request=quote_request,
-        status_form=status_form,
         note_form=note_form,
+        request_quote_form=request_quote_form,
+        quote_decision_forms=quote_decision_forms,
         delete_note_form=delete_note_form,
         edit_note_forms=edit_note_forms,
         last_contacted_form=last_contacted_form,
@@ -543,17 +1010,37 @@ def request_detail(request_id: int):
     )
 
 
-@bp.post("/requests/<int:request_id>/status")
+@bp.post("/requests/<int:request_id>/quotes")
 @login_required
-def update_status(request_id: int):
-    form = StatusUpdateForm()
+def create_request_quote_route(request_id: int):
+    form = RequestQuoteForm(prefix="request-quote")
     if form.validate_on_submit():
-        update_request_status(request_id, form.status.data)
-        flash("Request status updated.", "success")
+        try:
+            create_request_quote(request_id, form.amount.data, form.description.data)
+            flash("Quote added.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
     else:
-        flash("Choose a valid status.", "error")
+        flash("Enter a valid quote amount before saving.", "error")
 
-    return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="status"))
+    return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="quotes"))
+
+
+@bp.post("/quotes/<int:quote_id>/decision/<decision>")
+@login_required
+def update_request_quote_decision_route(quote_id: int, decision: str):
+    request_quote = get_request_quote(quote_id)
+    form = RequestQuoteDecisionForm(prefix=f"quote-decision-{quote_id}")
+    if form.validate_on_submit():
+        try:
+            update_request_quote_decision(quote_id, decision)
+            flash("Quote decision updated.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Invalid quote decision request.", "error")
+
+    return redirect(url_for("admin.request_detail", request_id=request_quote.quote_request_id, _anchor="quotes"))
 
 @bp.post("/notes/<int:note_id>/edit")
 @login_required
@@ -633,14 +1120,14 @@ def create_appointment_route(request_id: int):
             create_appointment(
                 request_id,
                 requested_date=form.requested_date.data,
-                requested_time_window=(form.requested_time_window.data or "").strip() or None,
+                requested_time=form.time_value("requested_time"),
                 customer_notes=(form.customer_notes.data or "").strip() or None,
                 internal_notes=(form.internal_notes.data or "").strip() or None,
                 confirmed_date=form.confirmed_date.data,
-                confirmed_time_window=(form.confirmed_time_window.data or "").strip() or None,
+                confirmed_time=form.time_value("confirmed_time"),
                 scheduled_date=form.scheduled_date.data,
-                start_time=form.start_time.data,
-                end_time=form.end_time.data,
+                start_time=form.time_value("start_time"),
+                end_time=form.time_value("end_time"),
                 status=form.status.data,
             )
             flash("Appointment created.", "success")
@@ -724,16 +1211,45 @@ def customer_list():
 def staff_list():
     if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
-    staff_members = list_staff_members()
+    staff_members = sorted(
+        list_staff_members(),
+        key=lambda staff_member: (
+            staff_member.status != "active",
+            (staff_member.display_name or "").lower(),
+        ),
+    )
     today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+    month_start = date(today.year, today.month, 1)
+    month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
     staff_rows = []
     for staff_member in staff_members:
-        upcoming_count = sum(
-            1
-            for appt in staff_member.assigned_appointments
-            if appt.scheduled_date and appt.scheduled_date >= today and appt.status != "Cancelled"
+        assigned_appointments = sorted(
+            [appt for appt in staff_member.assigned_appointments if appt.scheduled_date is not None and appt.status != "Cancelled"],
+            key=lambda appt: (
+                appt.scheduled_date,
+                appt.start_time.strftime('%H:%M') if appt.start_time else "",
+                appt.id,
+            ),
         )
-        staff_rows.append({"staff_member": staff_member, "upcoming_count": upcoming_count})
+        upcoming_assignments = [appt for appt in assigned_appointments if appt.scheduled_date >= today]
+        next_assignment = upcoming_assignments[0] if upcoming_assignments else None
+        availability_days, availability_summary = _summarize_availability_days(staff_member)
+        schedule_reference_date = next_assignment.scheduled_date if next_assignment and next_assignment.scheduled_date else today
+        staff_rows.append(
+            {
+                "staff_member": staff_member,
+                "upcoming_count": len(upcoming_assignments),
+                "next_assignment": next_assignment,
+                "availability_days_count": len(availability_days),
+                "availability_summary": availability_summary,
+                "availability_window_count": len(staff_member.availability_windows),
+                "current_week_hours": _calculate_scheduled_hours(assigned_appointments, start_date=week_start, end_date=week_end),
+                "current_month_hours": _calculate_scheduled_hours(assigned_appointments, start_date=month_start, end_date=month_end),
+                "schedule_url": _build_staff_schedule_url(staff_member.id, schedule_reference_date),
+            }
+        )
     return render_template("admin/staff_list.html", staff_rows=staff_rows)
 
 
@@ -770,10 +1286,11 @@ def staff_detail(staff_member_id: int):
     staff_member = get_staff_member(staff_member_id)
     today = date.today()
     assigned_appointments = sorted(
-        [appt for appt in staff_member.assigned_appointments if appt.scheduled_date is not None],
+        [appt for appt in staff_member.assigned_appointments if appt.scheduled_date is not None and appt.status != "Cancelled"],
         key=lambda appt: (
             appt.scheduled_date,
             appt.start_time.strftime('%H:%M') if appt.start_time else "",
+            appt.id,
         ),
     )
     upcoming_assignments = [
@@ -784,21 +1301,14 @@ def staff_detail(staff_member_id: int):
         appt for appt in assigned_appointments
         if appt.status == "Completed" and appt.scheduled_date <= today
     ]
-
-    def calculate_hours(appointments, start_date=None, end_date=None):
-        minutes = 0
-        for appt in appointments:
-            if appt.status == "Cancelled" or not appt.start_time or not appt.end_time:
-                continue
-            if start_date and appt.scheduled_date < start_date:
-                continue
-            if end_date and appt.scheduled_date > end_date:
-                continue
-            minutes += (
-                appt.end_time.hour * 60 + appt.end_time.minute
-                - (appt.start_time.hour * 60 + appt.start_time.minute)
-            )
-        return minutes / 60
+    recent_completed.sort(
+        key=lambda appt: (
+            appt.scheduled_date,
+            appt.start_time.strftime('%H:%M') if appt.start_time else "",
+            appt.id,
+        ),
+        reverse=True,
+    )
 
     filter_start = request.args.get("start_date")
     filter_end = request.args.get("end_date")
@@ -816,22 +1326,29 @@ def staff_detail(staff_member_id: int):
         except ValueError:
             end_date = None
 
-    scheduled_hours = calculate_hours(assigned_appointments)
+    scheduled_hours = _calculate_scheduled_hours(assigned_appointments)
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
-    current_week_hours = calculate_hours(assigned_appointments, week_start, week_end)
+    current_week_hours = _calculate_scheduled_hours(assigned_appointments, start_date=week_start, end_date=week_end)
     month_start = date(today.year, today.month, 1)
     month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
-    current_month_hours = calculate_hours(assigned_appointments, month_start, month_end)
+    current_month_hours = _calculate_scheduled_hours(assigned_appointments, start_date=month_start, end_date=month_end)
     if start_date is not None or end_date is not None:
-        custom_hours = calculate_hours(assigned_appointments, start_date, end_date)
+        custom_hours = _calculate_scheduled_hours(assigned_appointments, start_date=start_date, end_date=end_date)
 
     availability_form = StaffAvailabilityForm(prefix="availability")
-    weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    availability_by_day = []
+    for index, day_name in enumerate(WEEKDAY_NAMES):
+        windows = [window for window in staff_member.availability_windows if window.day_of_week == index]
+        if windows:
+            availability_by_day.append({"day_name": day_name, "windows": windows})
+
+    schedule_reference_date = upcoming_assignments[0].scheduled_date if upcoming_assignments else today
     return render_template(
         "admin/staff_detail.html",
         staff_member=staff_member,
         availability_form=availability_form,
+        availability_by_day=availability_by_day,
         upcoming_assignments=upcoming_assignments,
         recent_completed=recent_completed,
         scheduled_hours=scheduled_hours,
@@ -841,7 +1358,13 @@ def staff_detail(staff_member_id: int):
         filter_start=filter_start,
         filter_end=filter_end,
         today=today,
-        weekday_names=weekday_names,
+        weekday_names=WEEKDAY_NAMES,
+        upcoming_assignment_count=len(upcoming_assignments),
+        service_count=len(staff_member.services),
+        availability_day_count=len(availability_by_day),
+        availability_window_count=len(staff_member.availability_windows),
+        upcoming_scheduled_hours=_calculate_scheduled_hours(upcoming_assignments),
+        staff_schedule_url=_build_staff_schedule_url(staff_member.id, schedule_reference_date),
     )
 
 
@@ -893,8 +1416,8 @@ def add_staff_availability_route(staff_member_id: int):
             add_staff_availability(
                 staff_member_id=staff_member_id,
                 day_of_week=form.day_of_week.data,
-                start_time=form.start_time.data,
-                end_time=form.end_time.data,
+                start_time=form.time_value("start_time"),
+                end_time=form.time_value("end_time"),
                 notes=form.notes.data,
             )
             flash("Availability added.", "success")
@@ -923,8 +1446,73 @@ def delete_staff_availability_route(staff_member_id: int, availability_id: int):
 def recurring_work_list():
     if not current_app.config.get("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
-    works = list_recurring_works()
+    works = sorted(
+        list_recurring_works(),
+        key=lambda work: (
+            work.status != "active",
+            (work.customer.primary_name or "").lower() if work.customer else "",
+            (work.title or "").lower(),
+            work.starts_on or date.max,
+            work.id,
+        ),
+    )
     return render_template("admin/recurring_work_list.html", recurring_works=works)
+
+
+@bp.route("/customers/<int:customer_id>/recurring-work/new", methods=["GET", "POST"])
+@login_required
+def new_recurring_work(customer_id: int):
+    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+        return redirect(url_for("admin.dashboard"))
+    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+        return redirect(url_for("admin.dashboard"))
+
+    customer = get_customer(customer_id)
+    form = RecurringWorkForm(prefix="recurring-work")
+
+    if request.method == "GET":
+        if form.frequency.data is None:
+            form.frequency.data = "weekly"
+        if form.status.data is None:
+            form.status.data = "active"
+        if form.starts_on.data is None:
+            form.starts_on.data = date.today()
+
+    if form.validate_on_submit():
+        selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(form)
+        if has_valid_schedule:
+            try:
+                work = create_recurring_work(
+                    customer.id,
+                    title=form.title.data,
+                    frequency=form.frequency.data,
+                    day_of_week=selected_day_of_week,
+                    day_of_month=selected_day_of_month,
+                    starts_on=form.starts_on.data,
+                    ends_on=form.ends_on.data,
+                    start_time=form.time_value("start_time"),
+                    end_time=form.time_value("end_time"),
+                    status=form.status.data,
+                    notes=form.notes.data,
+                )
+                flash("Recurring work saved.", "success")
+                return redirect(
+                    url_for(
+                        "admin.recurring_work_detail",
+                        recurring_work_id=work.id,
+                        **_build_recurring_source_args(source="customer", customer_id=customer.id),
+                    )
+                )
+            except Exception as exc:
+                flash(str(exc), "error")
+
+    return render_template(
+        "admin/recurring_work_form.html",
+        customer=customer,
+        form=form,
+        source_return_url=url_for("admin.customer_detail", customer_id=customer.id, _anchor="recurring-work"),
+        source_return_label="Back to Customer",
+    )
 
 
 @bp.get("/recurring-work/<int:recurring_work_id>")
@@ -933,7 +1521,95 @@ def recurring_work_detail(recurring_work_id: int):
     if not current_app.config.get("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
     work = get_recurring_work(recurring_work_id)
-    return render_template("admin/recurring_work_detail.html", work=work)
+    recurring_work_form = RecurringWorkForm(prefix="recurring-work", obj=work)
+    if recurring_work_form.day_of_week.data is None:
+        recurring_work_form.day_of_week.data = -1
+    if recurring_work_form.day_of_month.data is None:
+        recurring_work_form.day_of_month.data = 0
+    generate_recurring_appointments_form = RecurringWorkGenerationForm(prefix="generate-recurring")
+    return _render_recurring_work_detail_page(
+        work=work,
+        recurring_work_form=recurring_work_form,
+        generate_recurring_appointments_form=generate_recurring_appointments_form,
+        source_args=_recurring_source_args_from_request(),
+    )
+
+
+@bp.post("/recurring-work/<int:recurring_work_id>/edit")
+@login_required
+def edit_recurring_work_route(recurring_work_id: int):
+    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+        return redirect(url_for("admin.dashboard"))
+
+    work = get_recurring_work(recurring_work_id)
+    recurring_work_form = RecurringWorkForm(prefix="recurring-work")
+    generate_recurring_appointments_form = RecurringWorkGenerationForm(prefix="generate-recurring")
+    recurring_source_args = _recurring_source_args_from_request()
+
+    if recurring_work_form.validate_on_submit():
+        selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(recurring_work_form)
+        if has_valid_schedule:
+            try:
+                update_recurring_work(
+                    recurring_work_id,
+                    title=recurring_work_form.title.data,
+                    frequency=recurring_work_form.frequency.data,
+                    day_of_week=selected_day_of_week,
+                    day_of_month=selected_day_of_month,
+                    starts_on=recurring_work_form.starts_on.data,
+                    ends_on=recurring_work_form.ends_on.data,
+                    start_time=recurring_work_form.time_value("start_time"),
+                    end_time=recurring_work_form.time_value("end_time"),
+                    status=recurring_work_form.status.data,
+                    notes=recurring_work_form.notes.data,
+                )
+                flash("Recurring work updated.", "success")
+                return redirect(url_for("admin.recurring_work_detail", recurring_work_id=recurring_work_id, **recurring_source_args))
+            except Exception as exc:
+                flash(str(exc), "error")
+
+    return _render_recurring_work_detail_page(
+        work=work,
+        recurring_work_form=recurring_work_form,
+        generate_recurring_appointments_form=generate_recurring_appointments_form,
+        source_args=recurring_source_args,
+    )
+
+
+@bp.post("/recurring-work/<int:recurring_work_id>/generate")
+@login_required
+def generate_recurring_work_appointments_route(recurring_work_id: int):
+    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+        return redirect(url_for("admin.dashboard"))
+    if not current_app.config.get("ENABLE_SCHEDULING"):
+        return redirect(url_for("admin.recurring_work_detail", recurring_work_id=recurring_work_id, **_recurring_source_args_from_request()))
+
+    work = get_recurring_work(recurring_work_id)
+    form = RecurringWorkGenerationForm(prefix="generate-recurring")
+    recurring_source_args = _recurring_source_args_from_request()
+    if form.validate_on_submit():
+        try:
+            created_count = generate_appointments_for_recurring_work(recurring_work_id, days_ahead=int(form.days_ahead.data))
+            if created_count:
+                flash(
+                    f"Generated {created_count} upcoming appointment{'s' if created_count != 1 else ''} for {work.title or 'this recurring work'}.",
+                    "success",
+                )
+            else:
+                flash("No upcoming appointments were generated. This recurring plan may already be up to date or inactive.", "warning")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Choose a valid generation window before running.", "error")
+
+    return redirect(
+        url_for(
+            "admin.recurring_work_detail",
+            recurring_work_id=recurring_work_id,
+            _anchor="generated-appointments",
+            **recurring_source_args,
+        )
+    )
 
 
 @bp.get("/customers/<int:customer_id>")
@@ -962,7 +1638,26 @@ def customer_detail(customer_id: int):
     generate_recurring_appointments_form = RecurringWorkGenerationForm(prefix="generate-recurring")
     appointments = sorted(
         customer.appointments,
-        key=lambda appointment: appointment.created_at,
+        key=lambda appointment: (
+            appointment.scheduled_date or date.min,
+            appointment.start_time or time.min,
+            appointment.created_at,
+        ),
+        reverse=True,
+    )
+    request_history = sorted(
+        customer.quote_requests,
+        key=lambda quote_request: quote_request.created_at,
+        reverse=True,
+    )
+    customer_notes = sorted(
+        customer.notes,
+        key=lambda note: note.created_at,
+        reverse=True,
+    )
+    recurring_works = sorted(
+        customer.recurring_works,
+        key=lambda work: (work.starts_on or date.min, work.id),
         reverse=True,
     )
     return render_template(
@@ -976,6 +1671,9 @@ def customer_detail(customer_id: int):
         note_form=note_form,
         set_primary_field_form=set_primary_field_form,
         generate_recurring_appointments_form=generate_recurring_appointments_form,
+        request_history=request_history,
+        customer_notes=customer_notes,
+        recurring_works=recurring_works,
         appointments=appointments,
     )
 
@@ -1217,7 +1915,7 @@ def update_appointment_status_route(appointment_id: int):
         flash("Choose a valid appointment status.", "error")
 
     appointment = get_appointment(appointment_id)
-    return redirect(url_for("admin.request_detail", request_id=appointment.quote_request_id, _anchor="scheduling"))
+    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
 
 
 @bp.post("/appointments/<int:appointment_id>/edit")
@@ -1231,14 +1929,16 @@ def edit_appointment_route(appointment_id: int):
         appointment = get_appointment(appointment_id)
         update_appointment(
             appointment_id,
+            title=(form.title.data or "").strip() or None,
             requested_date=form.requested_date.data,
-            requested_time_window=(form.requested_time_window.data or "").strip() or None,
+            requested_time=form.time_value("requested_time"),
             confirmed_date=form.confirmed_date.data,
-            confirmed_time_window=(form.confirmed_time_window.data or "").strip() or None,
-            internal_notes=(form.internal_notes.data or appointment.internal_notes).strip() or None,
+            confirmed_time=form.time_value("confirmed_time"),
+            customer_notes=(form.customer_notes.data or "").strip() or None,
+            internal_notes=(form.internal_notes.data or "").strip() or None,
             scheduled_date=form.scheduled_date.data,
-            start_time=form.start_time.data,
-            end_time=form.end_time.data,
+            start_time=form.time_value("start_time"),
+            end_time=form.time_value("end_time"),
             status=form.status.data,
         )
         flash("Appointment details updated.", "success")
@@ -1246,7 +1946,7 @@ def edit_appointment_route(appointment_id: int):
         flash("Correct the appointment details and try again.", "error")
 
     appointment = get_appointment(appointment_id)
-    return redirect(url_for("admin.request_detail", request_id=appointment.quote_request_id, _anchor="scheduling"))
+    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
 
 
 @bp.post("/appointments/<int:appointment_id>/reschedule")
@@ -1263,7 +1963,7 @@ def reschedule_appointment_route(appointment_id: int):
             reschedule_appointment(
                 appointment_id,
                 requested_date=form.requested_date.data,
-                requested_time_window=(form.requested_time_window.data or "").strip() or None,
+                requested_time=form.time_value("requested_time"),
                 internal_notes=(form.internal_notes.data or "").strip() or None,
             )
             flash("Appointment rescheduled.", "success")
@@ -1271,7 +1971,7 @@ def reschedule_appointment_route(appointment_id: int):
         flash("Correct the reschedule details and try again.", "error")
 
     appointment = get_appointment(appointment_id)
-    return redirect(url_for("admin.request_detail", request_id=appointment.quote_request_id, _anchor="scheduling"))
+    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
 
 
 @bp.post("/requests/<int:request_id>/notes")

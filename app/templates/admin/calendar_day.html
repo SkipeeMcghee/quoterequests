@@ -7,19 +7,35 @@
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Daily Agenda',
-    description='Review scheduled work for ' ~ view_date.strftime('%A, %b %d, %Y') ~ '.',
+    description='Review scheduled work for ' ~ view_date.strftime('%A, %b %d, %Y') ~ ' with a visual timeline and a quick event list.',
     nav_mode='sub',
     return_url=url_for('admin.calendar_view', year=view_date.year, month=view_date.month),
-    return_label='Back to Schedule',
+    return_label='Back to Calendar View',
     actions_class='detail-actions calendar-day-nav'
   ) %}
       <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=prev_date.year, month=prev_date.month, day=prev_date.day) }}">Previous Day</a>
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month) }}">Month View</a>
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month, view='calendar') }}">Calendar View</a>
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month, view='list', show='upcoming', status='all', staff_id=0, sort='soonest') }}">List View</a>
       <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=next_date.year, month=next_date.month, day=next_date.day) }}">Next Day</a>
       {% if enable_scheduling %}
-        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', date=view_date.isoformat()) }}">Add Work</a>
+        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', source='day', date=view_date.isoformat(), year=view_date.year, month=view_date.month, day=view_date.day) }}">Add Work</a>
       {% endif %}
   {% endcall %}
+
+  <section class="agenda-snapshot-grid">
+    <article class="summary-card agenda-snapshot-card">
+      <strong>{{ scheduled_appointments|length }}</strong>
+      <span>Timed events</span>
+    </article>
+    <article class="summary-card agenda-snapshot-card">
+      <strong>{% if scheduled_appointments %}{{ scheduled_appointments[0].appointment.start_time.strftime('%H:%M') }}{% else %}No timed work{% endif %}</strong>
+      <span>First start</span>
+    </article>
+    <article class="summary-card agenda-snapshot-card">
+      <strong>{{ unscheduled_appointments|length }}</strong>
+      <span>Needs follow-up</span>
+    </article>
+  </section>
 
   <section class="agenda-page">
     <div class="agenda-sidebar">
@@ -35,7 +51,7 @@
         {% if scheduled_appointments %}
           {% for item in scheduled_appointments %}
             {% set appt = item.appointment %}
-            <a class="agenda-event" href="{{ url_for('admin.appointment_detail', appointment_id=appt.id) }}" style="top: {{ item.top_percent }}%; height: {{ item.height_percent }}%; left: {{ item.left_percent }}%; width: {{ item.width_percent }}%;">
+            <a class="agenda-event" href="{{ url_for('admin.appointment_detail', appointment_id=appt.id, source='day', date=view_date.isoformat(), year=view_date.year, month=view_date.month, day=view_date.day) }}" style="top: {{ item.top_percent }}%; height: {{ item.height_percent }}%; left: {{ item.left_percent }}%; width: {{ item.width_percent }}%;">
                 <div class="agenda-event-row">
                   <span class="agenda-event-time">{{ appt.start_time.strftime('%H:%M') }}&nbsp;–&nbsp;{{ appt.end_time.strftime('%H:%M') }}</span>
                   <span class="status-badge status-{{ appt.status|lower|replace(' ', '-') }}">{{ appt.status }}</span>
@@ -59,6 +75,37 @@
           <div class="agenda-empty">No scheduled work on this day.</div>
         {% endif %}
       </div>
+
+      {% if scheduled_appointments %}
+        <section class="summary-card agenda-list-card">
+          <div class="section-bar compact-bar">
+            <div>
+              <h2>Today at a glance</h2>
+              <p class="subtle-text">Use the quick list when you want the same information as the timeline in a simpler scan order.</p>
+            </div>
+          </div>
+          <div class="agenda-quick-list">
+            {% for item in scheduled_appointments %}
+              {% set appt = item.appointment %}
+              <a class="agenda-quick-item" href="{{ url_for('admin.appointment_detail', appointment_id=appt.id, source='day', date=view_date.isoformat(), year=view_date.year, month=view_date.month, day=view_date.day) }}">
+                <div class="agenda-quick-item__time">{{ appt.start_time.strftime('%H:%M') }}&nbsp;–&nbsp;{{ appt.end_time.strftime('%H:%M') }}</div>
+                <div class="agenda-quick-item__copy">
+                  <strong>{{ appt.title or appt.display_title }}</strong>
+                  <span>{{ appt.customer.primary_name or appt.quote_request.full_name or 'Customer' }}</span>
+                  {% if enable_staff_management and appt.assigned_staff %}
+                    <span>
+                      {% for staff in appt.assigned_staff %}
+                        {{ staff.display_name }}{% if not loop.last %}, {% endif %}
+                      {% endfor %}
+                    </span>
+                  {% endif %}
+                </div>
+                <span class="status-badge status-{{ appt.status|lower|replace(' ', '-') }}">{{ appt.status }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
 
       {% if unscheduled_appointments %}
         <section class="section-bar compact-bar">
@@ -86,6 +133,7 @@
                 {% if appointment.quote_request_id %}
                   <p><a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">View request #{{ appointment.quote_request_id }}</a></p>
                 {% endif %}
+                <p><a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='day', date=view_date.isoformat(), year=view_date.year, month=view_date.month, day=view_date.day) }}">Open scheduled event</a></p>
               </div>
             </article>
           {% endfor %}
@@ -94,21 +142,4 @@
     </div>
   </section>
 </main>
-{% endblock %}
-{% block scripts %}
-<style>
-.agenda-event-staff {
-  margin-top: 0.35rem;
-  font-size: 0.82rem;
-  color: #102a43;
-}
-.agenda-event-staff-link {
-  color: #005b94;
-  text-decoration: underline;
-}
-.agenda-event-staff-link:hover,
-.agenda-event-staff-link:focus-visible {
-  text-decoration: none;
-}
-</style>
 {% endblock %}

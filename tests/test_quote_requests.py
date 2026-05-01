@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import date, time
 from io import BytesIO
 from pathlib import Path
 
 from app.extensions import db
-from app.models import QuoteRequest, RequestNote
+from app.models import QuoteRequest, RequestNote, RequestQuote
 from app.models.user import User
 
 
@@ -47,7 +48,7 @@ def test_schedule_work_button_visible_in_index_when_scheduling_enabled(client, a
     response = client.get("/")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Schedule some work" in body
+    assert "Schedule Some Work" in body
     assert "/schedule-work" in body
 
 
@@ -83,7 +84,7 @@ def test_schedule_work_submission_records_work_request_type(client, app):
         assert quote_request.request_type == "Work request"
 
 
-def test_admin_request_detail_shows_status_form_and_submission_time(client, app, admin_user):
+def test_admin_request_detail_shows_automatic_status_and_marks_request_viewed(client, app, admin_user):
     client.post(
         "/quote-request",
         data={
@@ -106,9 +107,16 @@ def test_admin_request_detail_shows_status_form_and_submission_time(client, app,
     body = response.get_data(as_text=True)
     assert "Submitted" in body
     assert "Request status" in body
-    assert "name=\"status\"" in body
+    assert "name=\"status\"" not in body
+    assert "Viewed" in body
+    assert "Quote tracking" in body
     assert "Request type" in body
     assert "Quote request" in body
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.status == "Viewed"
+        assert quote_request.first_viewed_at is not None
 
 
 def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user):
@@ -136,6 +144,38 @@ def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user
     assert "name=\"last_contacted_on\"" in body
 
 
+def test_last_contacted_date_updates_request_status_to_contacted(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        "/admin/requests/1/last-contacted",
+        data={"last_contacted_on": date.today().isoformat()},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.status == "Contacted"
+        assert quote_request.last_contacted_on == date.today()
+
+
 def test_admin_calendar_and_day_add_work_links_visible_when_enabled(client, app, admin_user):
     app.config["ENABLE_CALENDAR"] = True
     app.config["ENABLE_SCHEDULING"] = True
@@ -159,14 +199,14 @@ def test_admin_calendar_and_day_add_work_links_visible_when_enabled(client, app,
     response = client.get("/admin/calendar")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Add work" in body
-    assert "/admin/scheduled-work/new?date=" in body
+    assert "Add Work" in body
+    assert "/admin/scheduled-work/new?source=calendar" in body
 
     response = client.get("/admin/calendar/2026/05/01")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Add work" in body
-    assert "/admin/scheduled-work/new?date=2026-05-01" in body
+    assert "Add Work" in body
+    assert "/admin/scheduled-work/new?source=day&amp;date=2026-05-01&amp;year=2026&amp;month=5&amp;day=1" in body
 
 
 def test_admin_customer_detail_schedule_work_button_visible_when_enabled(client, app, admin_user):
@@ -190,8 +230,8 @@ def test_admin_customer_detail_schedule_work_button_visible_when_enabled(client,
     response = client.get(f"/admin/customers/{customer_id}")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Schedule work" in body
-    assert f"/admin/scheduled-work/new?customer_id={customer.id}" in body
+    assert "Schedule Work" in body
+    assert f"/admin/scheduled-work/new?customer_id={customer.id}&amp;source=customer" in body
 
 
 def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_user):
@@ -213,13 +253,147 @@ def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_u
         follow_redirects=False,
     )
 
-    response = client.get("/admin/scheduled-work/new?request_id=1&date=2026-05-10")
+    response = client.get("/admin/scheduled-work/new?request_id=1&source=request&date=2026-05-10")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "name=\"scheduled-work-request_id\"" in body
     assert "value=\"1\"" in body
     assert "name=\"scheduled-work-scheduled_date\"" in body
     assert "value=\"2026-05-10\"" in body
+    assert "Source request" in body
+    assert "Selected date" in body
+
+
+def test_admin_request_detail_routes_scheduling_into_shared_scheduled_work_flow(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Ari Blake",
+            "phone": "555-444-7777",
+            "services": ["Painting"],
+            "city": "32 Broad St",
+        },
+        follow_redirects=False,
+    )
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/requests/1")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "/admin/scheduled-work/new?request_id=1&amp;source=request" in body
+    assert "action=\"/admin/requests/1/appointments\"" not in body
+
+
+def test_admin_calendar_view_and_list_view_render_as_alternates(client, app, admin_user):
+    app.config["ENABLE_CALENDAR"] = True
+    app.config["ENABLE_SCHEDULING"] = True
+
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Ari Blake",
+            "phone": "555-444-7777",
+            "services": ["Painting"],
+            "city": "32 Broad St",
+        },
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        from app.models import Appointment
+        from datetime import date, time
+
+        appointment = Appointment(
+            quote_request_id=1,
+            title="Morning prep",
+            scheduled_date=date(2026, 5, 12),
+            start_time=time(8, 0),
+            end_time=time(9, 0),
+            status="Scheduled",
+        )
+        db.session.add(appointment)
+        db.session.commit()
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/calendar?year=2026&month=5")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Calendar View" in body
+    assert "Upcoming scheduled events" not in body
+
+    response = client.get("/admin/calendar?year=2026&month=5&view=list")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Upcoming scheduled events" in body
+    assert "Sorted from soonest to latest by default." in body
+    assert "Update List" in body
+    assert "Open Day Agenda" not in body
+
+
+def test_admin_day_agenda_and_appointment_detail_preserve_schedule_navigation(client, app, admin_user):
+    app.config["ENABLE_CALENDAR"] = True
+    app.config["ENABLE_SCHEDULING"] = True
+
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Ari Blake",
+            "phone": "555-444-7777",
+            "services": ["Painting"],
+            "city": "32 Broad St",
+        },
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        from app.models import Appointment
+        from datetime import date, time
+
+        appointment = Appointment(
+            quote_request_id=1,
+            title="Morning prep",
+            scheduled_date=date(2026, 5, 12),
+            start_time=time(8, 0),
+            end_time=time(9, 0),
+            status="Scheduled",
+        )
+        db.session.add(appointment)
+        db.session.commit()
+        appointment_id = appointment.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/calendar/2026/5/12")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Today at a glance" in body
+    assert f"/admin/appointments/{appointment_id}?source=day&amp;date=2026-05-12&amp;year=2026&amp;month=5&amp;day=12" in body
+    assert "/admin/calendar?year=2026&amp;month=5&amp;view=list&amp;show=upcoming&amp;status=all&amp;staff_id=0&amp;sort=soonest" in body
+
+    response = client.get(
+        f"/admin/appointments/{appointment_id}?source=calendar&year=2026&month=5&view=list&show=upcoming&status=all&staff_id=0&sort=soonest"
+    )
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Back to List View" in body
+    assert "Open Calendar View" in body
+    assert "Open List View" in body
+    assert "Open Day Agenda" in body
 
 
 def test_admin_can_edit_and_delete_own_internal_note(client, app, admin_user):
@@ -458,7 +632,7 @@ def test_thank_you_page_renders(client):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Thank you for reaching out." in body
-    assert "Submit another request" in body
+    assert "Submit Another Request" in body
 
 
 def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_user):
@@ -512,7 +686,7 @@ def test_dashboard_lists_quote_requests(client, admin_user):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Quote requests" in body
+    assert "Request queue" in body
     assert "Jamie Cole" in body
     assert "Flooring" in body
 
@@ -624,7 +798,7 @@ def test_create_dev_admin_command_creates_first_admin(app):
         assert user.check_password("LocalPass123!") is True
 
 
-def test_admin_can_login_update_status_and_add_note(client, app, admin_user):
+def test_admin_can_add_quote_and_note(client, app, admin_user):
     client.post(
         "/quote-request",
         data={
@@ -645,9 +819,13 @@ def test_admin_can_login_update_status_and_add_note(client, app, admin_user):
     assert login_response.status_code == 302
     assert login_response.headers["Location"].endswith("/admin/")
 
-    status_response = client.post(
-        "/admin/requests/1/status",
-        data={"status": "Quoted"},
+    quote_response = client.post(
+        "/admin/requests/1/quotes",
+        data={
+            "request-quote-amount": "2450.00",
+            "request-quote-description": "Exterior repaint option",
+            "request-quote-submit": "Add Quote",
+        },
         follow_redirects=False,
     )
     note_response = client.post(
@@ -656,14 +834,126 @@ def test_admin_can_login_update_status_and_add_note(client, app, admin_user):
         follow_redirects=False,
     )
 
-    assert status_response.status_code == 302
+    assert quote_response.status_code == 302
     assert note_response.status_code == 302
 
     with app.app_context():
         quote_request = QuoteRequest.query.one()
         assert quote_request.status == "Quoted"
-        assert quote_request.last_contacted_on.isoformat() == __import__('datetime').date.today().isoformat()
+        assert quote_request.last_contacted_on is None
+        assert quote_request.quotes[0].amount == 2450
+        assert quote_request.quotes[0].description == "Exterior repaint option"
         assert quote_request.notes[0].note_text == "Reviewed photos and prepared pricing draft."
+
+
+def test_quote_decision_buttons_update_request_status(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/admin/requests/1/quotes",
+        data={
+            "request-quote-amount": "1850.00",
+            "request-quote-description": "Interior repaint option",
+            "request-quote-submit": "Add Quote",
+        },
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        request_quote = RequestQuote.query.one()
+        quote_id = request_quote.id
+
+    accept_response = client.post(
+        f"/admin/quotes/{quote_id}/decision/accepted",
+        data={f"quote-decision-{quote_id}-submit": "Save Decision"},
+        follow_redirects=False,
+    )
+    assert accept_response.status_code == 302
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.status == "Accepted"
+        assert quote_request.quotes[0].decision == "Accepted"
+
+    reject_response = client.post(
+        f"/admin/quotes/{quote_id}/decision/rejected",
+        data={f"quote-decision-{quote_id}-submit": "Save Decision"},
+        follow_redirects=False,
+    )
+    assert reject_response.status_code == 302
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.status == "Rejected"
+        assert quote_request.quotes[0].decision == "Rejected"
+
+
+def test_scheduling_a_request_sets_request_status_to_scheduled(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+    app.config["ENABLE_CUSTOMER_RECORDS"] = True
+
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        from app.models import Customer
+
+        customer = Customer(primary_name="Casey Blake", primary_city="77 Market St", primary_phone="555-444-9999")
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        "/admin/scheduled-work/new?request_id=1&source=request",
+        data={
+            "scheduled-work-request_id": "1",
+            "scheduled-work-customer_id": str(customer_id),
+            "scheduled-work-title": "Paint consultation",
+            "scheduled-work-scheduled_date": "2026-05-10",
+            "scheduled-work-start_time_hour": "10",
+            "scheduled-work-start_time_minute": "0",
+            "scheduled-work-end_time_hour": "11",
+            "scheduled-work-end_time_minute": "30",
+            "scheduled-work-status": "Scheduled",
+            "scheduled-work-submit": "Add Work",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.status == "Scheduled"
 
 
 def test_scheduling_fields_are_hidden_when_disabled(client, app, admin_user):
@@ -706,7 +996,8 @@ def test_quote_request_does_not_create_appointment_when_scheduling_disabled(clie
             "services": ["Roof Repair"],
             "city": "141 Elm St",
             "preferred_date": "2026-05-01",
-            "preferred_time_window": "10am - 2pm",
+            "preferred_time_hour": "10",
+            "preferred_time_minute": "0",
             "additional_notes": "Please call before arrival.",
         },
         follow_redirects=False,
@@ -744,7 +1035,8 @@ def test_quote_request_creates_appointment_when_scheduling_enabled(client, app):
             "services": ["Deck Staining"],
             "city": "202 Garden Path",
             "preferred_date": "2026-06-10",
-            "preferred_time_window": "8am - 11am",
+            "preferred_time_hour": "8",
+            "preferred_time_minute": "0",
             "additional_notes": "Please send a confirmation email.",
         },
         follow_redirects=False,
@@ -759,5 +1051,5 @@ def test_quote_request_creates_appointment_when_scheduling_enabled(client, app):
         appointment = quote_request.appointments[0]
         assert appointment.status == "Requested"
         assert appointment.requested_date.isoformat() == "2026-06-10"
-        assert appointment.requested_time_window == "8am - 11am"
+        assert appointment.requested_time == time(8, 0)
         assert appointment.internal_notes == "Please send a confirmation email."
