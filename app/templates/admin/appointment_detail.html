@@ -1,28 +1,27 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Appointment #{{ appointment.id }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Appointment #{{ appointment.id }}</h1>
-      <p class="subtle-text">Edit the scheduled work details, review linked records, and preserve reschedule history.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">Month view</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=calendar_year, month=calendar_month, day=appointment.scheduled_date.day if appointment.scheduled_date else today.day) }}">Daily agenda</a>
+  {% call render_admin_page_header(
+    title='Scheduled Event',
+    description='View or edit this scheduled job.',
+    nav_mode='sub',
+    return_url=url_for('admin.calendar_view'),
+    return_label='Back to Schedule',
+    meta='#' ~ appointment.id ~ ' · ' ~ appointment.display_title
+  ) %}
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view') }}">Month View</a>
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=calendar_year, month=calendar_month, day=appointment.scheduled_date.day if appointment.scheduled_date else today.day) }}">Daily Agenda</a>
       {% if appointment.customer %}
-        <a class="button button-secondary" href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id) }}">Customer</a>
+        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id) }}">View Customer</a>
       {% endif %}
       {% if appointment.quote_request_id %}
-        <a class="button button-secondary" href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">Request</a>
+        <a class="btn btn-secondary" href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">View Request</a>
       {% endif %}
-    </div>
-  </section>
+  {% endcall %}
 
 
   <section class="detail-grid">
@@ -174,7 +173,7 @@
             </ul>
           </div>
 
-          {{ assign_staff_form.submit(class_="button") }}
+          {{ assign_staff_form.submit(class_="btn btn-primary") }}
         </form>
       </article>
     {% endif %}
@@ -218,7 +217,7 @@
           <span>Internal notes</span>
           {{ appointment_form.internal_notes(class_="textarea") }}
         </label>
-        {{ appointment_form.submit(class_="button") }}
+        {{ appointment_form.submit(class_="btn btn-primary") }}
       </form>
     </article>
   </section>
@@ -244,7 +243,7 @@
           <span>Internal notes</span>
           {{ reschedule_form.internal_notes(class_="textarea") }}
         </label>
-        {{ reschedule_form.submit(class_="button") }}
+        {{ reschedule_form.submit(class_="btn btn-primary") }}
       </form>
     </article>
 

@@ -1,21 +1,20 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}{{ staff_member.display_name }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>{{ staff_member.display_name }}</h1>
-      <p class="subtle-text">Staff detail and upcoming work assignments.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button button-secondary" href="{{ url_for('admin.staff_list') }}">Back to staff</a>
-      <a class="button button-primary" href="{{ url_for('admin.edit_staff_member', staff_member_id=staff_member.id) }}">Edit staff</a>
-    </div>
-  </section>
+  {% call render_admin_page_header(
+    title='Staff Record',
+    description='View this staff member\'s contact details, availability, and assigned work.',
+    nav_mode='sub',
+    return_url=url_for('admin.staff_list'),
+    return_label='Back to Staff',
+    meta=staff_member.display_name ~ ((' · ' ~ staff_member.role_title) if staff_member.role_title else '')
+  ) %}
+      <a class="btn btn-primary" href="{{ url_for('admin.edit_staff_member', staff_member_id=staff_member.id) }}">Edit</a>
+  {% endcall %}
 
   <section class="summary-grid">
     <div class="detail-grid">
@@ -78,7 +77,7 @@
               <input type="date" name="end_date" value="{{ filter_end or '' }}" class="input" />
             </label>
           </div>
-          <button type="submit" class="button button-secondary">Apply filter</button>
+          <button type="submit" class="btn btn-secondary btn-small">Apply Filter</button>
         </form>
       </article>
     </div>
@@ -97,7 +96,7 @@
                   <div class="subtle-text">{{ availability.notes }}</div>
                 {% endif %}
                 <form method="post" action="{{ url_for('admin.delete_staff_availability_route', staff_member_id=staff_member.id, availability_id=availability.id) }}" class="inline-form">
-                  <button type="submit" class="button button-small button-secondary">Delete</button>
+                  <button type="submit" class="btn btn-danger btn-small">Delete</button>
                 </form>
               </li>
             {% endfor %}
@@ -132,7 +131,7 @@
             {{ availability_form.notes(class_="textarea") }}
             {% for error in availability_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
-          {{ availability_form.submit(class_="button button-secondary") }}
+          {{ availability_form.submit(class_="btn btn-primary") }}
         </form>
       </article>
     </div>

@@ -1,23 +1,22 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}{{ 'New staff member' if is_new else 'Edit staff member' }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>{{ 'New staff member' if is_new else 'Edit staff member' }}</h1>
-      <p class="subtle-text">Manage worker contact details, type, availability and skills.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button button-secondary" href="{{ url_for('admin.staff_list') }}">Back to staff</a>
+  {% call render_admin_page_header(
+    title='Add Staff Member' if is_new else 'Edit Staff Member',
+    description='Create or update staff contact details, services, and notes.',
+    nav_mode='sub',
+    return_url=url_for('admin.staff_list'),
+    return_label='Back to Staff',
+    meta=staff_member.display_name if not is_new else None
+  ) %}
       {% if not is_new %}
-        <a class="button button-secondary" href="{{ url_for('admin.staff_detail', staff_member_id=staff_member.id) }}">View staff</a>
+        <a class="btn btn-secondary" href="{{ url_for('admin.staff_detail', staff_member_id=staff_member.id) }}">Cancel</a>
       {% endif %}
-    </div>
-  </section>
+  {% endcall %}
 
   <section class="summary-grid">
     <div class="detail-grid">
@@ -83,7 +82,7 @@
             {% for error in form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
 
-          {{ form.submit(class_="button") }}
+          {{ form.submit(class_="btn btn-primary") }}
         </form>
       </article>
     </div>

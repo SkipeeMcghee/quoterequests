@@ -1,26 +1,25 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Agenda for {{ view_date.strftime('%b %d, %Y') }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Agenda for {{ view_date.strftime('%A, %b %d, %Y') }}</h1>
-      <p class="subtle-text">View work across the day with time slots, duration blocks, and appointment detail links.</p>
-    </div>
-    <div class="detail-actions calendar-day-nav">
-      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=prev_date.year, month=prev_date.month, day=prev_date.day) }}">Previous day</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month) }}">Month view</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_day_view', year=next_date.year, month=next_date.month, day=next_date.day) }}">Next day</a>
+  {% call render_admin_page_header(
+    title='Daily Agenda',
+    description='Review scheduled work for ' ~ view_date.strftime('%A, %b %d, %Y') ~ '.',
+    nav_mode='sub',
+    return_url=url_for('admin.calendar_view', year=view_date.year, month=view_date.month),
+    return_label='Back to Schedule',
+    actions_class='detail-actions calendar-day-nav'
+  ) %}
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=prev_date.year, month=prev_date.month, day=prev_date.day) }}">Previous Day</a>
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month) }}">Month View</a>
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=next_date.year, month=next_date.month, day=next_date.day) }}">Next Day</a>
       {% if enable_scheduling %}
-        <a class="button button-primary" href="{{ url_for('admin.new_scheduled_work', date=view_date.isoformat()) }}">Add work</a>
+        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', date=view_date.isoformat()) }}">Add Work</a>
       {% endif %}
-    </div>
-  </section>
+  {% endcall %}
 
   <section class="agenda-page">
     <div class="agenda-sidebar">

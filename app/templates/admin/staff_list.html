@@ -1,20 +1,17 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Staff{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Staff</h1>
-      <p class="subtle-text">Manage staff and contractors, their skills, and upcoming assigned work.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button button-primary" href="{{ url_for('admin.new_staff_member') }}">Add staff member</a>
-    </div>
-  </section>
+  {% call render_admin_page_header(
+    title='Staff',
+    description='Manage employees, contractors, services, availability, and assigned work.',
+    nav_mode='main'
+  ) %}
+      <a class="btn btn-primary" href="{{ url_for('admin.new_staff_member') }}">Add Staff</a>
+  {% endcall %}
 
   <section class="table-card">
     <div class="section-bar">

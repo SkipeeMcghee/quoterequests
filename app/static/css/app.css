@@ -72,6 +72,15 @@ textarea {
   flex-wrap: wrap;
 }
 
+.site-nav form {
+  margin: 0;
+}
+
+.site-nav .btn,
+.site-nav .button {
+  box-shadow: none;
+}
+
 .site-nav a,
 .ghost-button,
 .text-link {
@@ -136,6 +145,32 @@ textarea {
   margin-bottom: 2rem;
 }
 
+.admin-page-header {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-page-header__body {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-page-header__copy {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.admin-page-header__description,
+.admin-page-header__meta {
+  margin: 0;
+  max-width: 48rem;
+}
+
+.admin-page-header__nav .admin-nav-buttons {
+  margin: 0;
+}
+
 .dashboard-view-toolbar {
   display: flex;
   gap: 0.75rem;
@@ -143,12 +178,21 @@ textarea {
   flex-wrap: wrap;
 }
 
+.btn-toggle,
+.button-toggle {
+  opacity: 0.82;
+}
+
+.btn-toggle.active,
+.btn-toggle[aria-current="page"],
 .button-toggle.active {
   opacity: 1;
   background: var(--accent-strong);
   color: var(--card);
+  border-color: transparent;
 }
 
+.dashboard-view-toolbar .btn-toggle,
 .dashboard-view-toolbar .button-toggle {
   opacity: 0.78;
 }
@@ -364,39 +408,59 @@ textarea {
   font-size: 0.85rem;
 }
 
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
 .button,
-.button-secondary {
+.button-primary,
+.button-secondary,
+.button-danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 46px;
   padding: 0 1.2rem;
   border-radius: 999px;
-  border: 0;
+  border: 1px solid transparent;
   cursor: pointer;
   text-decoration: none;
-  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.button {
+.btn-primary,
+.button,
+.button-primary {
   background: var(--accent-strong);
   color: var(--card);
   box-shadow: 0 10px 24px rgba(23, 77, 56, 0.16);
 }
 
+.btn-small,
 .button-small {
   min-height: 34px;
   padding: 0 0.9rem;
   font-size: 0.92rem;
 }
 
+.btn-secondary,
 .button-secondary {
   background: var(--accent);
   color: var(--card);
+  box-shadow: 0 10px 20px rgba(23, 77, 56, 0.12);
 }
 
-.button:focus-visible,
-.button-secondary:focus-visible,
+.btn-danger,
+.button-danger {
+  background: var(--danger);
+  color: var(--card);
+  box-shadow: 0 10px 24px rgba(77, 23, 23, 0.18);
+}
+
+:is(.btn, .btn-primary, .btn-secondary, .btn-danger, .button, .button-primary, .button-secondary, .button-danger):focus-visible,
 .ghost-button:focus-visible,
 .site-nav a:focus-visible,
 .brand:focus-visible {
@@ -404,8 +468,7 @@ textarea {
   outline-offset: 3px;
 }
 
-.button:hover,
-.button-secondary:hover,
+:is(.btn, .btn-primary, .btn-secondary, .btn-danger, .button, .button-primary, .button-secondary, .button-danger):hover,
 .action-link:hover,
 .site-nav a:hover,
 .ghost-button:hover,
@@ -413,13 +476,21 @@ textarea {
   opacity: 0.9;
 }
 
-.button:active,
-.button-secondary:active,
+:is(.btn, .btn-primary, .btn-secondary, .btn-danger, .button, .button-primary, .button-secondary, .button-danger):active,
 .site-nav a:active,
 .ghost-button:active,
 .brand:active {
   transform: translateY(1px);
   opacity: 0.85;
+}
+
+:is(.btn, .btn-primary, .btn-secondary, .btn-danger, .button, .button-primary, .button-secondary, .button-danger):disabled,
+:is(.btn, .btn-primary, .btn-secondary, .btn-danger, .button, .button-primary, .button-secondary, .button-danger)[aria-disabled="true"] {
+  opacity: 0.56;
+  box-shadow: none;
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none;
 }
 
 .stacked-form,
@@ -537,6 +608,18 @@ textarea {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.button-row,
+.button-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.button-group {
+  justify-content: flex-end;
 }
 
 .inline-form {
@@ -814,20 +897,22 @@ thead th {
   gap: 0.75rem;
 }
 
-  .history-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin-bottom: 0.55rem;
-  }
 
-  .history-body {
-    display: grid;
-    gap: 0.55rem;
-  }
+.history-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
 
+.history-body {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.empty-state {
   text-align: center;
   color: var(--muted);
 }

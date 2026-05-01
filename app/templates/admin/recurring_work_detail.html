@@ -1,24 +1,22 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Recurring work #{{ work.id }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="split-intro section-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Recurring work #{{ work.id }}</h1>
-      <p class="subtle-text">Manage this recurring schedule and review generated appointments.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
-      <a class="button-secondary" href="{{ url_for('admin.recurring_work_list') }}">Back to recurring work</a>
+  {% call render_admin_page_header(
+    title='Recurring Work',
+    description='Review this repeat job and its generated scheduled work.',
+    nav_mode='sub',
+    return_url=url_for('admin.recurring_work_list'),
+    return_label='Back to Recurring Work',
+    meta='#' ~ work.id ~ ((' · ' ~ (work.customer.primary_name or 'Unnamed customer')) if work.customer else '')
+  ) %}
       {% if work.customer %}
-        <a class="button button-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">Customer</a>
+        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">View Customer</a>
       {% endif %}
-    </div>
-  </section>
+  {% endcall %}
 
   <section class="summary-grid">
     <article class="summary-card">

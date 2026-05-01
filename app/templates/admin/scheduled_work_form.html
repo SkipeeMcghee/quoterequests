@@ -1,25 +1,23 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Create Scheduled Work{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Create Scheduled Work</h1>
-      <p class="subtle-text">Create a scheduled event linked to a customer and optional quote/work request.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">Back to schedule</a>
+  {% call render_admin_page_header(
+    title='Scheduled Event',
+    description='Create a scheduled job and link it to a customer or request.',
+    nav_mode='sub',
+    return_url=url_for('admin.calendar_view'),
+    return_label='Back to Schedule'
+  ) %}
       {% if quote_request %}
-        <a class="button button-secondary" href="{{ url_for('admin.request_detail', request_id=quote_request.id) }}">Back to request</a>
+        <a class="btn btn-secondary" href="{{ url_for('admin.request_detail', request_id=quote_request.id) }}">View Request</a>
       {% elif customer %}
-        <a class="button button-secondary" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">Back to customer</a>
+        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">View Customer</a>
       {% endif %}
-    </div>
-  </section>
+  {% endcall %}
 
   <section class="summary-grid">
     <div class="detail-grid">
@@ -110,7 +108,7 @@
             {% for error in form.internal_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
 
-          {{ form.submit(class_="button") }}
+          {{ form.submit(class_="btn btn-primary") }}
         </form>
       </article>
     </div>

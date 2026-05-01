@@ -1,15 +1,19 @@
 <section class="dashboard-actions admin-nav-buttons">
-  <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Requests</a>
-  {% if enable_calendar %}
-    <a class="button button-secondary" href="{{ url_for('admin.calendar_view') }}">Schedule</a>
-  {% endif %}
-  {% if enable_customer_records %}
-    <a class="button button-secondary" href="{{ url_for('admin.customer_list') }}">Customers</a>
-  {% endif %}
-  {% if enable_scheduling and enable_staff_management %}
-    <a class="button button-secondary" href="{{ url_for('admin.staff_list') }}">Team</a>
-  {% endif %}
-  {% if enable_recurring_work %}
-    <a class="button button-secondary" href="{{ url_for('admin.recurring_work_list') }}">Recurring Work</a>
+  {% if admin_return_url and admin_return_label %}
+    <a class="btn btn-secondary" href="{{ admin_return_url }}">{{ admin_return_label }}</a>
+  {% else %}
+    <a class="btn btn-secondary" href="{{ url_for('admin.dashboard') }}">Requests</a>
+    {% if enable_calendar %}
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view') }}">Schedule</a>
+    {% endif %}
+    {% if enable_customer_records %}
+      <a class="btn btn-secondary" href="{{ url_for('admin.customer_list') }}">Customers</a>
+    {% endif %}
+    {% if enable_scheduling and enable_staff_management %}
+      <a class="btn btn-secondary" href="{{ url_for('admin.staff_list') }}">Staff</a>
+    {% endif %}
+    {% if enable_recurring_work %}
+      <a class="btn btn-secondary" href="{{ url_for('admin.recurring_work_list') }}">Recurring Work</a>
+    {% endif %}
   {% endif %}
 </section>

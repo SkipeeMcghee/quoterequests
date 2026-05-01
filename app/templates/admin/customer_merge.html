@@ -1,19 +1,18 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Merge customer: {{ source.primary_name or 'Unnamed' }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="split-intro section-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      <h1>Merge customer</h1>
-      <p class="subtle-text">Select a surviving target customer and confirm the merge.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button-secondary" href="{{ url_for('admin.customer_detail', customer_id=source.id) }}">Back to customer</a>
-    </div>
-  </section>
+  {{ render_admin_page_header(
+    title='Merge Customer Record',
+    description='Choose the surviving customer record and confirm the merge.',
+    nav_mode='sub',
+    return_url=url_for('admin.customer_list'),
+    return_label='Back to Customers',
+    meta=source.primary_name or 'Unnamed customer'
+  ) }}
 
   <section class="section-intro">
     <div class="detail-card">
@@ -43,7 +42,7 @@
       <div class="subtle-text">
         All linked quote/work requests will move to the surviving customer. Source customer will be deleted.
       </div>
-      {{ merge_form.submit(class_="button button-primary") }}
+      {{ merge_form.submit(class_="btn btn-danger") }}
     </form>
   </section>
 </main>

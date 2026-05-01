@@ -1,20 +1,15 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Customer records{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Customer records</h1>
-      <p>View and manage internal customer records, billing, and request history.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
-    </div>
-  </section>
+  {{ render_admin_page_header(
+    title='Customers',
+    description='View customer records, contact details, and work history.',
+    nav_mode='main'
+  ) }}
 
   <section class="table-card">
     <div class="section-bar">

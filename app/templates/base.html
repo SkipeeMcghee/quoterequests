@@ -17,7 +17,7 @@
             <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
             <form action="{{ url_for('auth.logout') }}" method="post">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button class="ghost-button" type="submit">Logout</button>
+              <button class="btn btn-secondary btn-small" type="submit">Logout</button>
             </form>
           {% else %}
             <a href="{{ url_for('auth.login') }}">Admin Login</a>

@@ -51,7 +51,7 @@ class QuoteRequestForm(FlaskForm):
         "Project photos",
         validators=[FileAllowed(["jpg", "jpeg", "png", "gif", "webp"], "Images only.")],
     )
-    submit = SubmitField("Send request")
+    submit = SubmitField("Send Request")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -1,35 +1,32 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Admin Calendar{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Schedule</h1>
-      <p class="subtle-text">Browse scheduled work in a month view and click any day to see its agenda.</p>
-    </div>
-    <div class="detail-actions">
+  {% call render_admin_page_header(
+    title='Schedule',
+    description='View and manage scheduled work.',
+    nav_mode='main'
+  ) %}
       {% if enable_scheduling %}
-        <a class="button button-primary" href="{{ url_for('admin.new_scheduled_work', date=date(year, month, 1).isoformat()) }}">Add work</a>
+        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', date=date(year, month, 1).isoformat()) }}">Add Work</a>
       {% endif %}
-    </div>
-  </section>
+  {% endcall %}
 
   <section class="calendar-toolbar section-bar" id="calendar">
     <div>
       <h2>{{ month_name }} {{ year }}</h2>
     </div>
     <div class="calendar-nav">
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show) }}#calendar">Previous</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view=view, show=show) }}#calendar">This month</a>
-      <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show) }}#calendar">Next</a>
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show) }}#calendar">Previous</a>
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view=view, show=show) }}#calendar">This Month</a>
+      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show) }}#calendar">Next</a>
     </div>
     <div class="schedule-view-toggle">
-      <a class="button button-toggle{% if view == 'calendar' %} active{% endif %}" href="{{ url_for('admin.calendar_view', year=year, month=month, view='calendar', show=show) }}#calendar">Calendar</a>
-      <a class="button button-toggle{% if view == 'list' %} active{% endif %}" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=sort_by) }}#calendar">List</a>
+      <a class="btn btn-secondary btn-toggle{% if view == 'calendar' %} active{% endif %}"{% if view == 'calendar' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='calendar', show=show) }}#calendar">Calendar View</a>
+      <a class="btn btn-secondary btn-toggle{% if view == 'list' %} active{% endif %}"{% if view == 'list' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=sort_by) }}#calendar">List View</a>
     </div>
   </section>
 
@@ -51,9 +48,9 @@
       </div>
       <div class="detail-actions">
         {% if show == 'upcoming' %}
-          <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='all', status=status, staff_id=staff_id, sort=sort_by) }}#calendar">View all events</a>
+          <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='all', status=status, staff_id=staff_id, sort=sort_by) }}#calendar">View All Events</a>
         {% else %}
-          <a class="button button-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='upcoming', status=status, staff_id=staff_id, sort=sort_by) }}#calendar">View upcoming only</a>
+          <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='upcoming', status=status, staff_id=staff_id, sort=sort_by) }}#calendar">View Upcoming Only</a>
         {% endif %}
       </div>
     </div>
@@ -93,7 +90,7 @@
           </label>
           {% endif %}
           <div class="filter-actions">
-            <button class="button button-secondary" type="submit">Apply</button>
+            <button class="btn btn-secondary btn-small" type="submit">Apply</button>
           </div>
         </div>
       </form>
@@ -156,9 +153,9 @@
               </td>
               <td class="actions-cell">
                 <div class="button-group">
-                  <a class="button button-small button-secondary" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">View / Edit</a>
+                  <a class="btn btn-secondary btn-small" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">View Details</a>
                   {% if customer %}
-                    <a class="button button-small button-secondary" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">Customer</a>
+                    <a class="btn btn-secondary btn-small" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">View Customer</a>
                   {% endif %}
                 </div>
               </td>
@@ -234,6 +231,8 @@
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+.calendar-nav .btn,
+.schedule-view-toggle .btn,
 .calendar-nav .button,
 .schedule-view-toggle .button {
   margin: 0;
@@ -287,6 +286,7 @@
   gap: 0.5rem;
   justify-content: flex-end;
 }
+.button-group .btn,
 .button-group .button {
   min-width: 90px;
 }

@@ -1,27 +1,23 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Customer: {{ customer.primary_name or 'Unnamed' }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="split-intro section-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>{{ customer.primary_name or 'Unnamed customer' }}</h1>
-      <p class="subtle-text">Manage this customer record, alternate contact values, billing, and linked history.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button-secondary" href="{{ url_for('admin.customer_list') }}">Back to customers</a>
+  {% call render_admin_page_header(
+    title='Customer Record',
+    description='View customer contact info, notes, requests, appointments, and recurring work.',
+    nav_mode='sub',
+    return_url=url_for('admin.customer_list'),
+    return_label='Back to Customers',
+    meta=(customer.primary_name or 'Unnamed customer') ~ ((' · ' ~ customer.primary_city) if customer.primary_city else '')
+  ) %}
       {% if enable_scheduling %}
-        <a class="button button-primary" href="{{ url_for('admin.new_scheduled_work', customer_id=customer.id) }}">Schedule work</a>
+        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', customer_id=customer.id) }}">Schedule Work</a>
       {% endif %}
-      {% if enable_recurring_work %}
-        <a class="button button-primary" href="{{ url_for('admin.recurring_work_list') }}">Add recurring work</a>
-      {% endif %}
-      <a class="button button-secondary" href="{{ url_for('admin.customer_merge', customer_id=customer.id) }}">Merge customer</a>
-    </div>
-  </section>
+      <a class="btn btn-danger" href="{{ url_for('admin.customer_merge', customer_id=customer.id) }}">Merge Customer</a>
+  {% endcall %}
 
   <section class="summary-grid">
     <div class="detail-grid">
@@ -63,7 +59,7 @@
               {% endfor %}
             </label>
           </div>
-          {{ customer_info_form.submit(class_="button") }}
+          {{ customer_info_form.submit(class_="btn btn-primary") }}
         </form>
       </article>
 
@@ -89,7 +85,7 @@
                     <span class="status-badge status-billing">Billing</span>
                   {% else %}
                     <form method="post" action="{{ url_for('admin.set_customer_billing_address_route', customer_id=customer.id, address_id=address.id) }}" class="inline-form">
-                      <button type="submit" class="button-small button-secondary">Set billing</button>
+                      <button type="submit" class="btn btn-secondary btn-small">Set Billing</button>
                     </form>
                   {% endif %}
                 </div>
@@ -126,7 +122,7 @@
             {{ address_form.is_billing() }}
             <label class="checkbox-label">Mark as billing address</label>
           </div>
-          {{ address_form.submit(class_="button") }}
+          {{ address_form.submit(class_="btn btn-primary") }}
         </form>
       </article>
 
@@ -145,7 +141,7 @@
             <span>Frequency</span>
             {{ billing_form.billing_frequency(class_="select") }}
           </label>
-          {{ billing_form.submit(class_="button") }}
+          {{ billing_form.submit(class_="btn btn-primary") }}
         </form>
       </article>
     </div>
@@ -178,7 +174,7 @@
               <small class="field-error">{{ error }}</small>
             {% endfor %}
           </label>
-          {{ photo_upload_form.submit(class_="button") }}
+          {{ photo_upload_form.submit(class_="btn btn-primary") }}
         </form>
       </article>
     </div>
@@ -205,7 +201,7 @@
                       <form method="post" action="{{ url_for('admin.set_primary_field_route', customer_id=customer.id) }}" class="inline-form">
                         {{ set_primary_field_form.hidden_tag() }}
                         {{ set_primary_field_form.field_id(value=field.id) }}
-                        {{ set_primary_field_form.submit(class_="button button-small button-secondary", value="Make primary") }}
+                        {{ set_primary_field_form.submit(class_="btn btn-secondary btn-small", value="Set Primary") }}
                       </form>
                     {% endif %}
                   </article>
@@ -232,7 +228,7 @@
               {{ add_field_form.value(class_="input") }}
             </label>
           </div>
-          {{ add_field_form.submit(class_="button") }}
+          {{ add_field_form.submit(class_="btn btn-primary") }}
         </form>
       </article>
 
@@ -247,7 +243,7 @@
             {{ note_form.note_text(class_="textarea") }}
             {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
-          {{ note_form.submit(class_="button") }}
+          {{ note_form.submit(class_="btn btn-primary") }}
         </form>
 
         <div class="notes-list">
@@ -307,7 +303,7 @@
           <div>
             <h2>Recurring work</h2>
           </div>
-          <a class="button button-small button-secondary" href="{{ url_for('admin.recurring_work_list') }}">Add recurring work</a>
+          <a class="btn btn-secondary btn-small" href="{{ url_for('admin.recurring_work_list') }}">Back to Recurring Work</a>
         </div>
         {% if customer.recurring_works %}
           <ul class="recurring-list">
@@ -342,7 +338,7 @@
               <span>Generate appointments for</span>
               {{ generate_recurring_appointments_form.days_ahead(class_="select") }}
             </label>
-            {{ generate_recurring_appointments_form.submit(class_="button") }}
+            {{ generate_recurring_appointments_form.submit(class_="btn btn-primary") }}
           </form>
         {% else %}
           <p class="subtle-text">No recurring work configured for this customer.</p>
@@ -353,7 +349,6 @@
       <article class="summary-card" id="appointments">
         <div class="section-bar compact-bar">
           <h2>Linked appointments</h2>
-          <a class="button button-small button-secondary" href="{{ url_for('admin.recurring_work_list') }}">All recurring work</a>
         </div>
         <div class="table-scroll">
           <table>

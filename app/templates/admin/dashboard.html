@@ -1,17 +1,16 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Admin Dashboard{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Quote requests</h1>
-      <p>Track every inquiry from first contact to final outcome without leaving the server-rendered workflow.</p>
-    </div>
-    <div class="dashboard-metrics">
+  {% call render_admin_page_header(
+    title='Requests',
+    description='Review incoming quote and work requests.',
+    nav_mode='main',
+    actions_class='dashboard-metrics'
+  ) %}
       <article class="metric-card">
         <strong>{{ quote_requests|length }}</strong>
         <span>Total requests</span>
@@ -20,8 +19,7 @@
         <strong>{{ quote_requests | selectattr('status', 'equalto', 'New') | list | length }}</strong>
         <span>Need first response</span>
       </article>
-    </div>
-  </section>
+  {% endcall %}
 
   <section class="table-card">
     <div class="section-bar">

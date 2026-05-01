@@ -1,21 +1,15 @@
 {% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Recurring Work{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  <section class="section-intro split-intro">
-    <div>
-      <p class="eyebrow">Admin</p>
-      {% include "admin/nav_buttons.html" %}
-      <h1>Recurring work</h1>
-      <p class="subtle-text">Review active recurring work and navigate directly to customer records or generated appointments.</p>
-    </div>
-    <div class="detail-actions">
-      <a class="button button-secondary" href="{{ url_for('admin.dashboard') }}">Back to dashboard</a>
-      <a class="button button-primary" href="{{ url_for('admin.customer_list') }}">Add recurring work</a>
-    </div>
-  </section>
+  {{ render_admin_page_header(
+    title='Recurring Work',
+    description='Manage repeat jobs and generate upcoming scheduled work.',
+    nav_mode='main'
+  ) }}
 
   <section class="table-card">
     <div class="table-scroll">
@@ -44,7 +38,7 @@
               </td>
               <td>{{ work.starts_on.strftime('%b %d, %Y') }}</td>
               <td>{{ work.status }}</td>
-              <td><a class="button button-small button-secondary" href="{{ url_for('admin.recurring_work_detail', recurring_work_id=work.id) }}">Edit</a></td>
+              <td><a class="btn btn-secondary btn-small" href="{{ url_for('admin.recurring_work_detail', recurring_work_id=work.id) }}">View Details</a></td>
             </tr>
           {% else %}
             <tr>
