@@ -1,0 +1,34 @@
+{% extends "site_base.html" %}
+
+{% block title %}FAQ | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main class="shell brochure-shell">
+  <section class="section-intro">
+    <p class="eyebrow">FAQ</p>
+    <h1>Frequently asked questions</h1>
+    <p>Answers to common questions about estimates, scheduling, photos, and how follow-up works.</p>
+  </section>
+
+  <section class="faq-list">
+    {% for item in faq_items %}
+      <article class="faq-item">
+        <h2>{{ item.question }}</h2>
+        <p class="subtle-text">{{ item.answer }}</p>
+      </article>
+    {% endfor %}
+  </section>
+
+  <section class="cta-panel">
+    <div>
+      <p class="eyebrow">Still have a question?</p>
+      <h2>Reach {{ business_name }} directly.</h2>
+      <p class="subtle-text">Call {{ phone }} or email {{ email }} if you need a quick answer before requesting a quote.</p>
+    </div>
+    <div class="form-actions">
+      <a href="{{ url_for('main.contact_page') }}" class="btn btn-secondary">Contact</a>
+      <a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>
+    </div>
+  </section>
+</main>
+{% endblock %}

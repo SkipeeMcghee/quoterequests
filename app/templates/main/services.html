@@ -1,0 +1,34 @@
+{% extends "site_base.html" %}
+
+{% block title %}Services | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main class="shell brochure-shell">
+  <section class="section-intro">
+    <p class="eyebrow">Services</p>
+    <h1>{{ business_name }} services across {{ service_area }}</h1>
+    <p>From one-time repairs to ongoing upkeep, here are the kinds of projects customers most often ask us to review.</p>
+  </section>
+
+  <section class="brochure-grid brochure-grid--two">
+    {% for service in services %}
+      <article class="brochure-card">
+        <h2>{{ service }}</h2>
+        <p class="subtle-text">{{ describe_service(service) }}</p>
+      </article>
+    {% endfor %}
+  </section>
+
+  <section class="cta-panel">
+    <div>
+      <p class="eyebrow">Need help deciding?</p>
+      <h2>Tell us what needs attention.</h2>
+      <p class="subtle-text">If you are not sure which service fits best, send a few details and we can point you in the right direction.</p>
+    </div>
+    <div class="form-actions">
+      <a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>
+      <a href="{{ url_for('main.contact_page') }}" class="btn btn-secondary">Contact</a>
+    </div>
+  </section>
+</main>
+{% endblock %}

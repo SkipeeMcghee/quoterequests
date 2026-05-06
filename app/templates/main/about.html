@@ -1,0 +1,54 @@
+{% extends "site_base.html" %}
+
+{% block title %}About | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main class="shell brochure-shell">
+  <section class="section-intro">
+    <p class="eyebrow">About</p>
+    <h1>About {{ business_name }}</h1>
+    <p>Customers usually want clear communication, dependable follow-up, and work that fits the property. That is the standard this site is built to communicate.</p>
+  </section>
+
+  <section class="brochure-grid brochure-grid--two">
+    <article class="brochure-card brochure-card--accent">
+      <h2>A straightforward approach</h2>
+      <p class="subtle-text">{{ business_name }} is presented as a local business that values honest expectations, organized communication, and practical solutions.</p>
+      <p class="subtle-text">The goal is simple: make it easy for people in {{ service_area }} to understand the work, ask questions, and know what happens next.</p>
+    </article>
+
+    <article class="brochure-card">
+      <h2>Local, accessible, and easy to work with</h2>
+      <p class="subtle-text">Serving {{ service_area }}, {{ business_name }} uses the website to collect the details needed for faster follow-up and better estimates.</p>
+      <p class="subtle-text">Customers can reach out by phone, email, or the quote form, and business correspondence can be directed to {{ address }}.</p>
+    </article>
+  </section>
+
+  <section class="brochure-grid brochure-grid--three">
+    <article class="brochure-card">
+      <strong>Clear expectations</strong>
+      <p class="subtle-text">Straight answers about scope, timing, and what information is still needed.</p>
+    </article>
+    <article class="brochure-card">
+      <strong>Respect for the property</strong>
+      <p class="subtle-text">A professional tone that suggests care, preparation, and attention to detail.</p>
+    </article>
+    <article class="brochure-card">
+      <strong>Consistent follow-up</strong>
+      <p class="subtle-text">The quote system keeps requests organized so customers are not left guessing.</p>
+    </article>
+  </section>
+
+  <section class="cta-panel">
+    <div>
+      <p class="eyebrow">Start the conversation</p>
+      <h2>Have a project in mind?</h2>
+      <p class="subtle-text">Send the details and we’ll review the request with the same straightforward approach shown throughout the site.</p>
+    </div>
+    <div class="form-actions">
+      <a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>
+      <a href="{{ url_for('main.contact_page') }}" class="btn btn-secondary">Contact</a>
+    </div>
+  </section>
+</main>
+{% endblock %}

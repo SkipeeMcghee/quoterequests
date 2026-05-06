@@ -1,0 +1,37 @@
+{% extends "site_base.html" %}
+
+{% block title %}Gallery | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main class="shell brochure-shell">
+  <section class="section-intro">
+    <p class="eyebrow">Gallery</p>
+    <h1>Project gallery</h1>
+    <p>A simple gallery for before-and-after examples, finished work, and the kinds of projects customers often ask about.</p>
+  </section>
+
+  <section class="gallery-grid">
+    {% for item in gallery_items %}
+      <article class="gallery-tile">
+        <div class="gallery-tile__media" aria-hidden="true">{{ item.title }}</div>
+        <div>
+          <h2>{{ item.title }}</h2>
+          <p class="subtle-text">{{ item.caption }}</p>
+        </div>
+      </article>
+    {% endfor %}
+  </section>
+
+  <section class="cta-panel">
+    <div>
+      <p class="eyebrow">Project inquiry</p>
+      <h2>Have a similar project in mind?</h2>
+      <p class="subtle-text">Share the details through the quote form and mention anything here that feels close to your project.</p>
+    </div>
+    <div class="form-actions">
+      <a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>
+      <a href="{{ url_for('main.contact_page') }}" class="btn btn-secondary">Contact</a>
+    </div>
+  </section>
+</main>
+{% endblock %}

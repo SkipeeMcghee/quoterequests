@@ -1,14 +1,14 @@
-{% extends "base.html" %}
+{% extends "site_base.html" %}
 {% from "_time_selects.html" import render_time_select %}
 
-{% block title %}Schedule Some Work{% endblock %}
+{% block title %}Schedule Work | {{ business_name }}{% endblock %}
 
 {% block content %}
 <main class="shell narrow-shell">
   <section class="section-intro">
     <p class="eyebrow">Schedule some work</p>
     <h1>Request a scheduled visit</h1>
-    <p>Provide your project details and preferred timing so our team can follow up with a visit or estimate.</p>
+    <p>Share the scope and your preferred timing so {{ business_name }} can follow up about scheduling in {{ service_area }}.</p>
   </section>
 
   <div class="hero-panel">
@@ -84,8 +84,8 @@
       </div>
 
       <div class="form-actions">
-        {{ form.submit(class_="btn btn-primary") }}
-        <span class="subtle-text">We’ll use your preferred contact details when we follow up.</span>
+        {{ form.submit(class_="btn btn-primary", value="Request Scheduled Work") }}
+        <span class="subtle-text">We’ll use your preferred contact details when we confirm the next step.</span>
       </div>
     </form>
   </div>

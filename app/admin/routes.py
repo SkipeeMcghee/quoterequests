@@ -4,6 +4,7 @@ from flask import current_app, flash, redirect, render_template, request, url_fo
 from flask_login import current_user, login_required
 
 from app.admin import bp
+from app.auth.routes import handle_admin_login
 from app.forms.admin import (
     AppointmentForm,
     AppointmentStatusForm,
@@ -371,6 +372,11 @@ def _render_recurring_work_detail_page(
         edit_recurring_work_url=url_for("admin.edit_recurring_work_route", recurring_work_id=work.id, **recurring_source_args),
         generate_recurring_work_url=url_for("admin.generate_recurring_work_appointments_route", recurring_work_id=work.id, **recurring_source_args),
     )
+
+
+@bp.route("", methods=["GET", "POST"])
+def admin_entry():
+    return handle_admin_login()
 
 
 @bp.get("/")

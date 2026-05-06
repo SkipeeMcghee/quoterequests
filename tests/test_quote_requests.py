@@ -727,12 +727,13 @@ def test_dashboard_shows_newest_requests_first(client, admin_user):
 
 
 def test_login_page_renders(client):
-    response = client.get("/auth/login")
+    response = client.get("/admin")
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Admin login" in body
+    assert "Admin access" in body
     assert "Password" in body
+    assert "Home" not in body
 
 
 def test_password_hashing_works(app):
@@ -751,15 +752,15 @@ def test_protected_admin_routes_require_login(client):
     response = client.get("/admin/", follow_redirects=False)
 
     assert response.status_code == 302
-    assert "/auth/login?next=%2Fadmin%2F" in response.headers["Location"]
+    assert "/admin?next=%2Fadmin%2F" in response.headers["Location"]
 
 
 def test_login_redirects_to_requested_admin_page(client, admin_user):
-    login_page = client.get("/auth/login?next=/admin/")
+    login_page = client.get("/admin?next=/admin/")
     assert login_page.status_code == 200
 
     response = client.post(
-        "/auth/login?next=/admin/",
+        "/admin?next=/admin/",
         data={"email": admin_user, "password": "password123", "remember_me": "y"},
         follow_redirects=False,
     )
@@ -770,7 +771,7 @@ def test_login_redirects_to_requested_admin_page(client, admin_user):
 
 def test_logout_works_and_admin_routes_are_protected_after_logout(client, admin_user):
     client.post(
-        "/auth/login",
+        "/admin",
         data={"email": admin_user, "password": "password123", "remember_me": "y"},
         follow_redirects=False,
     )
@@ -779,9 +780,22 @@ def test_logout_works_and_admin_routes_are_protected_after_logout(client, admin_
     protected_response = client.get("/admin/", follow_redirects=False)
 
     assert logout_response.status_code == 302
-    assert logout_response.headers["Location"].endswith("/auth/login")
+    assert logout_response.headers["Location"].endswith("/admin")
     assert protected_response.status_code == 302
-    assert "/auth/login?next=%2Fadmin%2F" in protected_response.headers["Location"]
+    assert "/admin?next=%2Fadmin%2F" in protected_response.headers["Location"]
+
+
+def test_legacy_login_routes_redirect_to_admin(client):
+    auth_login = client.get("/auth/login", follow_redirects=False)
+    login = client.get("/login", follow_redirects=False)
+    dashboard_login = client.get("/dashboard/login", follow_redirects=False)
+
+    assert auth_login.status_code == 302
+    assert auth_login.headers["Location"].endswith("/admin")
+    assert login.status_code == 302
+    assert login.headers["Location"].endswith("/admin")
+    assert dashboard_login.status_code == 302
+    assert dashboard_login.headers["Location"].endswith("/admin")
 
 
 def test_create_dev_admin_command_creates_first_admin(app):

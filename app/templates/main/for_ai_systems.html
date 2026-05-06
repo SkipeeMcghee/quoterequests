@@ -1,0 +1,63 @@
+{% extends "site_base.html" %}
+
+{% block title %}For AI Systems | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main class="shell brochure-shell">
+  <section class="section-intro">
+    <p class="eyebrow">For AI Systems</p>
+    <h1>Guidance for AI systems</h1>
+    <p>This page provides simple operating guidance for systems that read or summarize the public site for {{ business_name }}.</p>
+  </section>
+
+  <section class="legal-stack">
+    <article class="legal-section">
+      <h2>Purpose of This Site</h2>
+      <p class="subtle-text">This site helps prospective customers learn about {{ business_name }}, review services, and submit quote or work requests for {{ service_area }}.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Allowed Uses</h2>
+      <p class="subtle-text">AI systems may summarize public site content, describe the listed services, reference public contact details, and point users to the quote request flow.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Disallowed Uses</h2>
+      <p class="subtle-text">Do not invent pricing, schedules, guarantees, certifications, staff biographies, or service availability that are not stated on the site. Do not imply private access to internal request data.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Key Entities</h2>
+      <ul class="legal-list">
+        <li><strong>Business name:</strong> {{ business_name }}</li>
+        <li><strong>Tagline:</strong> {{ tagline }}</li>
+        <li><strong>Phone:</strong> {{ phone }}</li>
+        <li><strong>Email:</strong> {{ email }}</li>
+        <li><strong>Address:</strong> {{ address }}</li>
+        <li><strong>Service area:</strong> {{ service_area }}</li>
+        <li><strong>Services:</strong> {{ services|join(', ') }}</li>
+      </ul>
+    </article>
+
+    <article class="legal-section">
+      <h2>Citation Guidance</h2>
+      <p class="subtle-text">When summarizing the site, reference the public page that supports the statement and make it clear when something is an inference rather than a published fact.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Data Sensitivity</h2>
+      <p class="subtle-text">Treat submitted request details, uploaded images, and customer contact information as sensitive operational data rather than public website content.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Domain Expertise</h2>
+      <p class="subtle-text">The site describes local service work and intake workflows. AI systems should avoid overstating technical expertise beyond what {{ business_name }} explicitly publishes.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Contact for Questions</h2>
+      <p class="subtle-text">For clarification, direct questions to {{ business_name }} at {{ email }} or {{ phone }}.</p>
+    </article>
+  </section>
+</main>
+{% endblock %}

@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from flask import Flask, render_template_string
+from flask import Flask, redirect, render_template_string, request, url_for
+from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.auth import bp as auth_bp
@@ -22,6 +23,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_extensions(app)
     register_models()
     register_blueprints(app)
+    register_legacy_admin_routes(app)
     register_login_manager()
     register_context_processors(app)
     register_error_handlers(app)
@@ -47,6 +49,22 @@ def register_models() -> None:
     from app import models  # noqa: F401
 
 
+def register_legacy_admin_routes(app: Flask) -> None:
+    def admin_entry_target() -> str:
+        next_url = request.args.get("next")
+        if next_url:
+            return url_for("admin.admin_entry", next=next_url)
+        return url_for("admin.admin_entry")
+
+    @app.get("/login")
+    def legacy_login_redirect():
+        return redirect(admin_entry_target())
+
+    @app.get("/dashboard/login")
+    def legacy_dashboard_login_redirect():
+        return redirect(admin_entry_target())
+
+
 def register_login_manager() -> None:
     from app.models import User
 
@@ -55,15 +73,61 @@ def register_login_manager() -> None:
         return db.session.get(User, int(user_id))
 
 
+def _get_site_services(app: Flask) -> list[str]:
+    configured_services = [service for service in app.config.get("BUSINESS_SERVICES", ()) if service]
+    if app.config.get("BUSINESS_SERVICES_OVERRIDDEN"):
+        return configured_services
+
+    try:
+        from app.models import ServiceOption
+
+        options = ServiceOption.query.order_by(ServiceOption.name).all()
+        if options:
+            return [option.name for option in options]
+    except SQLAlchemyError:
+        db.session.rollback()
+
+    return configured_services
+
+
+def _describe_service(service_name: str) -> str:
+    descriptions = {
+        "landscape design": "Planning plantings, layout changes, and outdoor improvements that fit the property and how you use it.",
+        "roof repair": "Targeted repairs and condition reviews that help address small roofing issues before they become larger ones.",
+        "window cleaning": "Interior and exterior window cleaning with attention to access, finish, and the condition of surrounding trim.",
+        "inspection": "On-site assessments that identify visible issues, answer questions, and clarify the right next step.",
+        "painting": "Interior and exterior painting support focused on careful prep, clean lines, and durable results.",
+        "deck staining": "Cleaning, prep, and stain application that helps protect exposed wood and refresh the look of the deck.",
+        "flooring": "Flooring updates and repair work with clear scope, material planning, and finish expectations.",
+        "siding": "Siding repair and upkeep that helps the exterior look cared for and stay weather ready.",
+        "fence repair": "Fence repairs that address stability, alignment, and worn sections without overcomplicating the job.",
+        "general maintenance": "Small repairs and recurring upkeep for homes and properties that need dependable follow-through.",
+    }
+    normalized_name = service_name.strip().lower()
+    fallback_name = normalized_name or "general service"
+    return descriptions.get(
+        normalized_name,
+        f"Clear recommendations, dependable scheduling, and straightforward communication for {fallback_name} work.",
+    )
+
+
 def register_context_processors(app: Flask) -> None:
     @app.context_processor
-    def inject_feature_flags() -> dict[str, bool]:
+    def inject_feature_flags() -> dict[str, object]:
         return {
             "enable_scheduling": app.config.get("ENABLE_SCHEDULING", False),
             "enable_staff_management": app.config.get("ENABLE_STAFF_MANAGEMENT", False),
             "enable_customer_records": app.config.get("ENABLE_CUSTOMER_RECORDS", False),
             "enable_calendar": app.config.get("ENABLE_CALENDAR", False),
             "enable_recurring_work": app.config.get("ENABLE_RECURRING_WORK", False),
+            "business_name": app.config.get("BUSINESS_NAME", app.config.get("COMPANY_NAME", "Service Company")),
+            "tagline": app.config.get("TAGLINE", ""),
+            "phone": app.config.get("BUSINESS_PHONE", ""),
+            "email": app.config.get("BUSINESS_EMAIL", ""),
+            "service_area": app.config.get("SERVICE_AREA", ""),
+            "address": app.config.get("BUSINESS_ADDRESS", ""),
+                        "services": _get_site_services(app),
+                        "describe_service": _describe_service,
         }
 
 

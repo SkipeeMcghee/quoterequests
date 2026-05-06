@@ -1,0 +1,42 @@
+{% extends "site_base.html" %}
+
+{% block title %}Contact | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main class="shell brochure-shell">
+  <section class="section-intro">
+    <p class="eyebrow">Contact</p>
+    <h1>Contact {{ business_name }}</h1>
+    <p>Call, email, or use the quote form if you would like pricing or a review of work in {{ service_area }}.</p>
+  </section>
+
+  <section class="brochure-grid brochure-grid--two">
+    <article class="brochure-card brochure-card--accent">
+      <h2>Direct contact</h2>
+      <div class="contact-list">
+        <a class="text-link" href="tel:{{ phone }}">{{ phone }}</a>
+        <a class="text-link" href="mailto:{{ email }}">{{ email }}</a>
+        <span class="subtle-text">{{ address }}</span>
+        <span class="subtle-text">Serving {{ service_area }}</span>
+      </div>
+    </article>
+
+    <article class="brochure-card">
+      <h2>What helps us respond quickly</h2>
+      <p class="subtle-text">A short description of the project, rough measurements if you have them, and a few photos are often enough for a useful first conversation.</p>
+      <p class="subtle-text">If the scope is still unclear, a quote request is the easiest way to start and lets the team follow up with the right questions.</p>
+    </article>
+  </section>
+
+  <section class="cta-panel">
+    <div>
+      <p class="eyebrow">Best next step</p>
+      <h2>Send the project details in one place.</h2>
+      <p class="subtle-text">The quote form keeps contact information, selected services, and any uploaded photos together for follow-up.</p>
+    </div>
+    <div class="form-actions">
+      <a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>
+    </div>
+  </section>
+</main>
+{% endblock %}

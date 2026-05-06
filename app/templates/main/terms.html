@@ -1,0 +1,35 @@
+{% extends "site_base.html" %}
+
+{% block title %}Terms of Service | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main class="shell brochure-shell">
+  <section class="section-intro">
+    <p class="eyebrow">Terms</p>
+    <h1>Terms of service</h1>
+    <p>These terms apply when you browse the site, review public information, or submit a request through {{ business_name }}.</p>
+  </section>
+
+  <section class="legal-stack">
+    <article class="legal-section">
+      <h2>Use of the site</h2>
+      <p class="subtle-text">Visitors may browse the site, review public information, and submit legitimate quote or work requests for services in {{ service_area }}.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>No guarantee of project acceptance</h2>
+      <p class="subtle-text">Submitting a request does not guarantee a quote, appointment, or service engagement. All work is subject to availability, review, and mutual agreement.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Accuracy of submissions</h2>
+      <p class="subtle-text">Customers should provide accurate contact details and project information so {{ business_name }} can respond appropriately.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Contact</h2>
+      <p class="subtle-text">Questions about these terms can be sent to {{ email }} or directed to {{ address }}.</p>
+    </article>
+  </section>
+</main>
+{% endblock %}

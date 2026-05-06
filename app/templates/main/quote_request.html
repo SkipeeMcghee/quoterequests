@@ -1,13 +1,13 @@
-﻿{% extends "base.html" %}
+﻿{% extends "site_base.html" %}
 
-{% block title %}Request a Quote{% endblock %}
+{% block title %}Get a Quote | {{ business_name }}{% endblock %}
 
 {% block content %}
 <main class="shell narrow-shell">
   <section class="section-intro">
     <p class="eyebrow">Quote request</p>
     <h1>Tell us about your project</h1>
-    <p>Complete the details below so our team can prepare an accurate estimate and contact you your way.</p>
+    <p>Share a few details so {{ business_name }} can review the work, prepare an estimate, and reply the way you prefer.</p>
   </section>
 
   <div class="hero-panel">
@@ -75,8 +75,8 @@
       </div>
 
       <div class="form-actions">
-        {{ form.submit(class_="btn btn-primary") }}
-        <span class="subtle-text">We’ll use your preferred contact details when we follow up.</span>
+        {{ form.submit(class_="btn btn-primary", value="Get a Quote") }}
+        <span class="subtle-text">We’ll follow up by phone or email using the contact details that work best for you.</span>
       </div>
     </form>
   </div>

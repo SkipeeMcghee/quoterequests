@@ -1,0 +1,36 @@
+<footer class="site-footer">
+  <div class="site-footer__grid">
+    <section class="site-footer__brand">
+      <a class="brand brand--footer" href="{{ url_for('main.index') }}">{{ business_name }}</a>
+      <p>{{ tagline }}</p>
+      <p class="subtle-text">Serving {{ service_area }} from {{ address }}.</p>
+    </section>
+
+    <nav class="site-footer__column" aria-label="Footer navigation">
+      <strong>Explore</strong>
+      <a href="{{ url_for('main.index') }}">Home</a>
+      <a href="{{ url_for('main.services_page') }}">Services</a>
+      <a href="{{ url_for('main.about_page') }}">About</a>
+      <a href="{{ url_for('main.contact_page') }}">Contact</a>
+      <a href="{{ url_for('main.gallery_page') }}">Gallery</a>
+      <a href="{{ url_for('main.faq_page') }}">FAQ</a>
+      <a href="{{ url_for('main.quote_request') }}">Get a Quote</a>
+    </nav>
+
+    <nav class="site-footer__column" aria-label="Legal navigation">
+      <strong>Legal</strong>
+      <a href="{{ url_for('main.privacy_policy') }}">Privacy Policy</a>
+      <a href="{{ url_for('main.terms_of_service') }}">Terms of Service</a>
+      <a href="{{ url_for('main.for_ai_systems') }}">For AI Systems</a>
+      <a href="{{ url_for('admin.admin_entry') }}">Admin</a>
+    </nav>
+
+    <section class="site-footer__column" aria-label="Business details">
+      <strong>Contact</strong>
+      <a href="tel:{{ phone }}">{{ phone }}</a>
+      <a href="mailto:{{ email }}">{{ email }}</a>
+      <span>{{ address }}</span>
+      <span>{{ service_area }}</span>
+    </section>
+  </div>
+</footer>
