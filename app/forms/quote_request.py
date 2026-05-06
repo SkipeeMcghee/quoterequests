@@ -1,7 +1,7 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, MultipleFileField
 from sqlalchemy.exc import SQLAlchemyError
-from wtforms import DateField, EmailField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField, ValidationError
+from wtforms import DateField, EmailField, HiddenField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField, ValidationError
 from wtforms.validators import DataRequired, Email, Length, Optional
 from wtforms.widgets import CheckboxInput, ListWidget
 
@@ -57,6 +57,7 @@ class QuoteRequestForm(TimeSelectMixin, FlaskForm):
         "Project photos",
         validators=[FileAllowed(["jpg", "jpeg", "png", "gif", "webp"], "Images only.")],
     )
+    recaptcha_token = HiddenField("reCAPTCHA token", validators=[Optional()])
     submit = SubmitField("Send Request")
 
     def __init__(self, *args, **kwargs):

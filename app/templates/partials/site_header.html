@@ -1,6 +1,12 @@
 <header class="site-header site-header--brochure">
   <div class="site-header__lead">
-    <a class="brand" href="{{ url_for('main.index') }}">{{ business_name }}</a>
+    <a class="brand brand--logo" href="{{ url_for('main.index') }}" aria-label="{{ business_name }} home">
+      {% if site_logo.path %}
+        <img class="brand__image" src="{{ url_for('static', filename=site_logo.path) }}" alt="{{ site_logo.alt or business_name }}">
+      {% else %}
+        {{ business_name }}
+      {% endif %}
+    </a>
     <div class="site-header__copy">
       <strong>{{ tagline }}</strong>
       <span>Serving {{ service_area }}</span>

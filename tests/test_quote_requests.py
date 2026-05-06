@@ -7,6 +7,7 @@ from pathlib import Path
 from app.extensions import db
 from app.models import QuoteRequest, RequestNote, RequestQuote
 from app.models.user import User
+from app.services.recaptcha import RecaptchaVerificationResult
 
 
 JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"0" * 32
@@ -21,6 +22,21 @@ def test_quote_request_page_renders(client):
     assert "Tell us about your project" in body
     assert "Full name" in body
     assert "Location" in body
+
+
+def test_quote_request_page_renders_recaptcha_v3_when_enabled(client, app):
+    app.config["RECAPTCHA_ENABLED"] = True
+    app.config["RECAPTCHA_SITE_KEY"] = "test-site-key"
+    app.config["RECAPTCHA_SECRET_KEY"] = "test-secret-key"
+
+    response = client.get("/quote-request")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'https://www.google.com/recaptcha/api.js?render=test-site-key' in body
+    assert 'data-recaptcha-site-key="test-site-key"' in body
+    assert 'data-recaptcha-action="quote_request"' in body
+    assert 'Protected by reCAPTCHA v3' in body
 
 
 def test_quote_request_services_does_not_require_every_checkbox(client):
@@ -60,6 +76,83 @@ def test_schedule_work_page_renders_scheduling_fields(client, app):
     body = response.get_data(as_text=True)
     assert "Preferred date" in body
     assert "Additional Notes" in body
+
+
+def test_schedule_work_page_uses_schedule_work_recaptcha_action(client, app):
+    app.config["ENABLE_SCHEDULING"] = True
+    app.config["RECAPTCHA_ENABLED"] = True
+    app.config["RECAPTCHA_SITE_KEY"] = "test-site-key"
+    app.config["RECAPTCHA_SECRET_KEY"] = "test-secret-key"
+
+    response = client.get("/schedule-work")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'data-recaptcha-action="schedule_work"' in body
+
+
+def test_quote_request_submission_requires_valid_recaptcha_when_enabled(client, app, monkeypatch):
+    app.config["RECAPTCHA_ENABLED"] = True
+    app.config["RECAPTCHA_SITE_KEY"] = "test-site-key"
+    app.config["RECAPTCHA_SECRET_KEY"] = "test-secret-key"
+    monkeypatch.setattr(
+        "app.main.routes.verify_recaptcha_submission",
+        lambda token, action, remote_ip=None: RecaptchaVerificationResult(
+            success=False,
+            message="We couldn't verify the spam protection check. Please try again.",
+        ),
+    )
+
+    response = client.post(
+        "/quote-request",
+        data={
+            "full_name": "Taylor Grant",
+            "phone": "555-333-2222",
+            "services": ["Inspection"],
+            "city": "14 Maple Ln",
+            "recaptcha_token": "test-token",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "We couldn't verify the spam protection check. Please try again." in body
+
+    with app.app_context():
+        assert QuoteRequest.query.count() == 0
+
+
+def test_quote_request_submission_succeeds_with_recaptcha_when_enabled(client, app, monkeypatch):
+    app.config["RECAPTCHA_ENABLED"] = True
+    app.config["RECAPTCHA_SITE_KEY"] = "test-site-key"
+    app.config["RECAPTCHA_SECRET_KEY"] = "test-secret-key"
+    monkeypatch.setattr(
+        "app.main.routes.verify_recaptcha_submission",
+        lambda token, action, remote_ip=None: RecaptchaVerificationResult(
+            success=True,
+            score=0.9,
+            action=action,
+        ),
+    )
+
+    response = client.post(
+        "/quote-request",
+        data={
+            "full_name": "Taylor Grant",
+            "phone": "555-333-2222",
+            "services": ["Inspection"],
+            "city": "14 Maple Ln",
+            "recaptcha_token": "test-token",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/thank-you")
+
+    with app.app_context():
+        assert QuoteRequest.query.count() == 1
 
 
 def test_schedule_work_submission_records_work_request_type(client, app):

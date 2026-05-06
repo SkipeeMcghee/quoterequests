@@ -3,8 +3,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env", override=True)
 
 DEFAULT_BUSINESS_SERVICES = (
     "Landscape Design",
@@ -18,6 +21,25 @@ DEFAULT_BUSINESS_SERVICES = (
     "Fence Repair",
     "General Maintenance",
 )
+
+DEFAULT_SITE_LOGO_PATH = "assets/images/Logowhite.png"
+
+SOCIAL_PLATFORM_ASSETS: dict[str, dict[str, str]] = {
+    "facebook": {"label": "Facebook", "icon_path": "assets/images/facebook.png"},
+    "instagram": {"label": "Instagram", "icon_path": "assets/images/instagram.png"},
+    "linkedin": {"label": "LinkedIn", "icon_path": "assets/images/linkedin.png"},
+    "youtube": {"label": "YouTube", "icon_path": "assets/images/youtube.png"},
+    "x": {"label": "X", "icon_path": "assets/images/x.png"},
+    "tiktok": {"label": "TikTok", "icon_path": "assets/images/tiktok.png"},
+    "pinterest": {"label": "Pinterest", "icon_path": "assets/images/pinterest.png"},
+    "whatsapp": {"label": "WhatsApp", "icon_path": "assets/images/whatsapp.png"},
+    "telegram": {"label": "Telegram", "icon_path": "assets/images/telegram.png"},
+    "skype": {"label": "Skype", "icon_path": "assets/images/skype.png"},
+    "snapchat": {"label": "Snapchat", "icon_path": "assets/images/snapchat.png"},
+    "spotify": {"label": "Spotify", "icon_path": "assets/images/spotify.png"},
+    "reddit": {"label": "Reddit", "icon_path": "assets/images/reddit.png"},
+    "google": {"label": "Google Business", "icon_path": "assets/images/google.png"},
+}
 
 
 def get_required_env(name: str) -> str:
@@ -36,8 +58,53 @@ def parse_csv_env(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
     return values or default
 
 
+def parse_bool_env(name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def parse_float_env(name: str, default: float) -> float:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+
+    try:
+        value = float(raw_value)
+    except ValueError:
+        return default
+
+    return max(0.0, min(1.0, value))
+
+
+def normalize_static_asset_path(value: str, default: str = "") -> str:
+    normalized = (value or default).strip().lstrip("/")
+    return normalized or default
+
+
+def build_social_links() -> dict[str, dict[str, str | bool]]:
+    social_links: dict[str, dict[str, str | bool]] = {}
+    for platform, defaults in SOCIAL_PLATFORM_ASSETS.items():
+        env_prefix = f"SOCIAL_{platform.upper()}"
+        social_links[platform] = {
+            **defaults,
+            "enabled": parse_bool_env(f"{env_prefix}_ENABLED", False),
+            "url": os.getenv(f"{env_prefix}_URL", "").strip(),
+        }
+    return social_links
+
+
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
+    RECAPTCHA_ENABLED = parse_bool_env("RECAPTCHA_ENABLED", False)
+    RECAPTCHA_SITE_KEY = os.getenv("RECAPTCHA_SITE_KEY", "").strip()
+    RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "").strip()
+    RECAPTCHA_MIN_SCORE = parse_float_env("RECAPTCHA_MIN_SCORE", 0.5)
+    RECAPTCHA_VERIFY_URL = os.getenv(
+        "RECAPTCHA_VERIFY_URL",
+        "https://www.google.com/recaptcha/api/siteverify",
+    ).strip()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024
     UPLOAD_FOLDER = str(BASE_DIR / "app" / "static" / "uploads")
@@ -54,6 +121,12 @@ class Config:
     BUSINESS_EMAIL = os.getenv("BUSINESS_EMAIL", "hello@example.com")
     SERVICE_AREA = os.getenv("SERVICE_AREA", "your local service area")
     BUSINESS_ADDRESS = os.getenv("BUSINESS_ADDRESS", "123 Service Lane, Suite 100")
+    SITE_LOGO = {
+        "path": normalize_static_asset_path(os.getenv("SITE_LOGO_PATH", DEFAULT_SITE_LOGO_PATH), DEFAULT_SITE_LOGO_PATH),
+        "alt": os.getenv("SITE_LOGO_ALT", "").strip(),
+    }
+    SOCIAL_LINKS_PREVIEW = parse_bool_env("SOCIAL_LINKS_PREVIEW", False)
+    SOCIAL_LINKS = build_social_links()
     BUSINESS_SERVICES = parse_csv_env("BUSINESS_SERVICES", DEFAULT_BUSINESS_SERVICES)
     BUSINESS_SERVICES_OVERRIDDEN = bool(os.getenv("BUSINESS_SERVICES"))
     ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "admin@example.com")
@@ -70,11 +143,11 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    ENABLE_SCHEDULING = True
-    ENABLE_STAFF_MANAGEMENT = True
-    ENABLE_CUSTOMER_RECORDS = True
-    ENABLE_CALENDAR = True
-    ENABLE_RECURRING_WORK = True
+    ENABLE_SCHEDULING = parse_bool_env("ENABLE_SCHEDULING", True)
+    ENABLE_STAFF_MANAGEMENT = parse_bool_env("ENABLE_STAFF_MANAGEMENT", True)
+    ENABLE_CUSTOMER_RECORDS = parse_bool_env("ENABLE_CUSTOMER_RECORDS", True)
+    ENABLE_CALENDAR = parse_bool_env("ENABLE_CALENDAR", True)
+    ENABLE_RECURRING_WORK = parse_bool_env("ENABLE_RECURRING_WORK", True)
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL",
         "postgresql+psycopg://quote_requests:quote_requests@localhost:5432/quote_requests",
@@ -84,6 +157,7 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     TESTING = True
     WTF_CSRF_ENABLED = False
+    SOCIAL_LINKS_PREVIEW = False
     ENABLE_SCHEDULING = False
     ENABLE_STAFF_MANAGEMENT = False
     ENABLE_CUSTOMER_RECORDS = False
@@ -104,6 +178,9 @@ class ProductionConfig(Config):
         secret_key = get_required_env("SECRET_KEY")
         if secret_key == "change-me":
             raise RuntimeError("SECRET_KEY must be changed for production.")
+        if parse_bool_env("RECAPTCHA_ENABLED", False):
+            get_required_env("RECAPTCHA_SITE_KEY")
+            get_required_env("RECAPTCHA_SECRET_KEY")
 
 
 config_by_name = {

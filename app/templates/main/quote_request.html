@@ -11,7 +11,7 @@
   </section>
 
   <div class="hero-panel">
-    <form method="post" enctype="multipart/form-data" class="quote-form">
+    <form method="post" enctype="multipart/form-data" class="quote-form" {% if recaptcha_enabled %}data-recaptcha-site-key="{{ recaptcha_site_key }}" data-recaptcha-action="{{ recaptcha_action }}"{% endif %}>
       {{ form.hidden_tag() }}
       <div class="form-grid">
         <label class="form-field field-span-2">
@@ -72,6 +72,16 @@
           </div>
           {% for error in form.photos.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
+
+        {% if recaptcha_enabled or form.recaptcha_token.errors %}
+          <div class="form-field field-span-2">
+            {% if recaptcha_enabled %}
+              <small class="subtle-text">Protected by reCAPTCHA v3 to reduce spam.</small>
+              <small class="field-error" id="recaptcha-client-error" hidden></small>
+            {% endif %}
+            {% for error in form.recaptcha_token.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </div>
+        {% endif %}
       </div>
 
       <div class="form-actions">
@@ -84,13 +94,20 @@
 {% endblock %}
 
 {% block scripts %}
+{% if recaptcha_enabled %}
+<script src="https://www.google.com/recaptcha/api.js?render={{ recaptcha_site_key }}"></script>
+{% endif %}
 <script>
 (function () {
+  const form = document.querySelector('.quote-form');
   const input = document.querySelector('#photos') || document.querySelector('input[name="photos"]');
   const preview = document.querySelector('#photo-preview');
-  if (!input || !preview) {
-    return;
-  }
+  const tokenInput = form ? form.querySelector('input[name="recaptcha_token"]') : null;
+  const submitButton = form ? form.querySelector('button[type="submit"], input[type="submit"]') : null;
+  const clientError = document.querySelector('#recaptcha-client-error');
+  const siteKey = form ? form.dataset.recaptchaSiteKey : '';
+  const recaptchaAction = form ? form.dataset.recaptchaAction : '';
+  let verifyingRecaptcha = false;
 
   const formatBytes = (bytes) => {
     if (bytes < 1024) return `${bytes} bytes`;
@@ -99,6 +116,10 @@
   };
 
   const updatePreview = () => {
+    if (!input || !preview) {
+      return;
+    }
+
     const files = input.files;
     if (!files || files.length === 0) {
       preview.textContent = 'No files selected.';
@@ -113,7 +134,64 @@
     preview.textContent = `Selected ${files.length} file${files.length === 1 ? '' : 's'} · ${formatBytes(total)} total.`;
   };
 
-  input.addEventListener('change', updatePreview);
+  const showRecaptchaError = (message) => {
+    if (!clientError) {
+      return;
+    }
+
+    clientError.textContent = message;
+    clientError.hidden = !message;
+  };
+
+  if (form && siteKey && recaptchaAction && tokenInput) {
+    form.addEventListener('submit', (event) => {
+      if (tokenInput.value) {
+        return;
+      }
+
+      if (!window.grecaptcha) {
+        event.preventDefault();
+        showRecaptchaError("Spam protection is still loading. Please wait a moment and try again.");
+        return;
+      }
+
+      event.preventDefault();
+      if (verifyingRecaptcha) {
+        return;
+      }
+
+      verifyingRecaptcha = true;
+      showRecaptchaError('');
+      if (submitButton) {
+        submitButton.disabled = true;
+      }
+
+      grecaptcha.ready(() => {
+        grecaptcha.execute(siteKey, {action: recaptchaAction}).then((token) => {
+          tokenInput.value = token;
+          verifyingRecaptcha = false;
+          if (submitButton) {
+            submitButton.disabled = false;
+          }
+          if (form.requestSubmit && submitButton) {
+            form.requestSubmit(submitButton);
+            return;
+          }
+          form.submit();
+        }).catch(() => {
+          verifyingRecaptcha = false;
+          if (submitButton) {
+            submitButton.disabled = false;
+          }
+          showRecaptchaError("We couldn't verify the spam protection check. Please try again.");
+        });
+      });
+    });
+  }
+
+  if (input) {
+    input.addEventListener('change', updatePreview);
+  }
   updatePreview();
 })();
 </script>

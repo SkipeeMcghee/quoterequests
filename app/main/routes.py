@@ -1,9 +1,10 @@
-from flask import current_app, flash, redirect, render_template, url_for
+from flask import current_app, flash, redirect, render_template, request, url_for
 from werkzeug.exceptions import BadRequest
 
 from app.forms.quote_request import QuoteRequestForm
 from app.main import bp
 from app.services.quotes import create_quote_request
+from app.services.recaptcha import should_render_recaptcha, verify_recaptcha_submission
 
 
 HOME_TRUST_POINTS = (
@@ -93,6 +94,36 @@ GALLERY_ITEMS = (
     },
 )
 
+QUOTE_REQUEST_RECAPTCHA_ACTION = "quote_request"
+SCHEDULE_WORK_RECAPTCHA_ACTION = "schedule_work"
+
+
+def _public_form_context(recaptcha_action: str) -> dict[str, str | bool]:
+    return {
+        "recaptcha_enabled": should_render_recaptcha(),
+        "recaptcha_site_key": current_app.config.get("RECAPTCHA_SITE_KEY", ""),
+        "recaptcha_action": recaptcha_action,
+    }
+
+
+def _render_public_form(template_name: str, form: QuoteRequestForm, recaptcha_action: str):
+    form.recaptcha_token.data = ""
+    return render_template(template_name, form=form, **_public_form_context(recaptcha_action))
+
+
+def _validate_recaptcha(form: QuoteRequestForm, recaptcha_action: str) -> bool:
+    verification = verify_recaptcha_submission(
+        form.recaptcha_token.data or "",
+        action=recaptcha_action,
+        remote_ip=request.access_route[0] if request.access_route else request.remote_addr,
+    )
+    if verification.success:
+        return True
+
+    form.recaptcha_token.errors.append(verification.message)
+    form.recaptcha_token.data = ""
+    return False
+
 
 @bp.get("/")
 def index():
@@ -147,15 +178,16 @@ def for_ai_systems():
 def quote_request():
     form = QuoteRequestForm()
     if form.validate_on_submit():
-        try:
-            create_quote_request(form, form.photos.data, request_type="Quote request")
-        except BadRequest as exc:
-            form.photos.errors.append(exc.description)
-            flash(exc.description, "error")
-        else:
-            return redirect(url_for("main.thank_you"))
+        if _validate_recaptcha(form, QUOTE_REQUEST_RECAPTCHA_ACTION):
+            try:
+                create_quote_request(form, form.photos.data, request_type="Quote request")
+            except BadRequest as exc:
+                form.photos.errors.append(exc.description)
+                flash(exc.description, "error")
+            else:
+                return redirect(url_for("main.thank_you"))
 
-    return render_template("main/quote_request.html", form=form)
+    return _render_public_form("main/quote_request.html", form, QUOTE_REQUEST_RECAPTCHA_ACTION)
 
 
 @bp.route("/schedule-work", methods=["GET", "POST"])
@@ -165,15 +197,16 @@ def schedule_work():
 
     form = QuoteRequestForm()
     if form.validate_on_submit():
-        try:
-            create_quote_request(form, form.photos.data, request_type="Work request")
-        except BadRequest as exc:
-            form.photos.errors.append(exc.description)
-            flash(exc.description, "error")
-        else:
-            return redirect(url_for("main.thank_you"))
+        if _validate_recaptcha(form, SCHEDULE_WORK_RECAPTCHA_ACTION):
+            try:
+                create_quote_request(form, form.photos.data, request_type="Work request")
+            except BadRequest as exc:
+                form.photos.errors.append(exc.description)
+                flash(exc.description, "error")
+            else:
+                return redirect(url_for("main.thank_you"))
 
-    return render_template("main/schedule_work.html", form=form)
+    return _render_public_form("main/schedule_work.html", form, SCHEDULE_WORK_RECAPTCHA_ACTION)
 
 
 @bp.get("/thank-you")

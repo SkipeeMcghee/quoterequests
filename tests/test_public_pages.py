@@ -30,9 +30,11 @@ def test_brochure_pages_render_with_shared_layout(client, route: str, expected_t
     assert "Services" in body
     assert "About" in body
     assert "Contact" in body
+    assert '/static/assets/images/Logowhite.png' in body
     assert "Privacy Policy" in body
     assert "Terms" in body
     assert "For AI Systems" in body
+    assert "Follow Us" not in body
     assert expected_text in body
     assert "template" not in body.lower()
     assert "placeholder" not in body.lower()
@@ -50,6 +52,76 @@ def test_quote_request_page_uses_public_site_layout(client):
     assert "Privacy Policy" in body
     assert "Admin Login" not in body
     assert 'href="/admin"' in body
+    assert '/static/assets/images/Logowhite.png' in body
+
+
+def test_footer_social_links_render_only_for_enabled_platforms(app):
+    app.config["SOCIAL_LINKS"] = {
+        "facebook": {
+            "enabled": True,
+            "url": "https://example.com/facebook",
+            "label": "Facebook",
+            "icon_path": "assets/images/facebook.png",
+        },
+        "instagram": {
+            "enabled": False,
+            "url": "https://example.com/instagram",
+            "label": "Instagram",
+            "icon_path": "assets/images/instagram.png",
+        },
+    }
+    client = app.test_client()
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+
+    body = response.get_data(as_text=True)
+    assert "Follow Us" in body
+    assert 'href="https://example.com/facebook"' in body
+    assert 'aria-label="Facebook"' in body
+    assert 'assets/images/facebook.png' in body
+    assert 'aria-label="Instagram"' not in body
+
+
+def test_footer_social_links_preview_renders_disabled_or_missing_platforms(app):
+    app.config["SOCIAL_LINKS_PREVIEW"] = True
+    app.config["SOCIAL_LINKS"] = {
+        "facebook": {
+            "enabled": False,
+            "url": "",
+            "label": "Facebook",
+            "icon_path": "assets/images/facebook.png",
+        },
+        "instagram": {
+            "enabled": True,
+            "url": "",
+            "label": "Instagram",
+            "icon_path": "assets/images/instagram.png",
+        },
+        "linkedin": {
+            "enabled": False,
+            "url": "https://example.com/linkedin",
+            "label": "LinkedIn",
+            "icon_path": "assets/images/linkedin.png",
+        },
+    }
+    client = app.test_client()
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+
+    body = response.get_data(as_text=True)
+    assert "Follow Us" in body
+    assert 'aria-label="Facebook preview"' in body
+    assert 'aria-label="Instagram preview"' in body
+    assert 'aria-label="LinkedIn preview"' in body
+    assert 'href="https://example.com/facebook"' not in body
+    assert 'href="https://example.com/linkedin"' not in body
+    assert 'assets/images/facebook.png' in body
+    assert 'assets/images/instagram.png' in body
+    assert 'assets/images/linkedin.png' in body
 
 
 @pytest.mark.parametrize(
@@ -76,6 +148,9 @@ def test_public_links_resolve(client, route: str):
             continue
 
         parsed = urlparse(href)
+        if parsed.scheme or parsed.netloc:
+            continue
+
         target = parsed.path or "/"
         if parsed.query:
             target = f"{target}?{parsed.query}"

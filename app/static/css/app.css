@@ -88,6 +88,24 @@ textarea {
   border: 1px solid var(--line-brand);
 }
 
+.brand--logo {
+  width: fit-content;
+  min-height: 56px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+.brand__image {
+  display: block;
+  width: auto;
+  height: 2rem;
+  max-width: min(180px, 32vw);
+  object-fit: contain;
+}
+
 .site-nav {
   display: flex;
   align-items: center;
@@ -114,11 +132,13 @@ textarea {
 .site-nav a {
   padding: 0.25rem 0.65rem;
   border-radius: 999px;
-  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  background: transparent;
+  transition: background-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
 }
 
 .site-nav a[aria-current="page"] {
-  background: var(--surface-accent-muted);
+  background: var(--surface-accent-soft);
+  color: var(--accent);
 }
 
 .ghost-button {
@@ -582,6 +602,31 @@ textarea {
   color: var(--accent);
 }
 
+.site-nav a:hover {
+  background: var(--surface-accent-subtle);
+  color: var(--accent);
+  opacity: 1;
+}
+
+.site-nav a:active {
+  background: var(--surface-accent-muted);
+  color: var(--accent);
+  opacity: 1;
+  transform: none;
+}
+
+.brand--logo:hover {
+  background: transparent;
+  border-color: transparent;
+  opacity: 0.92;
+}
+
+.brand--logo:active {
+  background: transparent;
+  opacity: 0.88;
+  transform: none;
+}
+
 .brochure-shell {
   gap: 2rem;
 }
@@ -754,6 +799,64 @@ textarea {
   margin: 0;
 }
 
+.site-footer__social {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.35rem;
+}
+
+.social-links {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.social-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem;
+  color: var(--accent);
+  text-decoration: none;
+  line-height: 0;
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.social-link--preview {
+  cursor: default;
+}
+
+.social-link:hover {
+  color: var(--accent-strong);
+  transform: translateY(-1px);
+}
+
+.social-link:active {
+  color: var(--accent-strong);
+  transform: translateY(0);
+}
+
+.social-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.social-link__icon {
+  display: block;
+  width: 1.2rem;
+  height: 1.2rem;
+  background-color: currentColor;
+  mask-image: var(--social-icon);
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-image: var(--social-icon);
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
 @media (max-width: 900px) {
   .hero--brochure,
   .brochure-grid--three,
@@ -813,7 +916,6 @@ textarea {
 }
 
 :is(.btn, .btn-primary, .btn-secondary, .btn-danger, .button, .button-primary, .button-secondary, .button-danger):active,
-.site-nav a:active,
 .ghost-button:active,
 .brand:active {
   transform: translateY(1px);

@@ -31,6 +31,39 @@
       <a href="mailto:{{ email }}">{{ email }}</a>
       <span>{{ address }}</span>
       <span>{{ service_area }}</span>
+
+      {% if enabled_social_links %}
+        <section class="site-footer__social" aria-label="Social media">
+          <strong>Follow Us</strong>
+          <div class="social-links">
+            {% for social_link in enabled_social_links %}
+              {% if social_link.is_preview %}
+                <span class="social-link social-link--preview" aria-label="{{ social_link.label }} preview">
+                  <span
+                    class="social-link__icon"
+                    aria-hidden="true"
+                    style="--social-icon: url('{{ url_for('static', filename=social_link.icon_path) }}');"
+                  ></span>
+                </span>
+              {% else %}
+                <a
+                  class="social-link"
+                  href="{{ social_link.url }}"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  aria-label="{{ social_link.label }}"
+                >
+                  <span
+                    class="social-link__icon"
+                    aria-hidden="true"
+                    style="--social-icon: url('{{ url_for('static', filename=social_link.icon_path) }}');"
+                  ></span>
+                </a>
+              {% endif %}
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
     </section>
   </div>
 </footer>

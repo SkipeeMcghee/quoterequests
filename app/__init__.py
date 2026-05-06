@@ -90,6 +90,45 @@ def _get_site_services(app: Flask) -> list[str]:
     return configured_services
 
 
+def _get_enabled_social_links(app: Flask) -> list[dict[str, str | bool]]:
+    configured_links = app.config.get("SOCIAL_LINKS", {})
+    preview_mode = app.config.get("SOCIAL_LINKS_PREVIEW", False)
+    enabled_links: list[dict[str, str | bool]] = []
+    for platform, settings in configured_links.items():
+        if not isinstance(settings, dict):
+            continue
+
+        is_enabled = bool(settings.get("enabled"))
+        url = str(settings.get("url", "")).strip()
+
+        if is_enabled and url:
+            enabled_links.append(
+                {
+                    "platform": platform,
+                    "label": str(settings.get("label", platform.title())),
+                    "url": url,
+                    "icon_path": str(settings.get("icon_path", "")),
+                    "is_preview": False,
+                }
+            )
+            continue
+
+        if not preview_mode:
+            continue
+
+        enabled_links.append(
+            {
+                "platform": platform,
+                "label": str(settings.get("label", platform.title())),
+                "url": "",
+                "icon_path": str(settings.get("icon_path", "")),
+                "is_preview": True,
+            }
+        )
+
+    return enabled_links
+
+
 def _describe_service(service_name: str) -> str:
     descriptions = {
         "landscape design": "Planning plantings, layout changes, and outdoor improvements that fit the property and how you use it.",
@@ -126,8 +165,11 @@ def register_context_processors(app: Flask) -> None:
             "email": app.config.get("BUSINESS_EMAIL", ""),
             "service_area": app.config.get("SERVICE_AREA", ""),
             "address": app.config.get("BUSINESS_ADDRESS", ""),
-                        "services": _get_site_services(app),
-                        "describe_service": _describe_service,
+            "site_logo": app.config.get("SITE_LOGO", {}),
+            "social_links": app.config.get("SOCIAL_LINKS", {}),
+            "enabled_social_links": _get_enabled_social_links(app),
+            "services": _get_site_services(app),
+            "describe_service": _describe_service,
         }
 
 
