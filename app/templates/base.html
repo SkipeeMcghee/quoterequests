@@ -9,21 +9,33 @@
   <body>
     <div class="page-shell">
       {% block site_header %}
-        <header class="site-header">
-          <a class="brand" href="{{ url_for('main.index') }}">{{ business_name }}</a>
-          <nav class="site-nav">
-            <a href="{{ url_for('main.quote_request') }}">Quote Request</a>
-            <a href="{{ url_for('main.schedule_work') }}">Schedule Work</a>
-            {% if current_user.is_authenticated %}
-              <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+        {% set is_admin_workspace = current_user.is_authenticated and request.blueprint == 'admin' %}
+        <header class="site-header{% if is_admin_workspace %} site-header--admin{% endif %}">
+          {% if is_admin_workspace %}
+            <a class="brand" href="{{ url_for('main.index') }}" aria-label="Go to public site">Public Site</a>
+            <nav class="site-nav site-nav--admin" aria-label="Admin navigation">
+              {% include "admin/nav_buttons.html" %}
               <form action="{{ url_for('auth.logout') }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="btn btn-secondary btn-small" type="submit">Logout</button>
               </form>
-            {% else %}
-              <a href="{{ url_for('admin.admin_entry') }}">Admin Login</a>
-            {% endif %}
-          </nav>
+            </nav>
+          {% else %}
+            <a class="brand" href="{{ url_for('main.index') }}">{{ business_name }}</a>
+            <nav class="site-nav">
+              <a href="{{ url_for('main.quote_request') }}">Quote Request</a>
+              <a href="{{ url_for('main.schedule_work') }}">Schedule Work</a>
+              {% if current_user.is_authenticated %}
+                <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+                <form action="{{ url_for('auth.logout') }}" method="post">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button class="btn btn-secondary btn-small" type="submit">Logout</button>
+                </form>
+              {% else %}
+                <a href="{{ url_for('admin.admin_entry') }}">Admin Login</a>
+              {% endif %}
+            </nav>
+          {% endif %}
         </header>
       {% endblock %}
 

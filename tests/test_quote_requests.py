@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 
 from app.extensions import db
-from app.models import QuoteRequest, RequestNote, RequestQuote
+from app.models import Customer, QuoteRequest, RequestNote, RequestPhoto, RequestQuote
 from app.models.user import User
 from app.services.recaptcha import RecaptchaVerificationResult
 
@@ -360,27 +360,181 @@ def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_u
 def test_admin_request_detail_routes_scheduling_into_shared_scheduled_work_flow(client, app, admin_user):
     app.config["ENABLE_SCHEDULING"] = True
 
-    client.post(
-        "/quote-request",
-        data={
-            "full_name": "Ari Blake",
-            "phone": "555-444-7777",
-            "services": ["Painting"],
-            "city": "32 Broad St",
-        },
-        follow_redirects=False,
-    )
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+        )
+        db.session.add(quote_request)
+        db.session.commit()
+        request_id = quote_request.id
+
     client.post(
         "/auth/login",
         data={"email": admin_user, "password": "password123", "remember_me": "y"},
         follow_redirects=False,
     )
 
-    response = client.get("/admin/requests/1")
+    response = client.get(f"/admin/requests/{request_id}")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "/admin/scheduled-work/new?request_id=1&amp;source=request" in body
-    assert "action=\"/admin/requests/1/appointments\"" not in body
+    assert "Schedule this request here without leaving the review workflow." in body
+    assert f'action="/admin/requests/{request_id}/appointments"' in body
+    assert f"/admin/scheduled-work/new?request_id={request_id}&amp;source=request" not in body
+
+
+def test_request_detail_can_schedule_inline_and_link_existing_customer(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+    app.config["ENABLE_CUSTOMER_RECORDS"] = True
+
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+        )
+        db.session.add(quote_request)
+        db.session.flush()
+        request_id = quote_request.id
+        customer = Customer(primary_name="Ari Blake", primary_city="32 Broad St", primary_phone="555-444-7777")
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        f"/admin/requests/{request_id}/appointments",
+        data={
+            "create-customer_id": str(customer_id),
+            "create-title": "Paint consultation",
+            "create-scheduled_date": "2026-05-10",
+            "create-start_time_hour": "10",
+            "create-start_time_minute": "0",
+            "create-end_time_hour": "11",
+            "create-end_time_minute": "30",
+            "create-status": "Scheduled",
+            "create-submit": "Schedule Event",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/admin/requests/{request_id}#scheduling")
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.customer_id == customer_id
+        assert quote_request.status == "Scheduled"
+        assert quote_request.current_appointment is not None
+        assert quote_request.current_appointment.title == "Paint consultation"
+
+
+def test_request_detail_shows_inline_edit_form_for_current_appointment(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+        )
+        db.session.add(quote_request)
+        db.session.flush()
+
+        from app.models import Appointment
+        from datetime import date, time
+
+        appointment = Appointment(
+            quote_request_id=quote_request.id,
+            title="Paint consultation",
+            scheduled_date=date(2026, 5, 10),
+            start_time=time(10, 0),
+            end_time=time(11, 30),
+            status="Scheduled",
+        )
+        quote_request.appointments.append(appointment)
+        db.session.commit()
+        request_id = quote_request.id
+        appointment_id = appointment.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get(f"/admin/requests/{request_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Keep the scheduled event current here and open the full event page only when you need deeper tools." in body
+    assert f'action="/admin/appointments/{appointment_id}/edit?return_to=request"' in body
+    assert f"View scheduled event #{appointment_id}" in body
+    assert "Open day agenda" in body
+
+
+def test_request_detail_inline_edit_returns_to_request_page(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+        )
+        db.session.add(quote_request)
+        db.session.flush()
+
+        from app.models import Appointment
+        from datetime import date, time
+
+        appointment = Appointment(
+            quote_request_id=quote_request.id,
+            title="Paint consultation",
+            scheduled_date=date(2026, 5, 10),
+            start_time=time(10, 0),
+            end_time=time(11, 30),
+            status="Scheduled",
+        )
+        quote_request.appointments.append(appointment)
+        db.session.commit()
+        request_id = quote_request.id
+        appointment_id = appointment.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        f"/admin/appointments/{appointment_id}/edit?return_to=request",
+        data={
+            "edit-title": "Paint consultation updated",
+            "edit-scheduled_date": "2026-05-12",
+            "edit-start_time_hour": "12",
+            "edit-start_time_minute": "0",
+            "edit-end_time_hour": "13",
+            "edit-end_time_minute": "30",
+            "edit-status": "Scheduled",
+            "edit-submit": "Save Scheduling Changes",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/admin/requests/{request_id}#scheduling")
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.current_appointment is not None
+        assert quote_request.current_appointment.title == "Paint consultation updated"
 
 
 def test_admin_calendar_view_and_list_view_render_as_alternates(client, app, admin_user):
@@ -729,18 +883,28 @@ def test_thank_you_page_renders(client):
 
 
 def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_user):
-    client.post(
-        "/quote-request",
-        data={
-            "full_name": "Avery Stone",
-            "phone": "555-343-2222",
-            "services": ["Deck Staining"],
-            "city": "18 Oak Lane",
-            "photos": [(BytesIO(PNG_BYTES), "deck.png")],
-        },
-        content_type="multipart/form-data",
-        follow_redirects=False,
-    )
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Avery Stone",
+            phone="555-343-2222",
+            city="18 Oak Lane",
+        )
+        db.session.add(quote_request)
+        db.session.flush()
+        request_id = quote_request.id
+        db.session.add_all(
+            [
+                RequestPhoto(
+                    quote_request=quote_request,
+                    file_path=f"uploads/quote_requests/{request_id}/deck-front.png",
+                ),
+                RequestPhoto(
+                    quote_request=quote_request,
+                    file_path=f"uploads/quote_requests/{request_id}/deck-side.png",
+                ),
+            ]
+        )
+        db.session.commit()
 
     client.post(
         "/auth/login",
@@ -748,12 +912,20 @@ def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_u
         follow_redirects=False,
     )
 
-    response = client.get("/admin/requests/1")
+    response = client.get(f"/admin/requests/{request_id}")
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Uploaded photos" in body
-    assert "/static/uploads/quote_requests/1/" in body
+    assert "Photo gallery" in body
+    assert "Browse each uploaded image in place" in body
+    assert 'data-photo-gallery' in body
+    assert 'data-gallery-stage' in body
+    assert 'data-gallery-prev' in body
+    assert 'data-gallery-next' in body
+    assert body.count('aria-label="Show quote request photo ') == 2
+    assert 'activeIndex = (activeIndex - 1 + thumbButtons.length) % thumbButtons.length;' in body
+    assert 'activeIndex = (activeIndex + 1) % thumbButtons.length;' in body
+    assert f"/static/uploads/quote_requests/{request_id}/" in body
     assert "Quote request photo 1" in body
 
 
@@ -817,6 +989,137 @@ def test_dashboard_shows_newest_requests_first(client, admin_user):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert body.index("Second Request") < body.index("First Request")
+
+
+def test_dashboard_uses_simplified_admin_header(client, admin_user):
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert ">Public Site</a>" in body
+    assert 'href="/quote-request"' not in body
+    assert 'href="/schedule-work"' not in body
+    assert ">Dashboard</a>" not in body
+    assert ">Requests</a>" in body
+    assert "Logout" in body
+
+
+def test_request_detail_uses_shared_admin_header_and_back_link(client, app, admin_user):
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Morgan Detail",
+            phone="555-333-2222",
+            email="morgan@example.com",
+            city="19 Elm St",
+        )
+        db.session.add(quote_request)
+        db.session.commit()
+        request_id = quote_request.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get(f"/admin/requests/{request_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert body.count("dashboard-actions admin-nav-buttons") == 1
+    assert ">Public Site</a>" in body
+    assert ">Back to Requests</a>" in body
+    assert "Morgan Detail" in body
+    assert "Submitted" in body
+    assert 'admin-page-header__meta' not in body
+    assert 'href="/quote-request"' not in body
+    assert 'href="/schedule-work"' not in body
+
+
+def test_request_detail_shows_compact_linked_customer_summary(client, app, admin_user):
+    app.config["ENABLE_CUSTOMER_RECORDS"] = True
+
+    with app.app_context():
+        customer = Customer(
+            primary_name="Jordan Avery",
+            primary_email="jordan@example.com",
+            primary_phone="555-010-1212",
+            primary_city="Pine Grove",
+        )
+        quote_request = QuoteRequest(
+            full_name="Jordan Avery",
+            phone="555-010-1212",
+            email="jordan@example.com",
+            city="Pine Grove",
+            customer=customer,
+        )
+        db.session.add_all([customer, quote_request])
+        db.session.commit()
+        request_id = quote_request.id
+        customer_id = customer.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get(f"/admin/requests/{request_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Linked:" in body
+    assert 'id="customer-matching"' in body
+    assert f'href="/admin/customers/{customer_id}"' in body
+    assert ">Jordan Avery</a>" in body
+    assert ">Request overview</h2>" in body
+    assert "View Customer" not in body
+    assert "Customer account" not in body
+    assert "customer-link-panel--linked" not in body
+
+
+def test_request_detail_includes_scroll_restore_targets_for_inline_forms(client, app, admin_user):
+    app.config.update(ENABLE_CUSTOMER_RECORDS=True, ENABLE_SCHEDULING=True)
+
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Taylor Flow",
+            phone="555-777-1111",
+            email="taylor@example.com",
+            city="12 Oak Ave",
+        )
+        db.session.add(quote_request)
+        db.session.commit()
+        request_id = quote_request.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get(f"/admin/requests/{request_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'id="customer-matching"' in body
+    assert 'id="request-details"' in body
+    assert 'id="quotes"' in body
+    assert 'id="notes"' in body
+    assert "Link an existing customer or create a new one here." in body
+    assert "Link this request to an existing customer or create a new internal customer account." not in body
+    assert "Existing customer matches were found for this request. Confirm a link or select another record." not in body
+    assert 'data-scroll-anchor="customer-matching"' in body
+    assert 'data-scroll-anchor="request-details"' in body
+    assert 'data-scroll-anchor="quotes"' in body
+    assert 'data-scroll-anchor="notes"' in body
+    assert "admin-request-detail-scroll" in body
 
 
 def test_login_page_renders(client):
@@ -1014,18 +1317,15 @@ def test_scheduling_a_request_sets_request_status_to_scheduled(client, app, admi
     app.config["ENABLE_SCHEDULING"] = True
     app.config["ENABLE_CUSTOMER_RECORDS"] = True
 
-    client.post(
-        "/quote-request",
-        data={
-            "full_name": "Casey Blake",
-            "phone": "555-444-9999",
-            "services": ["Painting"],
-            "city": "77 Market St",
-        },
-        follow_redirects=False,
-    )
-
     with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Casey Blake",
+            phone="555-444-9999",
+            city="77 Market St",
+        )
+        db.session.add(quote_request)
+        db.session.flush()
+        request_id = quote_request.id
         from app.models import Customer
 
         customer = Customer(primary_name="Casey Blake", primary_city="77 Market St", primary_phone="555-444-9999")
@@ -1040,9 +1340,9 @@ def test_scheduling_a_request_sets_request_status_to_scheduled(client, app, admi
     )
 
     response = client.post(
-        "/admin/scheduled-work/new?request_id=1&source=request",
+        f"/admin/scheduled-work/new?request_id={request_id}&source=request",
         data={
-            "scheduled-work-request_id": "1",
+            "scheduled-work-request_id": str(request_id),
             "scheduled-work-customer_id": str(customer_id),
             "scheduled-work-title": "Paint consultation",
             "scheduled-work-scheduled_date": "2026-05-10",
@@ -1059,7 +1359,7 @@ def test_scheduling_a_request_sets_request_status_to_scheduled(client, app, admi
     assert response.status_code == 302
 
     with app.app_context():
-        quote_request = QuoteRequest.query.one()
+        quote_request = db.session.get(QuoteRequest, request_id)
         assert quote_request.status == "Scheduled"
 
 

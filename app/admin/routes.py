@@ -197,6 +197,13 @@ def _schedule_source_args_from_request() -> dict[str, object]:
     )
 
 
+def _redirect_after_inline_appointment_action(appointment, *, anchor: str = "scheduling"):
+    if request.args.get("return_to") == "request" and appointment.quote_request_id is not None:
+        return redirect(url_for("admin.request_detail", request_id=appointment.quote_request_id, _anchor=anchor))
+
+    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
+
+
 def _resolve_schedule_return(
     *,
     source: str | None,
@@ -925,7 +932,7 @@ def assign_staff_to_appointment(appointment_id: int):
         flash("Choose valid staff members before saving.", "error")
 
     appointment = get_appointment(appointment_id)
-    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
+    return _redirect_after_inline_appointment_action(appointment)
 
 
 @bp.get("/requests/<int:request_id>")
@@ -949,15 +956,18 @@ def request_detail(request_id: int):
                 obj=quote_request.current_appointment,
                 prefix="edit",
             )
+            appointment_customer = quote_request.current_appointment.customer or quote_request.customer
             appointment_form.customer_id.choices = [
-                (quote_request.customer.id, quote_request.customer.primary_name or 'Customer')
-            ] if quote_request.customer else []
-            if quote_request.customer:
-                appointment_form.customer_id.data = quote_request.customer.id
+                (appointment_customer.id, appointment_customer.primary_name or 'Customer')
+            ] if appointment_customer else []
+            if appointment_customer:
+                appointment_form.customer_id.data = appointment_customer.id
+            appointment_form.submit.label.text = "Save Scheduling Changes"
             appointment_status_form = AppointmentStatusForm(status=quote_request.current_appointment.status)
             reschedule_form = RescheduleAppointmentForm(prefix="reschedule")
         else:
             appointment_form = AppointmentForm(prefix="create")
+            appointment_form.submit.label.text = "Schedule Event"
             if quote_request.customer:
                 appointment_form.customer_id.choices = [
                     (quote_request.customer.id, quote_request.customer.primary_name or 'Customer')
@@ -965,9 +975,13 @@ def request_detail(request_id: int):
                 appointment_form.customer_id.data = quote_request.customer.id
             else:
                 appointment_form.customer_id.choices = [
-                    (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
-                    for customer in list_customers()
+                    (0, "Choose an existing customer"),
+                    *[
+                        (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
+                        for customer in list_customers()
+                    ]
                 ]
+            appointment_form.title.data = quote_request.service_list_display or quote_request.request_type
 
     edit_note_forms = {
         note.id: NoteForm(prefix=f"edit-note-{note.id}", obj=note)
@@ -1111,15 +1125,24 @@ def create_appointment_route(request_id: int):
         form.customer_id.data = quote_request.customer.id
     else:
         form.customer_id.choices = [
-            (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
-            for customer in list_customers()
+            (0, "Choose an existing customer"),
+            *[
+                (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
+                for customer in list_customers()
+            ]
         ]
 
     if form.validate_on_submit():
+        start_time = form.time_value("start_time")
+        end_time = form.time_value("end_time")
         if quote_request.customer_id is None and not form.customer_id.data:
             flash("Choose a customer or link the request before scheduling.", "error")
+        elif not (form.title.data or "").strip():
+            flash("Enter a work title before saving.", "error")
         elif not form.scheduled_date.data:
             flash("Enter a scheduled date before saving.", "error")
+        elif start_time is None or end_time is None:
+            flash("Enter start and end times before saving.", "error")
         else:
             if quote_request.customer_id is None and form.customer_id.data:
                 link_quote_request_to_customer(request_id, int(form.customer_id.data))
@@ -1131,9 +1154,10 @@ def create_appointment_route(request_id: int):
                 internal_notes=(form.internal_notes.data or "").strip() or None,
                 confirmed_date=form.confirmed_date.data,
                 confirmed_time=form.time_value("confirmed_time"),
+                title=(form.title.data or "").strip() or None,
                 scheduled_date=form.scheduled_date.data,
-                start_time=form.time_value("start_time"),
-                end_time=form.time_value("end_time"),
+                start_time=start_time,
+                end_time=end_time,
                 status=form.status.data,
             )
             flash("Appointment created.", "success")
@@ -1921,7 +1945,7 @@ def update_appointment_status_route(appointment_id: int):
         flash("Choose a valid appointment status.", "error")
 
     appointment = get_appointment(appointment_id)
-    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
+    return _redirect_after_inline_appointment_action(appointment)
 
 
 @bp.post("/appointments/<int:appointment_id>/edit")
@@ -1952,7 +1976,7 @@ def edit_appointment_route(appointment_id: int):
         flash("Correct the appointment details and try again.", "error")
 
     appointment = get_appointment(appointment_id)
-    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
+    return _redirect_after_inline_appointment_action(appointment)
 
 
 @bp.post("/appointments/<int:appointment_id>/reschedule")
@@ -1977,7 +2001,7 @@ def reschedule_appointment_route(appointment_id: int):
         flash("Correct the reschedule details and try again.", "error")
 
     appointment = get_appointment(appointment_id)
-    return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
+    return _redirect_after_inline_appointment_action(appointment)
 
 
 @bp.post("/requests/<int:request_id>/notes")

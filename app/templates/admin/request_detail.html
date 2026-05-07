@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_time_selects.html" import render_time_select %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
 
 {% block title %}Request #{{ quote_request.id }}{% endblock %}
@@ -10,12 +11,8 @@
     description='Review this request, link it to a customer, or schedule the work.',
     nav_mode='sub',
     return_url=url_for('admin.dashboard'),
-    return_label='Back to Requests',
-    meta='#' ~ quote_request.id ~ ' · ' ~ quote_request.full_name ~ ' · Submitted ' ~ quote_request.created_at.strftime('%b %d, %Y %I:%M %p')
+    return_label='Back to Requests'
   ) %}
-      {% if enable_scheduling and not quote_request.current_appointment %}
-        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', request_id=quote_request.id, source='request') }}">Schedule This Work</a>
-      {% endif %}
       <div class="status-form request-status-display">
         <span class="status-label subtle-text">Request status</span>
         <span class="status-badge status-{{ quote_request.status|lower|replace(' ', '-') }}">{{ quote_request.status }}</span>
@@ -23,32 +20,15 @@
   {% endcall %}
 
   {% if enable_customer_records %}
-    <section class="customer-link-panel">
-      <div class="section-bar compact-bar">
-        <h2>Customer account</h2>
-        <p class="subtle-text">Link this request to an existing customer or create a new internal customer account.</p>
-      </div>
-
-      {% if quote_request.customer %}
-        <div class="customer-link-summary">
-          <p><strong>Linked customer:</strong> {{ quote_request.customer.primary_name or 'Unnamed customer' }}</p>
-          <div class="contact-block">
-            {% if quote_request.customer.primary_email %}
-              <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ quote_request.customer.primary_email }}</span></div>
-            {% endif %}
-            {% if quote_request.customer.primary_phone %}
-              <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ quote_request.customer.primary_phone }}</span></div>
-            {% endif %}
-            {% if quote_request.customer.primary_city %}
-              <div class="contact-row"><span class="contact-label">City:</span> <span>{{ quote_request.customer.primary_city }}</span></div>
-            {% endif %}
-          </div>
-          <a class="btn btn-secondary btn-small" href="{{ url_for('admin.customer_detail', customer_id=quote_request.customer.id) }}">View Customer</a>
+    {% if not quote_request.customer %}
+      <section class="customer-link-panel" id="customer-matching">
+        <div class="section-bar compact-bar">
+          <h2>Customer account</h2>
+          <p class="subtle-text">Link an existing customer or create a new one here.</p>
         </div>
-      {% else %}
+
         <div class="customer-link-actions">
           {% if customer_matches %}
-            <p class="subtle-text">Existing customer matches were found for this request. Confirm a link or select another record.</p>
             <div class="customer-match-list">
               {% for customer in customer_matches %}
                 <article class="customer-match-item">
@@ -60,7 +40,7 @@
                       {% if customer.primary_phone %}{{ customer.primary_phone }}{% endif %}
                     </div>
                   </div>
-                  <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="inline-form">
+                  <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="inline-form" data-scroll-anchor="customer-matching">
                     {{ link_customer_form.csrf_token }}
                     {{ link_customer_form.customer_id(value=customer.id) }}
                     {{ link_customer_form.submit(class_="btn btn-secondary btn-small") }}
@@ -68,13 +48,11 @@
                 </article>
               {% endfor %}
             </div>
-          {% else %}
-            <p class="subtle-text">No existing customer matches were found. You can select an existing customer or create a new one below.</p>
           {% endif %}
 
           <div class="manual-link-section">
-            <p class="subtle-text">Select an existing customer to link if the correct match is not listed.</p>
-            <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="stacked-form">
+            <p class="subtle-text">Select an existing customer if the right match is not listed.</p>
+            <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="customer-matching">
               {{ link_customer_form.csrf_token }}
               <label class="form-field">
                 {{ link_customer_form.manual_customer_id(class_="select") }}
@@ -84,24 +62,43 @@
           </div>
 
           <div class="create-customer-section">
-            <p class="subtle-text">If the correct customer is not listed, create a new customer record from this request.</p>
-            <form method="post" action="{{ url_for('admin.create_customer_route', request_id=quote_request.id) }}" class="inline-form">
+            <p class="subtle-text">Create a new customer from this request if needed.</p>
+            <form method="post" action="{{ url_for('admin.create_customer_route', request_id=quote_request.id) }}" class="inline-form" data-scroll-anchor="customer-matching">
               {{ create_customer_form.hidden_tag() }}
               {{ create_customer_form.submit(class_="btn btn-primary btn-small") }}
             </form>
           </div>
         </div>
-      {% endif %}
-    </section>
+      </section>
+    {% endif %}
   {% endif %}
 
   <section class="summary-grid">
     <div class="detail-grid">
-      <article class="detail-card">
+      <article class="detail-card" id="request-details">
         <div class="section-bar compact-bar">
-          <h2>Request details</h2>
+          <h2>Request overview</h2>
         </div>
         <dl class="detail-list vertical-list">
+          <div>
+            <dt>Request</dt>
+            <dd>#{{ quote_request.id }} · {{ quote_request.full_name }}</dd>
+          </div>
+          <div>
+            <dt>Submitted</dt>
+            <dd>{{ quote_request.created_at.strftime('%b %d, %Y %I:%M %p') }}</dd>
+          </div>
+          {% if enable_customer_records and quote_request.customer %}
+            <div id="customer-matching">
+              <dt>Customer</dt>
+              <dd>
+                <p class="customer-link-inline">
+                  <span class="customer-link-inline__label subtle-text">Linked:</span>
+                  <a class="customer-link-inline__link" href="{{ url_for('admin.customer_detail', customer_id=quote_request.customer.id) }}">{{ quote_request.customer.primary_name or 'Unnamed customer' }}</a>
+                </p>
+              </dd>
+            </div>
+          {% endif %}
           <div>
             <dt>Contact</dt>
             <dd>
@@ -133,7 +130,7 @@
           <div>
             <dt>Last contacted on</dt>
             <dd>
-              <form method="post" action="{{ url_for('admin.update_last_contacted_on_route', request_id=quote_request.id) }}" class="stacked-form" id="last-contacted-form">
+              <form method="post" action="{{ url_for('admin.update_last_contacted_on_route', request_id=quote_request.id) }}" class="stacked-form" id="last-contacted-form" data-scroll-anchor="request-details">
                 {{ last_contacted_form.hidden_tag() }}
                 <label class="form-field">
                   {{ last_contacted_form.last_contacted_on(class_="input compact-input", id="last-contacted-on") }}
@@ -159,20 +156,61 @@
             </dd>
           </div>
         </dl>
+      </article>
 
-
-        <h2>Uploaded photos</h2>
-        <p class="subtle-text">Images open in a new tab.</p>
-        
-        <div class="photo-grid">
-          {% for photo in quote_request.photos %}
-            <a class="photo-card" href="{{ url_for('static', filename=photo.file_path) }}" target="_blank" rel="noreferrer">
-              <img src="{{ url_for('static', filename=photo.file_path) }}" alt="Quote request photo {{ loop.index }}">
-            </a>
-          {% else %}
-            <div class="empty-state">No photos were uploaded for this request.</div>
-          {% endfor %}
+      <article class="summary-card request-photo-gallery-card" id="photos">
+        <div class="section-bar compact-bar">
+          <div>
+            <h2>Photo gallery</h2>
+            <p class="subtle-text">Browse each uploaded image in place and use the queue to move through the set.</p>
+          </div>
         </div>
+
+        {% if quote_request.photos %}
+          {% set first_photo = quote_request.photos[0] %}
+          <section class="request-photo-gallery" data-photo-gallery>
+            <div class="request-photo-gallery__stage">
+              <div class="request-photo-gallery__stage-frame">
+                <img
+                  class="request-photo-gallery__stage-image"
+                  src="{{ url_for('static', filename=first_photo.file_path) }}"
+                  alt="Quote request photo 1"
+                  data-gallery-stage
+                >
+              </div>
+              <div class="request-photo-gallery__stage-meta">
+                <span class="subtle-text" data-gallery-count aria-live="polite">1 of {{ quote_request.photos|length }}</span>
+                <span class="subtle-text">Original upload scaled to fit this panel.</span>
+              </div>
+            </div>
+
+            <div class="request-photo-gallery__queue" aria-label="Request photo thumbnails">
+              <button type="button" class="btn btn-secondary btn-small request-photo-gallery__nav" data-gallery-prev aria-label="Show previous photo">&larr;</button>
+              <div class="request-photo-gallery__thumbs">
+                {% for photo in quote_request.photos %}
+                  <button
+                    type="button"
+                    class="request-photo-gallery__thumb{% if loop.first %} is-active{% endif %}"
+                    data-gallery-thumb
+                    data-photo-src="{{ url_for('static', filename=photo.file_path) }}"
+                    data-photo-alt="Quote request photo {{ loop.index }}"
+                    aria-label="Show quote request photo {{ loop.index }}"
+                    aria-pressed="{{ 'true' if loop.first else 'false' }}"
+                  >
+                    <img
+                      src="{{ url_for('static', filename=photo.file_path) }}"
+                      alt="Quote request photo {{ loop.index }} thumbnail"
+                      {% if not loop.first %}loading="lazy"{% endif %}
+                    >
+                  </button>
+                {% endfor %}
+              </div>
+              <button type="button" class="btn btn-secondary btn-small request-photo-gallery__nav" data-gallery-next aria-label="Show next photo">&rarr;</button>
+            </div>
+          </section>
+        {% else %}
+          <div class="empty-state">No photos were uploaded for this request.</div>
+        {% endif %}
       </article>
 
     </div>
@@ -186,7 +224,7 @@
           </div>
         </div>
 
-        <form method="post" action="{{ url_for('admin.create_request_quote_route', request_id=quote_request.id) }}" class="stacked-form">
+        <form method="post" action="{{ url_for('admin.create_request_quote_route', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="quotes">
           {{ request_quote_form.hidden_tag() }}
           <div class="form-grid">
             <label class="form-field">
@@ -213,11 +251,11 @@
                 </div>
                 <div class="request-quote-item__actions button-row">
                   <span class="status-badge status-{{ request_quote.decision|lower|replace(' ', '-') }}">{{ request_quote.decision }}</span>
-                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id, decision='accepted') }}" class="inline-form">
+                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id, decision='accepted') }}" class="inline-form" data-scroll-anchor="quotes">
                     {{ quote_decision_forms[request_quote.id].hidden_tag() }}
                     <button type="submit" class="btn btn-secondary btn-small">Accept</button>
                   </form>
-                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id, decision='rejected') }}" class="inline-form">
+                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id, decision='rejected') }}" class="inline-form" data-scroll-anchor="quotes">
                     {{ quote_decision_forms[request_quote.id].hidden_tag() }}
                     <button type="submit" class="btn btn-secondary btn-small">Reject</button>
                   </form>
@@ -235,15 +273,22 @@
 
       {% if enable_scheduling %}
         <article class="summary-card" id="scheduling">
+          {% set appointment = quote_request.current_appointment %}
+          {% set show_schedule_optional_section = appointment_form and (appointment_form.customer_notes.data or appointment_form.internal_notes.data or (appointment_form.status.data and appointment_form.status.data != 'Scheduled')) %}
           <div class="section-bar compact-bar">
             <div>
               <h2>Scheduling</h2>
-              <p class="subtle-text">Start all admin scheduling from the shared Create Scheduled Event flow.</p>
+              <p class="subtle-text">
+                {% if appointment %}
+                  Keep the scheduled event current here and open the full event page only when you need deeper tools.
+                {% else %}
+                  Schedule this request here without leaving the review workflow.
+                {% endif %}
+              </p>
             </div>
           </div>
 
-          {% if quote_request.current_appointment %}
-            {% set appointment = quote_request.current_appointment %}
+          {% if appointment %}
             <dl class="detail-list vertical-list">
               <div>
                 <dt>Status</dt>
@@ -278,16 +323,52 @@
                 <dt>Appointment</dt>
                 <dd><a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">View scheduled event #{{ appointment.id }}</a></dd>
               </div>
-            </dl>
-            <div class="button-row">
-              <a class="btn btn-primary" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">Open Scheduled Event</a>
               {% if appointment.scheduled_date %}
-                <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open Day Agenda</a>
+              <div>
+                <dt>Agenda</dt>
+                <dd><a href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open day agenda</a></dd>
+              </div>
               {% endif %}
-              {% if quote_request.customer %}
-                <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=quote_request.customer.id) }}">View Customer</a>
-              {% endif %}
-            </div>
+            </dl>
+
+            <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id, return_to='request') }}" class="stacked-form" data-scroll-anchor="scheduling">
+              {{ appointment_form.hidden_tag() }}
+              <label class="form-field">
+                <span>Work title / summary</span>
+                {{ appointment_form.title(class_="input") }}
+                {% for error in appointment_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+              <div class="form-grid">
+                <label class="form-field">
+                  <span>Scheduled date</span>
+                  {{ appointment_form.scheduled_date(class_="input") }}
+                  {% for error in appointment_form.scheduled_date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </label>
+                {{ render_time_select(appointment_form.start_time_hour, appointment_form.start_time_minute, "Start time") }}
+                {{ render_time_select(appointment_form.end_time_hour, appointment_form.end_time_minute, "End time") }}
+              </div>
+              <details class="schedule-details"{% if show_schedule_optional_section %} open{% endif %}>
+                <summary>Status and notes</summary>
+                <div class="schedule-details__content">
+                  <label class="form-field">
+                    <span>Status</span>
+                    {{ appointment_form.status(class_="select") }}
+                    {% for error in appointment_form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                  </label>
+                  <label class="form-field">
+                    <span>Customer notes</span>
+                    {{ appointment_form.customer_notes(class_="textarea") }}
+                    {% for error in appointment_form.customer_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                  </label>
+                  <label class="form-field">
+                    <span>Internal notes</span>
+                    {{ appointment_form.internal_notes(class_="textarea") }}
+                    {% for error in appointment_form.internal_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                  </label>
+                </div>
+              </details>
+              {{ appointment_form.submit(class_="btn btn-primary") }}
+            </form>
 
             {% if quote_request.appointments|length > 1 %}
               <div class="appointment-history">
@@ -307,20 +388,63 @@
               </div>
             {% endif %}
           {% else %}
-            <div class="notice-card schedule-next-step-card">
-              <strong>Create the scheduled event in one place.</strong>
-              {% if quote_request.customer %}
-                <p class="subtle-text">This request is already linked to {{ quote_request.customer.primary_name or 'the customer' }}. Continue in the shared Create Scheduled Event page.</p>
-              {% else %}
-                <p class="subtle-text">This request is not linked to a customer yet. Open Create Scheduled Event to choose an existing customer or create a new one without leaving the scheduling workflow.</p>
-              {% endif %}
-              <div class="button-row">
-                <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', request_id=quote_request.id, source='request') }}">Open Create Scheduled Event</a>
-                {% if quote_request.customer %}
-                  <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=quote_request.customer.id) }}">View Customer</a>
-                {% endif %}
+            {% if quote_request.customer %}
+              <div class="schedule-context-item">
+                <strong>Scheduling for {{ quote_request.customer.primary_name or 'the linked customer' }}</strong>
+                <p class="subtle-text">This request is already linked, so you can schedule the event directly here.</p>
               </div>
-            </div>
+            {% else %}
+              <div class="schedule-context-item">
+                <strong>Customer required before scheduling</strong>
+                <p class="subtle-text">Choose an existing customer here, or create/link one in the customer section above without leaving the page.</p>
+              </div>
+            {% endif %}
+
+            <form method="post" action="{{ url_for('admin.create_appointment_route', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="scheduling">
+              {{ appointment_form.hidden_tag() }}
+              {% if not quote_request.customer %}
+                <label class="form-field">
+                  <span class="field-label-row">Customer <span class="required-pill">Required</span></span>
+                  {{ appointment_form.customer_id(class_="select") }}
+                  {% for error in appointment_form.customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </label>
+              {% endif %}
+              <label class="form-field">
+                <span class="field-label-row">Work title or service <span class="required-pill">Required</span></span>
+                {{ appointment_form.title(class_="input", required=true) }}
+                {% for error in appointment_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+              <div class="form-grid">
+                <label class="form-field">
+                  <span class="field-label-row">Scheduled date <span class="required-pill">Required</span></span>
+                  {{ appointment_form.scheduled_date(class_="input", required=true) }}
+                  {% for error in appointment_form.scheduled_date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </label>
+                {{ render_time_select(appointment_form.start_time_hour, appointment_form.start_time_minute, "Start time", required=true) }}
+                {{ render_time_select(appointment_form.end_time_hour, appointment_form.end_time_minute, "End time", required=true) }}
+              </div>
+              <details class="schedule-details"{% if show_schedule_optional_section %} open{% endif %}>
+                <summary>Optional status and notes</summary>
+                <div class="schedule-details__content">
+                  <label class="form-field">
+                    <span>Status</span>
+                    {{ appointment_form.status(class_="select") }}
+                    {% for error in appointment_form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                  </label>
+                  <label class="form-field">
+                    <span>Customer notes</span>
+                    {{ appointment_form.customer_notes(class_="textarea") }}
+                    {% for error in appointment_form.customer_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                  </label>
+                  <label class="form-field">
+                    <span>Internal notes</span>
+                    {{ appointment_form.internal_notes(class_="textarea") }}
+                    {% for error in appointment_form.internal_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                  </label>
+                </div>
+              </details>
+              {{ appointment_form.submit(class_="btn btn-primary") }}
+            </form>
           {% endif %}
         </article>
       {% endif %}
@@ -329,7 +453,7 @@
         <div class="section-bar compact-bar">
           <h2>Internal notes</h2>
         </div>
-        <form method="post" action="{{ url_for('admin.create_note', request_id=quote_request.id) }}" class="stacked-form">
+        <form method="post" action="{{ url_for('admin.create_note', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="notes">
           {{ note_form.hidden_tag() }}
           <label class="form-field">
             <span>Add note</span>
@@ -350,7 +474,7 @@
                 {% if note.created_by == current_user.id %}
                   <div class="note-actions">
                     <button type="button" class="btn btn-secondary btn-small note-edit-toggle" data-note-id="{{ note.id }}">Edit</button>
-                    <form method="post" action="{{ url_for('admin.delete_note_route', note_id=note.id) }}" class="inline-form">
+                    <form method="post" action="{{ url_for('admin.delete_note_route', note_id=note.id) }}" class="inline-form" data-scroll-anchor="notes">
                       {{ delete_note_form.hidden_tag() }}
                       <button type="submit" class="btn btn-danger btn-small">Delete</button>
                     </form>
@@ -360,7 +484,7 @@
               <p>{{ note.note_text }}</p>
               {% if note.created_by == current_user.id %}
                 <div id="note-edit-panel-{{ note.id }}" class="note-edit-panel hidden">
-                  <form method="post" action="{{ url_for('admin.edit_note_route', note_id=note.id) }}" class="stacked-form">
+                  <form method="post" action="{{ url_for('admin.edit_note_route', note_id=note.id) }}" class="stacked-form" data-scroll-anchor="notes">
                     {{ edit_note_forms[note.id].hidden_tag() }}
                     <label class="form-field">
                       {{ edit_note_forms[note.id].note_text(class_="textarea textarea--small") }}
@@ -385,13 +509,162 @@
 {% block scripts %}
 <script>
 (function () {
+  const requestDetailScrollKey = 'admin-request-detail-scroll';
   const lastContactedForm = document.getElementById('last-contacted-form');
   const lastContactedInput = document.getElementById('last-contacted-on');
+
+  document.querySelectorAll('form[data-scroll-anchor]').forEach((form) => {
+    form.addEventListener('submit', function () {
+      const anchorId = form.dataset.scrollAnchor;
+      const target = anchorId ? document.getElementById(anchorId) : null;
+      if (!target) {
+        return;
+      }
+
+      try {
+        sessionStorage.setItem(requestDetailScrollKey, JSON.stringify({
+          path: window.location.pathname,
+          anchorId,
+          topOffset: target.getBoundingClientRect().top,
+        }));
+      } catch (error) {
+        // Ignore storage issues and fall back to normal anchor behavior.
+      }
+    });
+  });
+
+  try {
+    const savedScrollState = sessionStorage.getItem(requestDetailScrollKey);
+    if (savedScrollState) {
+      sessionStorage.removeItem(requestDetailScrollKey);
+      const scrollState = JSON.parse(savedScrollState);
+      if (scrollState && scrollState.path === window.location.pathname && scrollState.anchorId) {
+        const target = document.getElementById(scrollState.anchorId);
+        if (target) {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              const desiredTop = window.scrollY + target.getBoundingClientRect().top - (scrollState.topOffset || 0);
+              window.scrollTo(0, Math.max(0, desiredTop));
+            });
+          });
+        }
+      }
+    }
+  } catch (error) {
+    sessionStorage.removeItem(requestDetailScrollKey);
+  }
+
   if (lastContactedForm && lastContactedInput) {
     lastContactedInput.addEventListener('change', function () {
       lastContactedForm.submit();
     });
   }
+
+  document.querySelectorAll('[data-photo-gallery]').forEach(function (gallery) {
+    const stageImage = gallery.querySelector('[data-gallery-stage]');
+    const stageCount = gallery.querySelector('[data-gallery-count]');
+    const prevButton = gallery.querySelector('[data-gallery-prev]');
+    const nextButton = gallery.querySelector('[data-gallery-next]');
+    const thumbButtons = Array.from(gallery.querySelectorAll('[data-gallery-thumb]'));
+    let activeIndex = 0;
+    let windowStart = 0;
+
+    if (!stageImage || !thumbButtons.length) {
+      return;
+    }
+
+    function getVisibleCount() {
+      return window.matchMedia('(max-width: 640px)').matches ? 3 : 5;
+    }
+
+    function clampWindowStart(nextStart, visibleCount) {
+      const maxStart = Math.max(0, thumbButtons.length - visibleCount);
+      return Math.max(0, Math.min(nextStart, maxStart));
+    }
+
+    function syncWindowToActive(visibleCount) {
+      if (activeIndex < windowStart) {
+        windowStart = activeIndex;
+      } else if (activeIndex >= windowStart + visibleCount) {
+        windowStart = activeIndex - visibleCount + 1;
+      }
+
+      windowStart = clampWindowStart(windowStart, visibleCount);
+    }
+
+    function render(focusThumb) {
+      const visibleCount = getVisibleCount();
+      const hasMultiplePhotos = thumbButtons.length > 1;
+
+      syncWindowToActive(visibleCount);
+
+      thumbButtons.forEach(function (button, index) {
+        const isActive = index === activeIndex;
+        const isVisible = index >= windowStart && index < windowStart + visibleCount;
+
+        button.hidden = !isVisible;
+        button.classList.toggle('is-active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        button.tabIndex = isVisible ? 0 : -1;
+      });
+
+      stageImage.src = thumbButtons[activeIndex].dataset.photoSrc;
+      stageImage.alt = thumbButtons[activeIndex].dataset.photoAlt;
+
+      if (stageCount) {
+        stageCount.textContent = String(activeIndex + 1) + ' of ' + String(thumbButtons.length);
+      }
+
+      if (prevButton) {
+        prevButton.hidden = !hasMultiplePhotos;
+        prevButton.disabled = !hasMultiplePhotos;
+      }
+
+      if (nextButton) {
+        nextButton.hidden = !hasMultiplePhotos;
+        nextButton.disabled = !hasMultiplePhotos;
+      }
+
+      if (focusThumb) {
+        thumbButtons[activeIndex].focus();
+      }
+    }
+
+    thumbButtons.forEach(function (button, index) {
+      button.addEventListener('click', function () {
+        activeIndex = index;
+        render(false);
+      });
+    });
+
+    if (prevButton) {
+      prevButton.addEventListener('click', function () {
+        if (thumbButtons.length <= 1) {
+          return;
+        }
+
+        activeIndex = (activeIndex - 1 + thumbButtons.length) % thumbButtons.length;
+        render(true);
+      });
+    }
+
+    if (nextButton) {
+      nextButton.addEventListener('click', function () {
+        if (thumbButtons.length <= 1) {
+          return;
+        }
+
+        activeIndex = (activeIndex + 1) % thumbButtons.length;
+        render(true);
+      });
+    }
+
+    window.addEventListener('resize', function () {
+      render(false);
+    });
+
+    render(false);
+  });
 
 })();
 </script>

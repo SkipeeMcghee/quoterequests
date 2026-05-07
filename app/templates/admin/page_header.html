@@ -1,11 +1,10 @@
 {% macro render_admin_page_header(title, description, nav_mode='main', return_url=None, return_label=None, meta=None, actions_class='detail-actions') %}
   {% set header_actions %}{% if caller is defined %}{{ caller() }}{% endif %}{% endset %}
+  {% set use_compact_admin_header = current_user.is_authenticated and request.blueprint == 'admin' %}
   <section class="section-intro admin-page-header">
     {% if nav_mode == 'sub' and return_url and return_label %}
       <div class="admin-page-header__nav admin-page-header__nav--top">
-        {% set admin_return_url = return_url %}
-        {% set admin_return_label = return_label %}
-        {% include "admin/nav_buttons.html" %}
+        <a class="btn btn-secondary btn-small" href="{{ return_url }}">{{ return_label }}</a>
       </div>
     {% endif %}
 
@@ -25,7 +24,7 @@
       {% endif %}
     </div>
 
-    {% if nav_mode == 'main' %}
+    {% if nav_mode == 'main' and not use_compact_admin_header %}
       <div class="admin-page-header__nav">
         {% include "admin/nav_buttons.html" %}
       </div>
