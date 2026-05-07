@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from app.admin import bp
 from app.auth.routes import handle_admin_login
 from app.forms.admin import (
+    ActionForm,
     AppointmentForm,
     AppointmentStatusForm,
     CreateCustomerForm,
@@ -83,6 +84,7 @@ from app.services.admin_requests import (
     upload_customer_photos,
     update_last_contacted_on,
     update_request_note,
+    unlink_quote_request_from_customer,
 )
 
 
@@ -935,6 +937,34 @@ def assign_staff_to_appointment(appointment_id: int):
     return _redirect_after_inline_appointment_action(appointment)
 
 
+@bp.post("/appointments/<int:appointment_id>/remove-staff/<int:staff_member_id>")
+@login_required
+def remove_staff_from_appointment(appointment_id: int, staff_member_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+
+    form = ActionForm(prefix=f"remove-staff-{staff_member_id}")
+    appointment = get_appointment(appointment_id)
+    if form.validate_on_submit():
+        assigned_staff_ids = [staff.id for staff in appointment.assigned_staff]
+        if staff_member_id not in assigned_staff_ids:
+            flash("Staff member is not assigned to this event.", "error")
+        else:
+            try:
+                set_appointment_staff_assignments(
+                    appointment_id,
+                    [assigned_id for assigned_id in assigned_staff_ids if assigned_id != staff_member_id],
+                )
+                flash("Staff member removed from the scheduled event.", "success")
+            except Exception as exc:
+                flash(str(exc), "error")
+    else:
+        flash("Invalid staff removal request.", "error")
+
+    appointment = get_appointment(appointment_id)
+    return _redirect_after_inline_appointment_action(appointment)
+
+
 @bp.get("/requests/<int:request_id>")
 @login_required
 def request_detail(request_id: int):
@@ -988,7 +1018,16 @@ def request_detail(request_id: int):
         for note in quote_request.notes
         if note.created_by == current_user.id
     }
-    delete_note_form = DeleteNoteForm(prefix="delete-note")
+    delete_note_forms = {
+        note.id: DeleteNoteForm(prefix=f"delete-note-{note.id}")
+        for note in quote_request.notes
+        if note.created_by == current_user.id
+    }
+    unlink_customer_form = ActionForm(prefix="unlink-customer")
+    remove_staff_forms = {
+        staff.id: ActionForm(prefix=f"remove-staff-{staff.id}")
+        for staff in (quote_request.current_appointment.assigned_staff if quote_request.current_appointment else [])
+    }
     link_customer_form = LinkCustomerForm(prefix="link-customer")
     link_customer_form.manual_customer_id.choices = [
         (0, "Choose an existing customer"),
@@ -1014,8 +1053,10 @@ def request_detail(request_id: int):
         note_form=note_form,
         request_quote_form=request_quote_form,
         quote_decision_forms=quote_decision_forms,
-        delete_note_form=delete_note_form,
+        delete_note_forms=delete_note_forms,
         edit_note_forms=edit_note_forms,
+        unlink_customer_form=unlink_customer_form,
+        remove_staff_forms=remove_staff_forms,
         last_contacted_form=last_contacted_form,
         appointment_form=appointment_form,
         appointment_status_form=appointment_status_form,
@@ -1204,6 +1245,25 @@ def link_customer_route(request_id: int):
             flash("Select an existing customer before linking.", "error")
     else:
         flash("Select an existing customer before linking.", "error")
+
+    return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="customer-matching"))
+
+
+@bp.post("/requests/<int:request_id>/unlink-customer")
+@login_required
+def unlink_customer_route(request_id: int):
+    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+        return redirect(url_for("admin.request_detail", request_id=request_id))
+
+    form = ActionForm(prefix="unlink-customer")
+    if form.validate_on_submit():
+        try:
+            unlink_quote_request_from_customer(request_id)
+            flash("Request unlinked from customer.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Invalid unlink request.", "error")
 
     return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="customer-matching"))
 

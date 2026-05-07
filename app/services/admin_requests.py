@@ -165,6 +165,19 @@ def link_quote_request_to_customer(request_id: int, customer_id: int) -> Custome
     return customer
 
 
+def unlink_quote_request_from_customer(request_id: int) -> QuoteRequest:
+    quote_request = get_quote_request(request_id)
+    if quote_request.customer_id is None:
+        raise BadRequest("Request is not linked to a customer.")
+
+    quote_request.customer = None
+    for appointment in quote_request.appointments:
+        appointment.customer = None
+
+    db.session.commit()
+    return quote_request
+
+
 def create_customer(
     primary_name: str,
     primary_phone: str | None = None,

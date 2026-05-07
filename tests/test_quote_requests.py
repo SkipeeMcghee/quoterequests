@@ -477,6 +477,85 @@ def test_request_detail_shows_inline_edit_form_for_current_appointment(client, a
     assert f'action="/admin/appointments/{appointment_id}/edit?return_to=request"' in body
     assert f"View scheduled event #{appointment_id}" in body
     assert "Open day agenda" in body
+    assert "<dt>Agenda</dt>" not in body
+
+
+def test_request_detail_can_remove_assigned_staff_from_current_appointment(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+    app.config["ENABLE_STAFF_MANAGEMENT"] = True
+
+    with app.app_context():
+        from app.models import Appointment, AppointmentStaffAssignment, StaffMember
+
+        customer = Customer(
+            primary_name="Ari Blake",
+            primary_email="ari@example.com",
+            primary_phone="555-444-7777",
+            primary_city="32 Broad St",
+        )
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            email="ari@example.com",
+            city="32 Broad St",
+            customer=customer,
+        )
+        appointment = Appointment(
+            quote_request=quote_request,
+            customer=customer,
+            title="Paint consultation",
+            scheduled_date=date(2026, 5, 10),
+            start_time=time(10, 0),
+            end_time=time(11, 30),
+            status="Scheduled",
+        )
+        staff_one = StaffMember(display_name="Alex Assign", worker_type="employee", status="active")
+        staff_two = StaffMember(display_name="Morgan Assign", worker_type="employee", status="active")
+        db.session.add_all([customer, quote_request, appointment, staff_one, staff_two])
+        db.session.flush()
+        db.session.add_all(
+            [
+                AppointmentStaffAssignment(appointment_id=appointment.id, staff_member_id=staff_one.id),
+                AppointmentStaffAssignment(appointment_id=appointment.id, staff_member_id=staff_two.id),
+            ]
+        )
+        db.session.commit()
+        request_id = quote_request.id
+        appointment_id = appointment.id
+        staff_one_id = staff_one.id
+        staff_two_id = staff_two.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get(f"/admin/requests/{request_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert f'/admin/appointments/{appointment_id}/remove-staff/{staff_one_id}?return_to=request' in body
+    assert 'aria-label="Remove Alex Assign from scheduled event"' in body
+    assert 'inline-remove-button inline-remove-button--bare' in body
+
+    response = client.post(
+        f"/admin/appointments/{appointment_id}/remove-staff/{staff_one_id}?return_to=request",
+        data={},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert f'/admin/appointments/{appointment_id}/remove-staff/{staff_one_id}?return_to=request' not in body
+    assert f'/admin/appointments/{appointment_id}/remove-staff/{staff_two_id}?return_to=request' in body
+
+    with app.app_context():
+        from app.models import Appointment
+
+        appointment = db.session.get(Appointment, appointment_id)
+        assigned_staff_ids = sorted(assignment.staff_member_id for assignment in appointment.staff_assignments)
+        assert assigned_staff_ids == [staff_two_id]
 
 
 def test_request_detail_inline_edit_returns_to_request_page(client, app, admin_user):
@@ -644,29 +723,44 @@ def test_admin_day_agenda_and_appointment_detail_preserve_schedule_navigation(cl
 
 
 def test_admin_can_edit_and_delete_own_internal_note(client, app, admin_user):
-    client.post(
-        "/quote-request",
-        data={
-            "full_name": "Casey Blake",
-            "phone": "555-444-9999",
-            "services": ["Painting"],
-            "city": "77 Market St",
-        },
-        follow_redirects=False,
-    )
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Casey Blake",
+            phone="555-444-9999",
+            city="77 Market St",
+            request_type="Painting",
+        )
+        db.session.add(quote_request)
+        db.session.commit()
+        request_id = quote_request.id
+
     client.post(
         "/auth/login",
         data={"email": admin_user, "password": "password123", "remember_me": "y"},
         follow_redirects=False,
     )
     client.post(
-        "/admin/requests/1/notes",
+        f"/admin/requests/{request_id}/notes",
         data={"note_text": "Initial internal note."},
         follow_redirects=False,
     )
+
+    with app.app_context():
+        note = RequestNote.query.one()
+        note_id = note.id
+
+    response = client.get(f"/admin/requests/{request_id}")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'class="note-action-link note-edit-toggle"' in body
+    assert 'aria-label="Delete note"' in body
+    assert 'inline-remove-button inline-remove-button--bare' in body
+    assert 'btn btn-secondary btn-small note-edit-toggle' not in body
+    assert '>Delete</button>' not in body
+
     response = client.post(
-        "/admin/notes/1/edit",
-        data={"edit-note-1-note_text": "Updated internal note."},
+        f"/admin/notes/{note_id}/edit",
+        data={f"edit-note-{note_id}-note_text": "Updated internal note."},
         follow_redirects=False,
     )
     assert response.status_code == 302
@@ -676,7 +770,7 @@ def test_admin_can_edit_and_delete_own_internal_note(client, app, admin_user):
         assert note.note_text == "Updated internal note."
 
     response = client.post(
-        "/admin/notes/1/delete",
+        f"/admin/notes/{note_id}/delete",
         data={},
         follow_redirects=False,
     )
@@ -1082,6 +1176,69 @@ def test_request_detail_shows_compact_linked_customer_summary(client, app, admin
     assert "View Customer" not in body
     assert "Customer account" not in body
     assert "customer-link-panel--linked" not in body
+    assert f'action="/admin/requests/{request_id}/unlink-customer"' in body
+    assert 'aria-label="Unlink customer"' in body
+    assert '<div class="customer-link-inline">' in body
+    assert 'inline-remove-button inline-remove-button--bare' in body
+
+
+def test_request_detail_can_unlink_linked_customer(client, app, admin_user):
+    app.config["ENABLE_CUSTOMER_RECORDS"] = True
+
+    with app.app_context():
+        from app.models import Appointment
+
+        customer = Customer(
+            primary_name="Jordan Avery",
+            primary_email="jordan@example.com",
+            primary_phone="555-010-1212",
+            primary_city="Pine Grove",
+        )
+        quote_request = QuoteRequest(
+            full_name="Jordan Avery",
+            phone="555-010-1212",
+            email="jordan@example.com",
+            city="Pine Grove",
+            customer=customer,
+        )
+        appointment = Appointment(
+            quote_request=quote_request,
+            customer=customer,
+            title="Initial walkthrough",
+            scheduled_date=date(2026, 5, 10),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            status="Scheduled",
+        )
+        db.session.add_all([customer, quote_request, appointment])
+        db.session.commit()
+        request_id = quote_request.id
+        appointment_id = appointment.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        f"/admin/requests/{request_id}/unlink-customer",
+        data={},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Customer account" in body
+    assert "Linked:" not in body
+
+    with app.app_context():
+        from app.models import Appointment
+
+        quote_request = db.session.get(QuoteRequest, request_id)
+        appointment = db.session.get(Appointment, appointment_id)
+        assert quote_request.customer_id is None
+        assert appointment.customer_id is None
 
 
 def test_request_detail_includes_scroll_restore_targets_for_inline_forms(client, app, admin_user):

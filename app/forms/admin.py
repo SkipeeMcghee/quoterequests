@@ -27,6 +27,10 @@ class RequestQuoteDecisionForm(FlaskForm):
     submit = SubmitField("Save Decision")
 
 
+class ActionForm(FlaskForm):
+    pass
+
+
 class NoteForm(FlaskForm):
     note_text = TextAreaField("Internal note", validators=[DataRequired(), Length(max=4000)])
     submit = SubmitField("Save Changes")

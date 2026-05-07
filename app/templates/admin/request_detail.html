@@ -92,10 +92,14 @@
             <div id="customer-matching">
               <dt>Customer</dt>
               <dd>
-                <p class="customer-link-inline">
+                <div class="customer-link-inline">
                   <span class="customer-link-inline__label subtle-text">Linked:</span>
                   <a class="customer-link-inline__link" href="{{ url_for('admin.customer_detail', customer_id=quote_request.customer.id) }}">{{ quote_request.customer.primary_name or 'Unnamed customer' }}</a>
-                </p>
+                  <form method="post" action="{{ url_for('admin.unlink_customer_route', request_id=quote_request.id) }}" class="inline-form customer-link-inline__action" data-scroll-anchor="customer-matching">
+                    {{ unlink_customer_form.hidden_tag() }}
+                    <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Unlink customer">&times;</button>
+                  </form>
+                </div>
               </dd>
             </div>
           {% endif %}
@@ -310,7 +314,13 @@
                   {% if appointment.assigned_staff %}
                     <div class="tag-list">
                       {% for staff in appointment.assigned_staff %}
-                        <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}" class="tag">{{ staff.display_name }}</a>
+                        <span class="tag removable-tag">
+                          <a href="{{ url_for('admin.staff_detail', staff_member_id=staff.id) }}" class="removable-tag__link">{{ staff.display_name }}</a>
+                          <form method="post" action="{{ url_for('admin.remove_staff_from_appointment', appointment_id=appointment.id, staff_member_id=staff.id, return_to='request') }}" class="inline-form removable-tag__action" data-scroll-anchor="scheduling">
+                            {{ remove_staff_forms[staff.id].hidden_tag() }}
+                            <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Remove {{ staff.display_name }} from scheduled event">&times;</button>
+                          </form>
+                        </span>
                       {% endfor %}
                     </div>
                   {% else %}
@@ -321,14 +331,13 @@
               {% endif %}
               <div>
                 <dt>Appointment</dt>
-                <dd><a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">View scheduled event #{{ appointment.id }}</a></dd>
+                  <dd>
+                    <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">View scheduled event #{{ appointment.id }}</a>
+                    {% if appointment.scheduled_date %}
+                    <div><a href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open day agenda</a></div>
+                    {% endif %}
+                  </dd>
               </div>
-              {% if appointment.scheduled_date %}
-              <div>
-                <dt>Agenda</dt>
-                <dd><a href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open day agenda</a></dd>
-              </div>
-              {% endif %}
             </dl>
 
             <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id, return_to='request') }}" class="stacked-form" data-scroll-anchor="scheduling">
@@ -473,10 +482,10 @@
                 </div>
                 {% if note.created_by == current_user.id %}
                   <div class="note-actions">
-                    <button type="button" class="btn btn-secondary btn-small note-edit-toggle" data-note-id="{{ note.id }}">Edit</button>
+                    <button type="button" class="note-action-link note-edit-toggle" data-note-id="{{ note.id }}" aria-expanded="false" aria-controls="note-edit-panel-{{ note.id }}">Edit</button>
                     <form method="post" action="{{ url_for('admin.delete_note_route', note_id=note.id) }}" class="inline-form" data-scroll-anchor="notes">
-                      {{ delete_note_form.hidden_tag() }}
-                      <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                      {{ delete_note_forms[note.id].hidden_tag() }}
+                      <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete note">&times;</button>
                     </form>
                   </div>
                 {% endif %}
@@ -559,6 +568,20 @@
       lastContactedForm.submit();
     });
   }
+
+  document.querySelectorAll('.note-edit-toggle').forEach(function (toggle) {
+    toggle.addEventListener('click', function () {
+      const noteId = toggle.dataset.noteId;
+      const panel = document.getElementById('note-edit-panel-' + noteId);
+      if (!panel) {
+        return;
+      }
+
+      const willExpand = panel.classList.contains('hidden');
+      panel.classList.toggle('hidden');
+      toggle.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+    });
+  });
 
   document.querySelectorAll('[data-photo-gallery]').forEach(function (gallery) {
     const stageImage = gallery.querySelector('[data-gallery-stage]');

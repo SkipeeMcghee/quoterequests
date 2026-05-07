@@ -376,6 +376,11 @@ textarea {
   margin: 0;
 }
 
+.customer-link-inline__action {
+  display: flex;
+  align-items: center;
+}
+
 .customer-link-inline__link {
   color: var(--accent-strong);
   font-weight: 700;
@@ -1143,6 +1148,97 @@ textarea {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.note-action-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.16em;
+}
+
+.note-action-link:hover,
+.note-action-link:focus-visible {
+  color: var(--accent);
+  text-decoration-thickness: 2px;
+}
+
+.inline-remove-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  padding: 0;
+  border: 1px solid rgba(var(--theme-brand-rgb), 0.18);
+  border-radius: 999px;
+  background: rgba(var(--theme-brand-rgb), 0.08);
+  color: var(--danger);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.inline-remove-button:hover,
+.inline-remove-button:focus-visible {
+  background: rgba(var(--theme-brand-rgb), 0.14);
+  border-color: rgba(var(--theme-brand-rgb), 0.26);
+  color: var(--danger);
+}
+
+.inline-remove-button--bare {
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.inline-remove-button--bare:hover,
+.inline-remove-button--bare:focus-visible {
+  background: transparent;
+  border-color: transparent;
+  color: rgba(var(--theme-brand-rgb), 0.7);
+}
+
+.inline-remove-button--bare:active {
+  background: transparent;
+  border-color: transparent;
+  color: rgba(var(--theme-accent-rgb), 0.92);
+}
+
+.removable-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.removable-tag__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.removable-tag__link:hover,
+.removable-tag__link:focus-visible {
+  text-decoration: underline;
+}
+
+.removable-tag__action {
+  display: inline-flex;
+  align-items: center;
 }
 
 .button-row,
