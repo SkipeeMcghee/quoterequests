@@ -353,6 +353,7 @@ def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_u
     assert "value=\"1\"" in body
     assert "name=\"scheduled-work-scheduled_date\"" in body
     assert "value=\"2026-05-10\"" in body
+    assert "name=\"scheduled-work-status\"" not in body
     assert "Source request" in body
     assert "Selected date" in body
 
@@ -418,7 +419,6 @@ def test_request_detail_can_schedule_inline_and_link_existing_customer(client, a
             "create-start_time_minute": "0",
             "create-end_time_hour": "11",
             "create-end_time_minute": "30",
-            "create-status": "Scheduled",
             "create-submit": "Schedule Event",
         },
         follow_redirects=False,
@@ -475,6 +475,7 @@ def test_request_detail_shows_inline_edit_form_for_current_appointment(client, a
     body = response.get_data(as_text=True)
     assert "Keep the scheduled event current here and open the full event page only when you need deeper tools." in body
     assert f'action="/admin/appointments/{appointment_id}/edit?return_to=request"' in body
+    assert 'name="edit-status"' not in body
     assert f"View scheduled event #{appointment_id}" in body
     assert "Open day agenda" in body
     assert "<dt>Agenda</dt>" not in body
@@ -601,7 +602,6 @@ def test_request_detail_inline_edit_returns_to_request_page(client, app, admin_u
             "edit-start_time_minute": "0",
             "edit-end_time_hour": "13",
             "edit-end_time_minute": "30",
-            "edit-status": "Scheduled",
             "edit-submit": "Save Scheduling Changes",
         },
         follow_redirects=False,

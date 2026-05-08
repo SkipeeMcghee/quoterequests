@@ -257,7 +257,7 @@ def test_incoming_request_workflow_end_to_end(client, app, admin_user):
         client,
         f"/admin/requests/{request_id}",
         back_label="Back to Requests",
-        expected_text=("Schedule This Work", "Customer account", "Create the scheduled event in one place."),
+        expected_text=("Scheduling", "Customer account", "Schedule this request here without leaving the review workflow."),
     )
 
     with app.app_context():
@@ -291,7 +291,6 @@ def test_incoming_request_workflow_end_to_end(client, app, admin_user):
             "scheduled-work-scheduled_date": scheduled_date.isoformat(),
             **_time_form_data("scheduled-work", "start_time", 9),
             **_time_form_data("scheduled-work", "end_time", 11),
-            "scheduled-work-status": "Scheduled",
             "scheduled-work-customer_notes": "Customer requested an arrival text.",
             "scheduled-work-internal_notes": "Bring ladder.",
             "scheduled-work-submit": "Add Work",
@@ -310,12 +309,14 @@ def test_incoming_request_workflow_end_to_end(client, app, admin_user):
         assert quote_request is not None
         assert quote_request.status == "Scheduled"
 
-    _assert_page_contract(
+    appointment_body = _assert_page_contract(
         client,
         appointment_detail_url,
         back_label="Back to Request",
-        expected_text=("Window visit from request", "Open Day Agenda", "Edit scheduling"),
+        expected_text=("Window visit from request", "Open Day Agenda", "Event notes"),
     )
+    assert "Reschedule" not in appointment_body
+    assert "Customer notes" not in appointment_body
 
     day_url = f"/admin/calendar/{scheduled_date.year}/{scheduled_date.month:02d}/{scheduled_date.day:02d}"
     day_body = _assert_page_contract(
@@ -413,7 +414,6 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
             "scheduled-work-scheduled_date": scheduled_date.isoformat(),
             **_time_form_data("scheduled-work", "start_time", 13),
             **_time_form_data("scheduled-work", "end_time", 15),
-            "scheduled-work-status": "Scheduled",
             "scheduled-work-submit": "Add Work",
         },
         follow_redirects=False,
@@ -516,7 +516,6 @@ def test_scheduling_workflow_end_to_end(client, app, admin_user):
             "scheduled-work-scheduled_date": scheduled_date.isoformat(),
             **_time_form_data("scheduled-work", "start_time", 10, 30),
             **_time_form_data("scheduled-work", "end_time", 12),
-            "scheduled-work-status": "Scheduled",
             "scheduled-work-submit": "Add Work",
         },
         follow_redirects=False,
@@ -596,12 +595,14 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
         f"/admin/appointments/{appointment_id}?source=day&date={scheduled_date.isoformat()}"
         f"&year={scheduled_date.year}&month={scheduled_date.month}&day={scheduled_date.day}"
     )
-    _assert_page_contract(
+    appointment_detail_body = _assert_page_contract(
         client,
         appointment_detail_url,
         back_label="Back to Day Agenda",
-        expected_text=("Edit scheduling", "Reschedule", "History"),
+        expected_text=("Event notes", "History", "Open Day Agenda"),
     )
+    assert "Reschedule" not in appointment_detail_body
+    assert "Customer notes" not in appointment_detail_body
 
     response = client.post(
         (
@@ -613,8 +614,6 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
             "edit-scheduled_date": scheduled_date.isoformat(),
             **_time_form_data("edit", "start_time", 11),
             **_time_form_data("edit", "end_time", 13),
-            "edit-status": "Completed",
-            "edit-customer_notes": "Customer confirmed the gate will be unlocked.",
             "edit-internal_notes": "Crew lead approved the updated timing.",
             "edit-requested_date": "",
             "edit-requested_time_hour": "",
@@ -629,15 +628,15 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
     assert response.status_code == 200
     updated_body = response.get_data(as_text=True)
     assert "Updated window visit" in updated_body
-    assert "Customer confirmed the gate will be unlocked." in updated_body
+    assert "Crew lead approved the updated timing." in updated_body
 
     with app.app_context():
         appointment = db.session.get(Appointment, appointment_id)
         assert appointment is not None
         assert appointment.title == "Updated window visit"
-        assert appointment.customer_notes == "Customer confirmed the gate will be unlocked."
+        assert appointment.customer_notes == "Call before arrival."
         assert appointment.internal_notes == "Crew lead approved the updated timing."
-        assert appointment.status == "Completed"
+        assert appointment.status == "Scheduled"
 
     refreshed_list_body = _assert_page_contract(
         client,
@@ -653,7 +652,7 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
         back_label="Back to Calendar View",
         expected_text=("Updated window visit",),
     )
-    assert "Completed" in refreshed_day_body
+    assert "Scheduled" in refreshed_day_body
 
 
 def test_recurring_work_workflow_end_to_end(client, app, admin_user):

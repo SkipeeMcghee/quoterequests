@@ -1957,6 +1957,88 @@ thead th {
   text-transform: uppercase;
 }
 
+.appointment-detail-stack,
+.appointment-editor-form,
+.appointment-editor-main,
+.appointment-editor-side {
+  display: grid;
+  gap: 1rem;
+}
+
+.appointment-editor-card {
+  gap: 1.25rem;
+}
+
+.appointment-editor-card__header,
+.appointment-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.appointment-editor-card__header h2 {
+  margin: 0;
+}
+
+.appointment-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.appointment-editor-schedule-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.appointment-editor-notes .textarea {
+  min-height: 220px;
+}
+
+.appointment-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.appointment-meta-item {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  background: rgba(23, 77, 56, 0.05);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+}
+
+.appointment-meta-item--wide {
+  grid-column: 1 / -1;
+}
+
+.appointment-meta-item span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.appointment-meta-item a {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.appointment-meta-item a:hover,
+.appointment-meta-item a:focus-visible {
+  text-decoration: none;
+}
+
+.appointment-editor-actions {
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  align-items: center;
+}
+
 
 .history-header {
   display: flex;
@@ -2705,7 +2787,10 @@ thead th {
   }
 
   .agenda-snapshot-grid,
-  .appointment-overview-grid {
+  .appointment-overview-grid,
+  .appointment-editor-layout,
+  .appointment-meta-grid,
+  .appointment-editor-schedule-grid {
     grid-template-columns: 1fr;
   }
 
@@ -2720,6 +2805,10 @@ thead th {
 
   .appointment-overview-card__status {
     justify-items: start;
+  }
+
+  .appointment-editor-actions {
+    align-items: stretch;
   }
 
   .filter-row,

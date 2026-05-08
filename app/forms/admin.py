@@ -222,12 +222,6 @@ class CreateScheduledWorkForm(TimeSelectMixin, FlaskForm):
     start_time_minute = SelectField("Start time minute", validators=[Optional()])
     end_time_hour = SelectField("End time hour", validators=[Optional()])
     end_time_minute = SelectField("End time minute", validators=[Optional()])
-    status = SelectField(
-        "Status",
-        choices=[(status, status) for status in ("Scheduled", "Requested", "Completed", "Cancelled", "Rescheduled", "No Show")],
-        default="Scheduled",
-        validators=[DataRequired()],
-    )
     customer_notes = TextAreaField("Customer notes", validators=[Optional(), Length(max=2000)])
     internal_notes = TextAreaField("Internal notes", validators=[Optional(), Length(max=2000)])
     submit = SubmitField("Add Work")
@@ -318,12 +312,6 @@ class AppointmentForm(TimeSelectMixin, FlaskForm):
     start_time_minute = SelectField("Start time minute", validators=[Optional()])
     end_time_hour = SelectField("End time hour", validators=[Optional()])
     end_time_minute = SelectField("End time minute", validators=[Optional()])
-    status = SelectField(
-        "Status",
-        choices=[(status, status) for status in ("Scheduled", "Completed", "Cancelled", "Rescheduled", "No Show")],
-        default="Scheduled",
-        validators=[DataRequired()],
-    )
     customer_notes = TextAreaField("Customer notes", validators=[Optional(), Length(max=2000)])
     internal_notes = TextAreaField("Internal notes", validators=[Optional(), Length(max=2000)])
     requested_date = DateField("Requested date", validators=[Optional()])

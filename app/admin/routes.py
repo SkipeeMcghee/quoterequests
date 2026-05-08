@@ -728,7 +728,6 @@ def new_scheduled_work():
                 scheduled_date=form.scheduled_date.data,
                 start_time=start_time,
                 end_time=end_time,
-                status=form.status.data,
                 customer_notes=form.customer_notes.data,
                 internal_notes=form.internal_notes.data,
             )
@@ -770,7 +769,8 @@ def appointment_detail(appointment_id: int):
 
     appointment = get_appointment(appointment_id)
     appointment_form = AppointmentForm(obj=appointment, prefix="edit")
-    reschedule_form = RescheduleAppointmentForm(prefix="reschedule")
+    if not appointment_form.internal_notes.data and appointment.customer_notes:
+        appointment_form.internal_notes.data = appointment.customer_notes
 
     history = []
     previous = appointment.previous_appointment
@@ -900,7 +900,6 @@ def appointment_detail(appointment_id: int):
         matching_staff_info=matching_staff_info,
         other_staff_info=other_staff_info,
         required_service_names=required_service_names,
-        reschedule_form=reschedule_form,
         history=history,
         future_reschedules=future_reschedules,
         calendar_year=calendar_year,
@@ -913,7 +912,6 @@ def appointment_detail(appointment_id: int):
         appointment_day_url=appointment_day_url,
         assign_staff_url=url_for("admin.assign_staff_to_appointment", appointment_id=appointment.id, **appointment_context_args),
         edit_appointment_url=url_for("admin.edit_appointment_route", appointment_id=appointment.id, **appointment_context_args),
-        reschedule_appointment_url=url_for("admin.reschedule_appointment_route", appointment_id=appointment.id, **appointment_context_args),
     )
 
 
@@ -977,7 +975,6 @@ def request_detail(request_id: int):
     }
     last_contacted_form = LastContactedForm(obj=quote_request)
     appointment_form = None
-    appointment_status_form = None
     reschedule_form = None
 
     if current_app.config.get("ENABLE_SCHEDULING"):
@@ -993,7 +990,6 @@ def request_detail(request_id: int):
             if appointment_customer:
                 appointment_form.customer_id.data = appointment_customer.id
             appointment_form.submit.label.text = "Save Scheduling Changes"
-            appointment_status_form = AppointmentStatusForm(status=quote_request.current_appointment.status)
             reschedule_form = RescheduleAppointmentForm(prefix="reschedule")
         else:
             appointment_form = AppointmentForm(prefix="create")
@@ -1059,7 +1055,6 @@ def request_detail(request_id: int):
         remove_staff_forms=remove_staff_forms,
         last_contacted_form=last_contacted_form,
         appointment_form=appointment_form,
-        appointment_status_form=appointment_status_form,
         reschedule_form=reschedule_form,
         link_customer_form=link_customer_form,
         create_customer_form=create_customer_form,
@@ -1199,7 +1194,6 @@ def create_appointment_route(request_id: int):
                 scheduled_date=form.scheduled_date.data,
                 start_time=start_time,
                 end_time=end_time,
-                status=form.status.data,
             )
             flash("Appointment created.", "success")
     else:
@@ -2017,19 +2011,38 @@ def edit_appointment_route(appointment_id: int):
     form = AppointmentForm(prefix="edit")
     if form.validate_on_submit():
         appointment = get_appointment(appointment_id)
+        requested_date = appointment.requested_date
+        if form.requested_date.name in request.form:
+            requested_date = form.requested_date.data
+
+        requested_time = appointment.requested_time
+        if form.requested_time_hour.name in request.form or form.requested_time_minute.name in request.form:
+            requested_time = form.time_value("requested_time")
+
+        confirmed_date = appointment.confirmed_date
+        if form.confirmed_date.name in request.form:
+            confirmed_date = form.confirmed_date.data
+
+        confirmed_time = appointment.confirmed_time
+        if form.confirmed_time_hour.name in request.form or form.confirmed_time_minute.name in request.form:
+            confirmed_time = form.time_value("confirmed_time")
+
+        customer_notes = appointment.customer_notes
+        if form.customer_notes.name in request.form:
+            customer_notes = (form.customer_notes.data or "").strip() or None
+
         update_appointment(
             appointment_id,
             title=(form.title.data or "").strip() or None,
-            requested_date=form.requested_date.data,
-            requested_time=form.time_value("requested_time"),
-            confirmed_date=form.confirmed_date.data,
-            confirmed_time=form.time_value("confirmed_time"),
-            customer_notes=(form.customer_notes.data or "").strip() or None,
+            requested_date=requested_date,
+            requested_time=requested_time,
+            confirmed_date=confirmed_date,
+            confirmed_time=confirmed_time,
+            customer_notes=customer_notes,
             internal_notes=(form.internal_notes.data or "").strip() or None,
             scheduled_date=form.scheduled_date.data,
             start_time=form.time_value("start_time"),
             end_time=form.time_value("end_time"),
-            status=form.status.data,
         )
         flash("Appointment details updated.", "success")
     else:

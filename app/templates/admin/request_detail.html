@@ -278,7 +278,7 @@
       {% if enable_scheduling %}
         <article class="summary-card" id="scheduling">
           {% set appointment = quote_request.current_appointment %}
-          {% set show_schedule_optional_section = appointment_form and (appointment_form.customer_notes.data or appointment_form.internal_notes.data or (appointment_form.status.data and appointment_form.status.data != 'Scheduled')) %}
+          {% set show_schedule_optional_section = appointment_form and (appointment_form.customer_notes.data or appointment_form.internal_notes.data) %}
           <div class="section-bar compact-bar">
             <div>
               <h2>Scheduling</h2>
@@ -357,13 +357,8 @@
                 {{ render_time_select(appointment_form.end_time_hour, appointment_form.end_time_minute, "End time") }}
               </div>
               <details class="schedule-details"{% if show_schedule_optional_section %} open{% endif %}>
-                <summary>Status and notes</summary>
+                <summary>Notes</summary>
                 <div class="schedule-details__content">
-                  <label class="form-field">
-                    <span>Status</span>
-                    {{ appointment_form.status(class_="select") }}
-                    {% for error in appointment_form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-                  </label>
                   <label class="form-field">
                     <span>Customer notes</span>
                     {{ appointment_form.customer_notes(class_="textarea") }}
@@ -433,13 +428,8 @@
                 {{ render_time_select(appointment_form.end_time_hour, appointment_form.end_time_minute, "End time", required=true) }}
               </div>
               <details class="schedule-details"{% if show_schedule_optional_section %} open{% endif %}>
-                <summary>Optional status and notes</summary>
+                <summary>Optional notes</summary>
                 <div class="schedule-details__content">
-                  <label class="form-field">
-                    <span>Status</span>
-                    {{ appointment_form.status(class_="select") }}
-                    {% for error in appointment_form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-                  </label>
                   <label class="form-field">
                     <span>Customer notes</span>
                     {{ appointment_form.customer_notes(class_="textarea") }}

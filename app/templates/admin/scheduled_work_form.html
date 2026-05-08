@@ -7,7 +7,7 @@
 {% block content %}
 <main class="shell dashboard-shell">
   {% set show_new_customer_section = (not form.customer_id.data) or form.new_customer_name.data or form.new_customer_city.data or form.new_customer_phone.data or form.new_customer_email.data or form.new_customer_name.errors or form.new_customer_city.errors or form.customer_id.errors %}
-  {% set show_optional_section = form.customer_notes.data or form.internal_notes.data or (form.status.data and form.status.data != 'Scheduled') %}
+  {% set show_optional_section = form.customer_notes.data or form.internal_notes.data %}
   {% call render_admin_page_header(
     title='Create Scheduled Event',
     description='Use the same admin scheduling flow for requests, customers, schedule, and day-agenda entry points.',
@@ -96,14 +96,8 @@
           </details>
 
           <details class="schedule-details"{% if show_optional_section %} open{% endif %}>
-            <summary>Optional status and notes</summary>
+            <summary>Optional notes</summary>
             <div class="schedule-details__content">
-              <label class="form-field">
-                <span>Status</span>
-                {{ form.status(class_="select") }}
-                {% for error in form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-              </label>
-
               <label class="form-field">
                 <span>Customer notes</span>
                 {{ form.customer_notes(class_="textarea") }}

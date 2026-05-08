@@ -4,7 +4,7 @@ from datetime import date, time, timedelta
 
 from app.extensions import db
 from app.models import Appointment, Customer, QuoteRequest, RecurringWork
-from app.services.admin_requests import create_appointment, generate_recurring_appointments_for_customer, reschedule_appointment, update_appointment_status
+from app.services.admin_requests import create_appointment, generate_recurring_appointments_for_customer, reschedule_appointment, update_appointment, update_appointment_status
 
 
 def test_quote_request_can_have_zero_appointments(app):
@@ -155,5 +155,29 @@ def test_update_appointment_status(app):
         )
 
         updated = update_appointment_status(appointment.id, "Scheduled")
+        assert updated.status == "Scheduled"
+        assert db.session.get(Appointment, appointment.id).status == "Scheduled"
+
+
+def test_update_appointment_marks_requested_work_scheduled_when_date_is_set(app):
+    with app.app_context():
+        quote_request = QuoteRequest(full_name="Test User", phone="555-1234", email="test@example.com", city="Testville")
+        db.session.add(quote_request)
+        db.session.commit()
+
+        appointment = create_appointment(
+            quote_request.id,
+            date.today() + timedelta(days=1),
+            requested_time=time(13, 0),
+        )
+
+        updated = update_appointment(
+            appointment.id,
+            title="On-site visit",
+            scheduled_date=date.today() + timedelta(days=2),
+            start_time=time(14, 0),
+            end_time=time(15, 0),
+        )
+
         assert updated.status == "Scheduled"
         assert db.session.get(Appointment, appointment.id).status == "Scheduled"

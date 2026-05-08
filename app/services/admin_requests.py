@@ -741,6 +741,23 @@ def get_appointment(appointment_id: int) -> Appointment:
     return appointment
 
 
+def _resolve_appointment_status(
+    *,
+    scheduled_date,
+    requested_status: str | None = None,
+    current_status: str | None = None,
+) -> str:
+    if requested_status is not None:
+        if requested_status not in APPOINTMENT_STATUSES:
+            raise BadRequest("Choose a valid appointment status.")
+        return requested_status
+
+    if current_status in {"Completed", "Cancelled", "No Show"}:
+        return current_status
+
+    return "Scheduled" if scheduled_date is not None else "Requested"
+
+
 def create_appointment(
     request_id: int,
     requested_date,
@@ -753,11 +770,9 @@ def create_appointment(
     scheduled_date=None,
     start_time=None,
     end_time=None,
-    status: str = "Requested",
+    status: str | None = None,
     previous_appointment_id: int | None = None,
 ) -> Appointment:
-    if status not in APPOINTMENT_STATUSES:
-        raise BadRequest("Choose a valid appointment status.")
     if start_time is not None and end_time is not None and end_time <= start_time:
         raise BadRequest("End time must be after the start time.")
 
@@ -775,7 +790,10 @@ def create_appointment(
         confirmed_time=confirmed_time,
         customer_notes=customer_notes,
         internal_notes=internal_notes,
-        status=status,
+        status=_resolve_appointment_status(
+            scheduled_date=scheduled_date,
+            requested_status=status,
+        ),
         previous_appointment_id=previous_appointment_id,
     )
     quote_request.appointments.append(appointment)
@@ -852,10 +870,11 @@ def update_appointment(
     appointment.scheduled_date = scheduled_date
     appointment.start_time = start_time
     appointment.end_time = end_time
-    if status is not None:
-        if status not in APPOINTMENT_STATUSES:
-            raise BadRequest("Choose a valid appointment status.")
-        appointment.status = status
+    appointment.status = _resolve_appointment_status(
+        scheduled_date=scheduled_date,
+        requested_status=status,
+        current_status=appointment.status,
+    )
     if appointment.quote_request is not None:
         appointment.quote_request.sync_status()
     db.session.commit()
