@@ -36,11 +36,45 @@
           {{ form.hidden_tag() }}
           {{ form.request_id }}
 
-          <label class="form-field">
+          <label class="form-field customer-combobox" data-customer-combobox>
             <span class="field-label-row">Customer <span class="required-pill">Required</span></span>
+            <input
+              type="hidden"
+              name="{{ form.customer_id.name }}"
+              id="{{ form.customer_id.id }}"
+              value="{{ form.customer_id.data if form.customer_id.data is not none else 0 }}"
+              data-customer-id-input
+              data-customer-unselected-value="0"
+            >
 {% from "_time_selects.html" import render_time_select %}
 
-            {{ form.customer_id(class_="select") }}
+            {{ form.customer_lookup(
+              class_="input customer-combobox__input",
+              placeholder="Choose an existing customer",
+              autocomplete="off",
+              spellcheck="false",
+              data_customer_combobox_input="true",
+              role="combobox",
+              aria_autocomplete="list",
+              aria_expanded="false",
+              aria_controls=form.customer_lookup.id ~ '-options',
+              aria_haspopup="listbox"
+            ) }}
+            <div class="customer-combobox__panel" id="{{ form.customer_lookup.id }}-options" data-customer-combobox-panel role="listbox" hidden>
+              {% for customer_id, customer_label in customer_options %}
+                <button
+                  type="button"
+                  class="customer-combobox__option"
+                  id="{{ form.customer_lookup.id }}-option-{{ customer_id }}"
+                  data-customer-option
+                  data-customer-id="{{ customer_id }}"
+                  data-customer-label="{{ customer_label }}"
+                  role="option"
+                  aria-selected="false"
+                >{{ customer_label }}</button>
+              {% endfor %}
+              <div class="customer-combobox__empty subtle-text" data-customer-combobox-empty hidden>No matching customers found.</div>
+            </div>
             {% for error in form.customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             {% if customer %}
               <small class="field-help">Preselected from the current workflow context. Change it only if this event belongs to a different customer.</small>
@@ -170,4 +204,8 @@
     </div>
   </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+{% include "admin/_customer_combobox_script.html" %}
 {% endblock %}

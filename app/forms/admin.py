@@ -47,7 +47,8 @@ class LastContactedForm(FlaskForm):
 
 class LinkCustomerForm(FlaskForm):
     customer_id = HiddenField("Customer ID", validators=[Optional()])
-    manual_customer_id = SelectField("Customer", coerce=int, validators=[Optional()])
+    manual_customer_lookup = StringField("Customer", validators=[Optional()])
+    manual_customer_id = HiddenField("Customer", validators=[Optional()])
     submit = SubmitField("Link Customer")
 
 
@@ -212,6 +213,7 @@ class CreateScheduledWorkForm(TimeSelectMixin, FlaskForm):
 
     request_id = HiddenField()
     customer_id = SelectField("Customer", coerce=int, validators=[Optional()])
+    customer_lookup = StringField("Customer", validators=[Optional()])
     new_customer_name = StringField("New customer name", validators=[Optional(), Length(max=255)])
     new_customer_phone = StringField("Phone", validators=[Optional(), Length(max=50)])
     new_customer_email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
@@ -306,6 +308,7 @@ class AppointmentForm(TimeSelectMixin, FlaskForm):
     }
 
     customer_id = SelectField("Customer", coerce=int, validators=[Optional()])
+    customer_lookup = StringField("Customer", validators=[Optional()])
     title = StringField("Work title / summary", validators=[Optional(), Length(max=255)])
     scheduled_date = DateField("Scheduled date", validators=[Optional()])
     start_time_hour = SelectField("Start time hour", validators=[Optional()])

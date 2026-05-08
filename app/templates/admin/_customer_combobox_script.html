@@ -1,0 +1,267 @@
+<script>
+(function () {
+  function setupCustomerCombobox(customerCombobox) {
+    const customerLookupInput = customerCombobox.querySelector('[data-customer-combobox-input]');
+    const customerIdInput = customerCombobox.querySelector('[data-customer-id-input]');
+    const customerPanel = customerCombobox.querySelector('[data-customer-combobox-panel]');
+    const customerOptions = customerPanel ? Array.from(customerPanel.querySelectorAll('[data-customer-option]')) : [];
+    const customerEmptyState = customerPanel ? customerPanel.querySelector('[data-customer-combobox-empty]') : null;
+
+    if (!customerLookupInput || !customerIdInput || !customerPanel) {
+      return;
+    }
+
+    const unselectedValue = customerIdInput.dataset.customerUnselectedValue || '';
+    let activeCustomerOptionIndex = -1;
+
+    function normalizeCustomerLookup(value) {
+      return (value || '').trim().toLowerCase();
+    }
+
+    function customerOptionLabel(option) {
+      return option.dataset.customerLabel || option.textContent.trim();
+    }
+
+    function hasSelectedCustomer() {
+      return String(customerIdInput.value || '') !== String(unselectedValue);
+    }
+
+    function getSelectedCustomerOption() {
+      if (!hasSelectedCustomer()) {
+        return null;
+      }
+
+      return customerOptions.find(function (option) {
+        return String(option.dataset.customerId || '') === String(customerIdInput.value || '');
+      }) || null;
+    }
+
+    function getVisibleCustomerOptions() {
+      return customerOptions.filter(function (option) {
+        return !option.hidden;
+      });
+    }
+
+    function setCustomerPanelOpen(isOpen) {
+      customerPanel.hidden = !isOpen;
+      customerLookupInput.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+
+    function setCustomerIdValue(value) {
+      customerIdInput.value = value === undefined || value === null || value === '' ? unselectedValue : String(value);
+    }
+
+    function clearActiveCustomerOption() {
+      activeCustomerOptionIndex = -1;
+      customerLookupInput.removeAttribute('aria-activedescendant');
+      customerOptions.forEach(function (option) {
+        const isSelected = hasSelectedCustomer() && String(option.dataset.customerId || '') === String(customerIdInput.value || '');
+        option.classList.remove('is-active');
+        option.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+      });
+    }
+
+    function setActiveCustomerOption(nextIndex) {
+      const visibleOptions = getVisibleCustomerOptions();
+      clearActiveCustomerOption();
+
+      if (!visibleOptions.length) {
+        return;
+      }
+
+      activeCustomerOptionIndex = Math.max(0, Math.min(nextIndex, visibleOptions.length - 1));
+      const activeOption = visibleOptions[activeCustomerOptionIndex];
+      activeOption.classList.add('is-active');
+      activeOption.setAttribute('aria-selected', 'true');
+      customerLookupInput.setAttribute('aria-activedescendant', activeOption.id);
+      activeOption.scrollIntoView({ block: 'nearest' });
+    }
+
+    function selectCustomerOption(option) {
+      customerLookupInput.value = customerOptionLabel(option);
+      setCustomerIdValue(option.dataset.customerId || '');
+      customerLookupInput.setCustomValidity('');
+      customerOptions.forEach(function (customerOption) {
+        customerOption.setAttribute('aria-selected', customerOption === option ? 'true' : 'false');
+      });
+      setCustomerPanelOpen(false);
+      clearActiveCustomerOption();
+    }
+
+    function showAllCustomerOptions() {
+      customerOptions.forEach(function (option) {
+        option.hidden = false;
+      });
+
+      if (customerEmptyState) {
+        customerEmptyState.hidden = true;
+      }
+
+      const selectedOption = getSelectedCustomerOption();
+      if (selectedOption) {
+        setActiveCustomerOption(getVisibleCustomerOptions().indexOf(selectedOption));
+      } else if (customerOptions.length) {
+        setActiveCustomerOption(0);
+      } else {
+        clearActiveCustomerOption();
+      }
+
+      customerLookupInput.setCustomValidity('');
+      setCustomerPanelOpen(customerOptions.length > 0);
+    }
+
+    function shouldShowAllCustomerOptions() {
+      const selectedOption = getSelectedCustomerOption();
+      return Boolean(selectedOption && normalizeCustomerLookup(customerOptionLabel(selectedOption)) === normalizeCustomerLookup(customerLookupInput.value));
+    }
+
+    function renderCustomerOptions(forceOpen) {
+      const normalizedLookup = normalizeCustomerLookup(customerLookupInput.value);
+      let exactMatch = null;
+      let visibleCount = 0;
+
+      customerOptions.forEach(function (option) {
+        const normalizedLabel = normalizeCustomerLookup(customerOptionLabel(option));
+        const isVisible = !normalizedLookup || normalizedLabel.includes(normalizedLookup);
+
+        option.hidden = !isVisible;
+        if (isVisible) {
+          visibleCount += 1;
+        }
+        if (normalizedLookup && normalizedLabel === normalizedLookup) {
+          exactMatch = option;
+        }
+      });
+
+      if (exactMatch) {
+        setCustomerIdValue(exactMatch.dataset.customerId || '');
+        customerLookupInput.setCustomValidity('');
+      } else {
+        setCustomerIdValue('');
+        if (normalizedLookup) {
+          customerLookupInput.setCustomValidity('Choose a customer from the list.');
+        } else {
+          customerLookupInput.setCustomValidity('');
+        }
+      }
+
+      if (customerEmptyState) {
+        customerEmptyState.hidden = visibleCount !== 0;
+      }
+
+      if (visibleCount) {
+        setActiveCustomerOption(0);
+      } else {
+        clearActiveCustomerOption();
+      }
+
+      const shouldOpen = forceOpen !== undefined
+        ? forceOpen
+        : (document.activeElement === customerLookupInput && (visibleCount > 0 || normalizedLookup.length > 0));
+      setCustomerPanelOpen(shouldOpen);
+      return exactMatch;
+    }
+
+    customerLookupInput.addEventListener('focus', function () {
+      if (shouldShowAllCustomerOptions()) {
+        showAllCustomerOptions();
+      } else {
+        renderCustomerOptions(true);
+      }
+    });
+
+    customerLookupInput.addEventListener('click', function () {
+      if (shouldShowAllCustomerOptions()) {
+        showAllCustomerOptions();
+      } else {
+        renderCustomerOptions(true);
+      }
+    });
+
+    customerLookupInput.addEventListener('input', function () {
+      renderCustomerOptions(true);
+    });
+
+    customerLookupInput.addEventListener('keydown', function (event) {
+      const visibleOptions = getVisibleCustomerOptions();
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (!customerPanel.hidden) {
+          setActiveCustomerOption(activeCustomerOptionIndex + 1);
+        } else if (shouldShowAllCustomerOptions()) {
+          showAllCustomerOptions();
+        } else {
+          renderCustomerOptions(true);
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!customerPanel.hidden) {
+          setActiveCustomerOption(activeCustomerOptionIndex - 1);
+        } else if (shouldShowAllCustomerOptions()) {
+          showAllCustomerOptions();
+        } else {
+          renderCustomerOptions(true);
+        }
+        return;
+      }
+
+      if (event.key === 'Enter' && !customerPanel.hidden && visibleOptions.length && !hasSelectedCustomer()) {
+        event.preventDefault();
+        selectCustomerOption(visibleOptions[Math.max(activeCustomerOptionIndex, 0)]);
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        setCustomerPanelOpen(false);
+        clearActiveCustomerOption();
+      }
+    });
+
+    customerOptions.forEach(function (option) {
+      option.addEventListener('mousedown', function (event) {
+        event.preventDefault();
+      });
+
+      option.addEventListener('click', function () {
+        selectCustomerOption(option);
+        customerLookupInput.focus();
+      });
+    });
+
+    document.addEventListener('mousedown', function (event) {
+      if (!customerCombobox.contains(event.target)) {
+        setCustomerPanelOpen(false);
+        clearActiveCustomerOption();
+      }
+    });
+
+    customerCombobox.addEventListener('mouseleave', function () {
+      setCustomerPanelOpen(false);
+      clearActiveCustomerOption();
+    });
+
+    if (customerLookupInput.form) {
+      customerLookupInput.form.addEventListener('submit', function (event) {
+        const exactMatch = renderCustomerOptions(false);
+        const visibleOptions = getVisibleCustomerOptions();
+
+        if (!exactMatch && !hasSelectedCustomer() && customerLookupInput.value.trim() && visibleOptions.length === 1) {
+          selectCustomerOption(visibleOptions[0]);
+          return;
+        }
+
+        if (!hasSelectedCustomer() && customerLookupInput.value.trim()) {
+          event.preventDefault();
+          customerLookupInput.reportValidity();
+        }
+      });
+    }
+  }
+
+  document.querySelectorAll('[data-customer-combobox]').forEach(setupCustomerCombobox);
+})();
+</script>

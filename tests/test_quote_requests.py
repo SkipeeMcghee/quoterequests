@@ -330,29 +330,32 @@ def test_admin_customer_detail_schedule_work_button_visible_when_enabled(client,
 def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_user):
     app.config["ENABLE_SCHEDULING"] = True
 
-    client.post(
-        "/quote-request",
-        data={
-            "full_name": "Ari Blake",
-            "phone": "555-444-7777",
-            "services": ["Painting"],
-            "city": "32 Broad St",
-        },
-        follow_redirects=False,
-    )
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+        )
+        db.session.add(quote_request)
+        db.session.commit()
+        request_id = quote_request.id
+
     client.post(
         "/auth/login",
         data={"email": admin_user, "password": "password123", "remember_me": "y"},
         follow_redirects=False,
     )
 
-    response = client.get("/admin/scheduled-work/new?request_id=1&source=request&date=2026-05-10")
+    response = client.get(f"/admin/scheduled-work/new?request_id={request_id}&source=request&date=2026-05-10")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "name=\"scheduled-work-request_id\"" in body
-    assert "value=\"1\"" in body
+    assert f"value=\"{request_id}\"" in body
     assert "name=\"scheduled-work-scheduled_date\"" in body
     assert "value=\"2026-05-10\"" in body
+    assert 'data-customer-combobox-input="true"' in body
+    assert 'id="scheduled-work-customer_lookup-options"' in body
+    assert 'placeholder="Choose an existing customer"' in body
     assert "name=\"scheduled-work-status\"" not in body
     assert "Source request" in body
     assert "Selected date" in body
@@ -1241,17 +1244,66 @@ def test_request_detail_can_unlink_linked_customer(client, app, admin_user):
         assert appointment.customer_id is None
 
 
+def test_request_detail_can_link_existing_customer_from_combobox(client, app, admin_user):
+    app.config["ENABLE_CUSTOMER_RECORDS"] = True
+
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+        )
+        customer = Customer(
+            primary_name="Ari Blake",
+            primary_phone="555-444-7777",
+            primary_city="32 Broad St",
+        )
+        db.session.add_all([quote_request, customer])
+        db.session.commit()
+        request_id = quote_request.id
+        customer_id = customer.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        f"/admin/requests/{request_id}/link-customer",
+        data={
+            "link-customer-manual_customer_lookup": "Ari Blake — no email — 555-444-7777",
+            "link-customer-manual_customer_id": str(customer_id),
+            "link-customer-submit": "Manual Link",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/admin/requests/{request_id}#customer-matching")
+
+    with app.app_context():
+        quote_request = db.session.get(QuoteRequest, request_id)
+        assert quote_request.customer_id == customer_id
+
+
 def test_request_detail_includes_scroll_restore_targets_for_inline_forms(client, app, admin_user):
     app.config.update(ENABLE_CUSTOMER_RECORDS=True, ENABLE_SCHEDULING=True)
 
     with app.app_context():
+        customer = Customer(
+            primary_name="Taylor Flow",
+            primary_phone="555-777-1111",
+            primary_email="taylor@example.com",
+            primary_city="12 Oak Ave",
+        )
         quote_request = QuoteRequest(
             full_name="Taylor Flow",
             phone="555-777-1111",
             email="taylor@example.com",
             city="12 Oak Ave",
         )
-        db.session.add(quote_request)
+        db.session.add_all([customer, quote_request])
         db.session.commit()
         request_id = quote_request.id
 
@@ -1269,7 +1321,23 @@ def test_request_detail_includes_scroll_restore_targets_for_inline_forms(client,
     assert 'id="request-details"' in body
     assert 'id="quotes"' in body
     assert 'id="notes"' in body
-    assert "Link an existing customer or create a new one here." in body
+    assert "Link this request to an existing customer or create a new one here." in body
+    assert "Create a new customer from this request." in body
+    assert body.count('data-customer-combobox-input="true"') == 2
+    assert 'data-customer-id-input="true"' in body
+    assert 'class="customer-combobox__panel" id="manual-customer-options"' in body
+    assert 'id="create-customer_lookup-options"' in body
+    assert 'data-customer-option' in body
+    assert 'placeholder="Click here to manually link by searching for an existing customer."' in body
+    assert 'placeholder="Choose an existing customer"' in body
+    assert '<p class="customer-link-section-text">Click here to manually link by searching for an existing customer.</p>' not in body
+    assert body.count('class="contact-or customer-link-or"') == 2
+    assert ">Auto Link<" in body
+    assert ">Manual Link<" in body
+    assert ">Add Customer<" in body
+    assert "Select an existing customer if the right match is not listed." not in body
+    assert "Type a name, email, or phone number" not in body
+    assert "Type to narrow the list as you search." not in body
     assert "Link this request to an existing customer or create a new internal customer account." not in body
     assert "Existing customer matches were found for this request. Confirm a link or select another record." not in body
     assert 'data-scroll-anchor="customer-matching"' in body

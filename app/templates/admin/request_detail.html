@@ -24,7 +24,7 @@
       <section class="customer-link-panel" id="customer-matching">
         <div class="section-bar compact-bar">
           <h2>Customer account</h2>
-          <p class="subtle-text">Link an existing customer or create a new one here.</p>
+          <p class="subtle-text">Link this request to an existing customer or create a new one here.</p>
         </div>
 
         <div class="customer-link-actions">
@@ -43,29 +43,58 @@
                   <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="inline-form" data-scroll-anchor="customer-matching">
                     {{ link_customer_form.csrf_token }}
                     {{ link_customer_form.customer_id(value=customer.id) }}
-                    {{ link_customer_form.submit(class_="btn btn-secondary btn-small") }}
+                    <button type="submit" class="btn btn-secondary btn-small" name="{{ link_customer_form.submit.name }}" value="Auto Link">Auto Link</button>
                   </form>
                 </article>
               {% endfor %}
             </div>
+            <div class="contact-or customer-link-or">OR</div>
           {% endif %}
 
           <div class="manual-link-section">
-            <p class="subtle-text">Select an existing customer if the right match is not listed.</p>
-            <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="customer-matching">
+            <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="stacked-form manual-link-form" data-scroll-anchor="customer-matching">
               {{ link_customer_form.csrf_token }}
-              <label class="form-field">
-                {{ link_customer_form.manual_customer_id(class_="select") }}
+              {{ link_customer_form.manual_customer_id(data_customer_id_input="true") }}
+              <label class="form-field customer-combobox" data-customer-combobox>
+                {{ link_customer_form.manual_customer_lookup(
+                  class_="input customer-combobox__input",
+                  placeholder="Click here to manually link by searching for an existing customer.",
+                  autocomplete="off",
+                  spellcheck="false",
+                  data_customer_combobox_input="true",
+                  role="combobox",
+                  aria_autocomplete="list",
+                  aria_expanded="false",
+                  aria_controls="manual-customer-options",
+                  aria_haspopup="listbox"
+                ) }}
+                <div class="customer-combobox__panel" id="manual-customer-options" data-customer-combobox-panel role="listbox" hidden>
+                  {% for customer_id, customer_label in manual_customer_options %}
+                    <button
+                      type="button"
+                      class="customer-combobox__option"
+                      id="manual-customer-option-{{ customer_id }}"
+                      data-customer-option
+                      data-customer-id="{{ customer_id }}"
+                      data-customer-label="{{ customer_label }}"
+                      role="option"
+                      aria-selected="false"
+                    >{{ customer_label }}</button>
+                  {% endfor %}
+                  <div class="customer-combobox__empty subtle-text" data-customer-combobox-empty hidden>No matching customers found.</div>
+                </div>
               </label>
-              {{ link_customer_form.submit(class_="btn btn-secondary btn-small") }}
+              <button type="submit" class="btn btn-secondary btn-small manual-link-form__submit" name="{{ link_customer_form.submit.name }}" value="Manual Link">Manual Link</button>
             </form>
           </div>
 
+          <div class="contact-or customer-link-or">OR</div>
+
           <div class="create-customer-section">
-            <p class="subtle-text">Create a new customer from this request if needed.</p>
+            <p class="customer-link-section-text">Create a new customer from this request.</p>
             <form method="post" action="{{ url_for('admin.create_customer_route', request_id=quote_request.id) }}" class="inline-form" data-scroll-anchor="customer-matching">
               {{ create_customer_form.hidden_tag() }}
-              {{ create_customer_form.submit(class_="btn btn-primary btn-small") }}
+              <button type="submit" class="btn btn-primary btn-small" name="{{ create_customer_form.submit.name }}" value="Add Customer">Add Customer</button>
             </form>
           </div>
         </div>
@@ -407,9 +436,43 @@
             <form method="post" action="{{ url_for('admin.create_appointment_route', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="scheduling">
               {{ appointment_form.hidden_tag() }}
               {% if not quote_request.customer %}
-                <label class="form-field">
+                <label class="form-field customer-combobox" data-customer-combobox>
                   <span class="field-label-row">Customer <span class="required-pill">Required</span></span>
-                  {{ appointment_form.customer_id(class_="select") }}
+                  <input
+                    type="hidden"
+                    name="{{ appointment_form.customer_id.name }}"
+                    id="{{ appointment_form.customer_id.id }}"
+                    value="{{ appointment_form.customer_id.data if appointment_form.customer_id.data is not none else 0 }}"
+                    data-customer-id-input
+                    data-customer-unselected-value="0"
+                  >
+                  {{ appointment_form.customer_lookup(
+                    class_="input customer-combobox__input",
+                    placeholder="Choose an existing customer",
+                    autocomplete="off",
+                    spellcheck="false",
+                    data_customer_combobox_input="true",
+                    role="combobox",
+                    aria_autocomplete="list",
+                    aria_expanded="false",
+                    aria_controls=appointment_form.customer_lookup.id ~ '-options',
+                    aria_haspopup="listbox"
+                  ) }}
+                  <div class="customer-combobox__panel" id="{{ appointment_form.customer_lookup.id }}-options" data-customer-combobox-panel role="listbox" hidden>
+                    {% for customer_id, customer_label in manual_customer_options %}
+                      <button
+                        type="button"
+                        class="customer-combobox__option"
+                        id="{{ appointment_form.customer_lookup.id }}-option-{{ customer_id }}"
+                        data-customer-option
+                        data-customer-id="{{ customer_id }}"
+                        data-customer-label="{{ customer_label }}"
+                        role="option"
+                        aria-selected="false"
+                      >{{ customer_label }}</button>
+                    {% endfor %}
+                    <div class="customer-combobox__empty subtle-text" data-customer-combobox-empty hidden>No matching customers found.</div>
+                  </div>
                   {% for error in appointment_form.customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
                 </label>
               {% endif %}
@@ -681,4 +744,5 @@
 
 })();
 </script>
+{% include "admin/_customer_combobox_script.html" %}
 {% endblock %}

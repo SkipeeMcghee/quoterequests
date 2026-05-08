@@ -93,6 +93,26 @@ VALID_RECURRING_SOURCES = {"customer"}
 WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
+def _format_customer_option_label(customer) -> str:
+    return f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}"
+
+
+def _build_customer_options(customers=None) -> list[tuple[int, str]]:
+    customer_records = customers if customers is not None else list_customers()
+    return [(customer.id, _format_customer_option_label(customer)) for customer in customer_records]
+
+
+def _find_customer_option_label(customer_options: list[tuple[int, str]], customer_id: int | None) -> str | None:
+    if customer_id is None:
+        return None
+
+    for option_customer_id, option_label in customer_options:
+        if option_customer_id == customer_id:
+            return option_label
+
+    return None
+
+
 def _calculate_scheduled_hours(
     appointments,
     *,
@@ -624,15 +644,10 @@ def new_scheduled_work():
 
     form = CreateScheduledWorkForm(prefix="scheduled-work")
     customers = list_customers()
+    customer_options = _build_customer_options(customers)
     form.customer_id.choices = [
         (0, "Choose an existing customer"),
-        *[
-            (
-                existing_customer.id,
-                f"{existing_customer.primary_name or 'Unnamed'} — {existing_customer.primary_email or 'no email'} — {existing_customer.primary_phone or 'no phone'}",
-            )
-            for existing_customer in customers
-        ],
+        *customer_options,
     ]
 
     form_action_url = url_for(
@@ -673,6 +688,7 @@ def new_scheduled_work():
         return render_template(
             "admin/scheduled_work_form.html",
             form=form,
+            customer_options=customer_options,
             form_action_url=form_action_url,
             quote_request=quote_request,
             customer=active_customer,
@@ -690,12 +706,14 @@ def new_scheduled_work():
             form.request_id.data = quote_request.id
             if quote_request.customer is not None:
                 form.customer_id.data = quote_request.customer.id
+                form.customer_lookup.data = _find_customer_option_label(customer_options, quote_request.customer.id)
             else:
                 form.new_customer_name.data = quote_request.full_name
                 form.new_customer_city.data = quote_request.city
             form.title.data = quote_request.service_list_display or quote_request.request_type
         if customer is not None:
             form.customer_id.data = customer.id
+            form.customer_lookup.data = _find_customer_option_label(customer_options, customer.id)
         if scheduled_date is not None:
             form.scheduled_date.data = scheduled_date
 
@@ -1000,12 +1018,10 @@ def request_detail(request_id: int):
                 ]
                 appointment_form.customer_id.data = quote_request.customer.id
             else:
+                customer_options = _build_customer_options()
                 appointment_form.customer_id.choices = [
                     (0, "Choose an existing customer"),
-                    *[
-                        (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
-                        for customer in list_customers()
-                    ]
+                    *customer_options,
                 ]
             appointment_form.title.data = quote_request.service_list_display or quote_request.request_type
 
@@ -1025,13 +1041,7 @@ def request_detail(request_id: int):
         for staff in (quote_request.current_appointment.assigned_staff if quote_request.current_appointment else [])
     }
     link_customer_form = LinkCustomerForm(prefix="link-customer")
-    link_customer_form.manual_customer_id.choices = [
-        (0, "Choose an existing customer"),
-        *[
-            (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
-            for customer in list_customers()
-        ],
-    ]
+    manual_customer_options = _build_customer_options()
     create_customer_form = CreateCustomerForm(prefix="create-customer")
     customer_matches = find_customer_matches_for_request(quote_request)
     customer_billing_form = CustomerBillingForm(
@@ -1057,6 +1067,7 @@ def request_detail(request_id: int):
         appointment_form=appointment_form,
         reschedule_form=reschedule_form,
         link_customer_form=link_customer_form,
+        manual_customer_options=manual_customer_options,
         create_customer_form=create_customer_form,
         customer_matches=customer_matches,
         customer_billing_form=customer_billing_form,
@@ -1160,12 +1171,10 @@ def create_appointment_route(request_id: int):
         ]
         form.customer_id.data = quote_request.customer.id
     else:
+        customer_options = _build_customer_options()
         form.customer_id.choices = [
             (0, "Choose an existing customer"),
-            *[
-                (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
-                for customer in list_customers()
-            ]
+            *customer_options,
         ]
 
     if form.validate_on_submit():
@@ -1208,13 +1217,6 @@ def link_customer_route(request_id: int):
         return redirect(url_for("admin.request_detail", request_id=request_id))
 
     form = LinkCustomerForm(prefix="link-customer")
-    form.manual_customer_id.choices = [
-        (0, "Choose an existing customer"),
-        *[
-            (customer.id, f"{customer.primary_name or 'Unnamed'} — {customer.primary_email or 'no email'} — {customer.primary_phone or 'no phone'}")
-            for customer in list_customers()
-        ],
-    ]
 
     if form.validate_on_submit():
         selected_customer_id = None
