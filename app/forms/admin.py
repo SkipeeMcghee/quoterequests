@@ -1,4 +1,4 @@
-from app.models import APPOINTMENT_STATUSES, RecurringWork, ServiceOption
+from app.models import APPOINTMENT_STATUSES, RecurringWork, RequestQuote, ServiceOption
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, MultipleFileField
 from wtforms import BooleanField, DateField, DecimalField, HiddenField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField
@@ -19,11 +19,23 @@ class RequestQuoteForm(FlaskForm):
         validators=[DataRequired(), NumberRange(min=0)],
         render_kw={"step": "0.01", "min": "0"},
     )
+    billing_frequency = SelectField(
+        "Billing frequency",
+        choices=[(frequency, frequency) for frequency in RequestQuote.BILLING_FREQUENCIES],
+        default="Monthly",
+        validators=[DataRequired()],
+    )
     description = StringField("Quote details", validators=[Optional(), Length(max=255)])
     submit = SubmitField("Add Quote")
 
 
 class RequestQuoteDecisionForm(FlaskForm):
+    decision = SelectField(
+        "Status",
+        choices=[(decision, decision) for decision in RequestQuote.DECISIONS],
+        default="Sent",
+        validators=[DataRequired()],
+    )
     submit = SubmitField("Save Decision")
 
 

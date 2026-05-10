@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, Time
+from sqlalchemy import ForeignKey, Time, event, func, select
 
 from app.extensions import db
 
 
 QUOTE_REQUEST_STATUSES = ("New", "Viewed", "Contacted", "Quoted", "Accepted", "Rejected", "Scheduled")
-REQUEST_QUOTE_DECISIONS = ("Pending", "Accepted", "Rejected")
+REQUEST_QUOTE_DECISIONS = ("Sent", "Accepted", "Rejected")
+REQUEST_QUOTE_BILLING_FREQUENCIES = ("Hourly", "Daily", "Weekly", "Biweekly", "Monthly")
 REQUEST_TYPES = ("Quote request", "Work request")
 
 APPOINTMENT_STATUSES = ("Requested", "Scheduled", "Completed", "Cancelled", "Rescheduled", "No Show")
@@ -60,9 +61,13 @@ class ServiceOption(db.Model):
 
 class QuoteRequest(db.Model):
     __tablename__ = "quote_requests"
+    __table_args__ = (
+        db.UniqueConstraint("request_type", "request_number", name="uq_quote_requests_type_number"),
+    )
     REQUEST_TYPES = ("Quote request", "Work request")
 
     id = db.Column(db.Integer, primary_key=True)
+    request_number = db.Column(db.Integer, nullable=False)
     full_name = db.Column(db.String(255), nullable=False)
     phone = db.Column(db.String(50), nullable=True)
     email = db.Column(db.String(255), nullable=True, index=True)
@@ -112,6 +117,22 @@ class QuoteRequest(db.Model):
         return ", ".join([service.name for service in self.services])
 
     @property
+    def normalized_request_type(self) -> str:
+        return self.request_type if self.request_type in self.REQUEST_TYPES else self.REQUEST_TYPES[0]
+
+    @property
+    def display_request_number(self) -> int:
+        return self.request_number or self.id
+
+    @property
+    def display_request_type(self) -> str:
+        return self.normalized_request_type.title()
+
+    @property
+    def request_reference(self) -> str:
+        return f"{self.display_request_type} #{self.display_request_number}"
+
+    @property
     def current_appointment(self) -> "Appointment | None":
         return self.appointments[0] if self.appointments else None
 
@@ -141,6 +162,22 @@ class QuoteRequest(db.Model):
 
     def sync_status(self) -> None:
         self.status = self.derived_status
+
+
+@event.listens_for(QuoteRequest, "before_insert")
+def assign_request_number(mapper, connection, target) -> None:
+    normalized_request_type = (
+        target.request_type if target.request_type in QuoteRequest.REQUEST_TYPES else QuoteRequest.REQUEST_TYPES[0]
+    )
+    target.request_type = normalized_request_type
+
+    if target.request_number:
+        return
+
+    max_request_number = connection.execute(
+        select(func.max(QuoteRequest.request_number)).where(QuoteRequest.request_type == normalized_request_type)
+    ).scalar_one_or_none()
+    target.request_number = (max_request_number or 0) + 1
 
 
 class Appointment(db.Model):
@@ -235,12 +272,14 @@ class RequestQuote(db.Model):
     __tablename__ = "request_quotes"
 
     DECISIONS = REQUEST_QUOTE_DECISIONS
+    BILLING_FREQUENCIES = REQUEST_QUOTE_BILLING_FREQUENCIES
 
     id = db.Column(db.Integer, primary_key=True)
     quote_request_id = db.Column(db.Integer, ForeignKey("quote_requests.id", ondelete="CASCADE"), nullable=False, index=True)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
     description = db.Column(db.String(255), nullable=True)
-    decision = db.Column(db.String(16), nullable=False, default="Pending")
+    billing_frequency = db.Column(db.String(16), nullable=True)
+    decision = db.Column(db.String(16), nullable=False, default="Sent")
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(
         db.DateTime(timezone=True),
@@ -256,4 +295,7 @@ class RequestQuote(db.Model):
         return f"${self.amount:,.2f}"
 
     def __repr__(self) -> str:
-        return f"<RequestQuote {self.id} request={self.quote_request_id} amount={self.amount} decision={self.decision}>"
+        return (
+            f"<RequestQuote {self.id} request={self.quote_request_id} amount={self.amount} "
+            f"billing_frequency={self.billing_frequency} decision={self.decision}>"
+        )

@@ -1225,7 +1225,12 @@ def get_request_quote(quote_id: int) -> RequestQuote:
     return request_quote
 
 
-def create_request_quote(request_id: int, amount, description: str | None = None) -> RequestQuote:
+def create_request_quote(
+    request_id: int,
+    amount,
+    billing_frequency: str,
+    description: str | None = None,
+) -> RequestQuote:
     quote_request = get_quote_request(request_id)
     if amount is None:
         raise BadRequest("Enter a quote amount before saving.")
@@ -1238,14 +1243,19 @@ def create_request_quote(request_id: int, amount, description: str | None = None
     if amount < 0:
         raise BadRequest("Quote amount cannot be negative.")
 
+    normalized_billing_frequency = (billing_frequency or "").strip().title()
+    if normalized_billing_frequency not in RequestQuote.BILLING_FREQUENCIES:
+        raise BadRequest("Choose a valid billing frequency.")
+
     if quote_request.first_viewed_at is None:
         quote_request.first_viewed_at = datetime.now(timezone.utc)
 
     request_quote = RequestQuote(
         quote_request_id=quote_request.id,
         amount=amount,
+        billing_frequency=normalized_billing_frequency,
         description=(description or "").strip() or None,
-        decision="Pending",
+        decision="Sent",
     )
     db.session.add(request_quote)
     quote_request.quotes.append(request_quote)
@@ -1264,6 +1274,24 @@ def update_request_quote_decision(quote_id: int, decision: str) -> RequestQuote:
     request_quote.quote_request.sync_status()
     db.session.commit()
     return request_quote
+
+
+def delete_request_quote(quote_id: int) -> int:
+    request_quote = get_request_quote(quote_id)
+    quote_request = request_quote.quote_request
+    request_id = quote_request.id
+    db.session.delete(request_quote)
+    db.session.flush()
+    if not quote_request.quotes and quote_request.status in {"Quoted", "Accepted", "Rejected"}:
+        if quote_request.last_contacted_on:
+            quote_request.status = "Contacted"
+        elif quote_request.first_viewed_at:
+            quote_request.status = "Viewed"
+        else:
+            quote_request.status = "New"
+    quote_request.sync_status()
+    db.session.commit()
+    return request_id
 
 
 def get_request_note(note_id: int) -> RequestNote:

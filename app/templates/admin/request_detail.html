@@ -2,12 +2,12 @@
 {% from "_time_selects.html" import render_time_select %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
 
-{% block title %}Request #{{ quote_request.id }}{% endblock %}
+{% block title %}{{ quote_request.request_reference }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
-    title='Request Details',
+    title=quote_request.request_reference,
     description='Review this request, link it to a customer, or schedule the work.',
     nav_mode='sub',
     return_url=url_for('admin.dashboard'),
@@ -106,12 +106,16 @@
     <div class="detail-grid">
       <article class="detail-card" id="request-details">
         <div class="section-bar compact-bar">
-          <h2>Request overview</h2>
+          <h2>Request details</h2>
         </div>
         <dl class="detail-list vertical-list">
           <div>
-            <dt>Request</dt>
-            <dd>#{{ quote_request.id }} · {{ quote_request.full_name }}</dd>
+            <dt>Name</dt>
+            <dd>{{ quote_request.full_name }}</dd>
+          </div>
+          <div>
+            <dt>Request ID</dt>
+            <dd>#{{ quote_request.display_request_number }}</dd>
           </div>
           <div>
             <dt>Submitted</dt>
@@ -189,6 +193,60 @@
             </dd>
           </div>
         </dl>
+
+        <section class="detail-card__section" id="notes">
+          <div class="section-bar compact-bar">
+            <h2>Internal notes</h2>
+          </div>
+          <form method="post" action="{{ url_for('admin.create_note', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="notes">
+            {{ note_form.hidden_tag() }}
+            <label class="form-field">
+              <span>Add note</span>
+              {{ note_form.note_text(class_="textarea") }}
+              {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            {{ note_form.submit(class_="btn btn-primary") }}
+          </form>
+
+          <div class="notes-list">
+            {% for note in quote_request.notes %}
+              <article class="note-item">
+                <div class="note-header">
+                  <div>
+                    <strong>{{ note.author.email }}</strong>
+                    <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+                  </div>
+                  {% if note.created_by == current_user.id %}
+                    <div class="note-actions">
+                      <button type="button" class="note-action-link note-edit-toggle" data-note-id="{{ note.id }}" aria-expanded="false" aria-controls="note-edit-panel-{{ note.id }}">Edit</button>
+                      <form method="post" action="{{ url_for('admin.delete_note_route', note_id=note.id) }}" class="inline-form" data-scroll-anchor="notes">
+                        {{ delete_note_forms[note.id].hidden_tag() }}
+                        <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete note">&times;</button>
+                      </form>
+                    </div>
+                  {% endif %}
+                </div>
+                <p>{{ note.note_text }}</p>
+                {% if note.created_by == current_user.id %}
+                  <div id="note-edit-panel-{{ note.id }}" class="note-edit-panel hidden">
+                    <form method="post" action="{{ url_for('admin.edit_note_route', note_id=note.id) }}" class="stacked-form" data-scroll-anchor="notes">
+                      {{ edit_note_forms[note.id].hidden_tag() }}
+                      <label class="form-field">
+                        {{ edit_note_forms[note.id].note_text(class_="textarea textarea--small") }}
+                        {% for error in edit_note_forms[note.id].note_text.errors %}
+                          <small class="field-error">{{ error }}</small>
+                        {% endfor %}
+                      </label>
+                      {{ edit_note_forms[note.id].submit(class_="btn btn-primary btn-small") }}
+                    </form>
+                  </div>
+                {% endif %}
+              </article>
+            {% else %}
+              <div class="empty-state">No internal notes yet.</div>
+            {% endfor %}
+          </div>
+        </section>
       </article>
 
       <article class="summary-card request-photo-gallery-card" id="photos">
@@ -265,6 +323,11 @@
               {{ request_quote_form.amount(class_="input") }}
               {% for error in request_quote_form.amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </label>
+            <label class="form-field">
+              <span>Billing frequency</span>
+              {{ request_quote_form.billing_frequency(class_="input") }}
+              {% for error in request_quote_form.billing_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
             <label class="form-field field-span-2">
               <span>Quote details</span>
               {{ request_quote_form.description(class_="input", placeholder="Optional: scope, option, or package name") }}
@@ -281,19 +344,21 @@
                 <div>
                   <strong>{{ request_quote.formatted_amount }}</strong>
                   <div class="subtle-text">Added {{ request_quote.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+                  <div class="subtle-text">Billing frequency: {{ request_quote.billing_frequency or 'Not set' }}</div>
                 </div>
-                <div class="request-quote-item__actions button-row">
-                  <span class="status-badge status-{{ request_quote.decision|lower|replace(' ', '-') }}">{{ request_quote.decision }}</span>
-                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id, decision='accepted') }}" class="inline-form" data-scroll-anchor="quotes">
-                    {{ quote_decision_forms[request_quote.id].hidden_tag() }}
-                    <button type="submit" class="btn btn-secondary btn-small">Accept</button>
+                <div class="request-quote-item__actions">
+                  <form method="post" action="{{ url_for('admin.delete_request_quote_route', quote_id=request_quote.id) }}" class="inline-form" data-scroll-anchor="quotes">
+                    {{ delete_quote_forms[request_quote.id].hidden_tag() }}
+                    <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete quote">x</button>
                   </form>
-                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id, decision='rejected') }}" class="inline-form" data-scroll-anchor="quotes">
+                  <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id) }}" class="inline-form button-row" data-scroll-anchor="quotes">
                     {{ quote_decision_forms[request_quote.id].hidden_tag() }}
-                    <button type="submit" class="btn btn-secondary btn-small">Reject</button>
+                    {{ quote_decision_forms[request_quote.id].decision(class_="input input--small") }}
+                    {{ quote_decision_forms[request_quote.id].submit(class_="btn btn-secondary btn-small") }}
                   </form>
                 </div>
               </div>
+              <span class="status-badge status-{{ request_quote.decision|lower|replace(' ', '-') }}">{{ request_quote.decision }}</span>
               {% if request_quote.description %}
                 <p>{{ request_quote.description }}</p>
               {% endif %}
@@ -307,7 +372,7 @@
       {% if enable_scheduling %}
         <article class="summary-card" id="scheduling">
           {% set appointment = quote_request.current_appointment %}
-          {% set show_schedule_optional_section = appointment_form and (appointment_form.customer_notes.data or appointment_form.internal_notes.data) %}
+          {% set show_schedule_optional_section = appointment_form and appointment_form.internal_notes.data %}
           <div class="section-bar compact-bar">
             <div>
               <h2>Scheduling</h2>
@@ -389,12 +454,7 @@
                 <summary>Notes</summary>
                 <div class="schedule-details__content">
                   <label class="form-field">
-                    <span>Customer notes</span>
-                    {{ appointment_form.customer_notes(class_="textarea") }}
-                    {% for error in appointment_form.customer_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-                  </label>
-                  <label class="form-field">
-                    <span>Internal notes</span>
+                    <span>Event notes</span>
                     {{ appointment_form.internal_notes(class_="textarea") }}
                     {% for error in appointment_form.internal_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
                   </label>
@@ -413,7 +473,7 @@
                       <span class="subtle-text">{{ old_appointment.scheduled_date.strftime('%b %d, %Y') if old_appointment.scheduled_date else 'No date' }}{% if old_appointment.start_time and old_appointment.end_time %} · {{ old_appointment.start_time.strftime('%H:%M') }} – {{ old_appointment.end_time.strftime('%H:%M') }}{% endif %}</span>
                     </div>
                     <div class="history-body">
-                      <p>{{ old_appointment.customer_notes or 'No customer notes' }}</p>
+                      <p>{{ old_appointment.internal_notes or old_appointment.customer_notes or 'No event notes' }}</p>
                       <p class="subtle-text">Rescheduled from appointment #{{ old_appointment.previous_appointment_id or 'N/A' }}</p>
                     </div>
                   </article>
@@ -494,12 +554,7 @@
                 <summary>Optional notes</summary>
                 <div class="schedule-details__content">
                   <label class="form-field">
-                    <span>Customer notes</span>
-                    {{ appointment_form.customer_notes(class_="textarea") }}
-                    {% for error in appointment_form.customer_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-                  </label>
-                  <label class="form-field">
-                    <span>Internal notes</span>
+                    <span>Event notes</span>
                     {{ appointment_form.internal_notes(class_="textarea") }}
                     {% for error in appointment_form.internal_notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
                   </label>
@@ -511,59 +566,6 @@
         </article>
       {% endif %}
 
-      <article class="summary-card" id="notes">
-        <div class="section-bar compact-bar">
-          <h2>Internal notes</h2>
-        </div>
-        <form method="post" action="{{ url_for('admin.create_note', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="notes">
-          {{ note_form.hidden_tag() }}
-          <label class="form-field">
-            <span>Add note</span>
-            {{ note_form.note_text(class_="textarea") }}
-            {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
-          {{ note_form.submit(class_="btn btn-primary") }}
-        </form>
-
-        <div class="notes-list">
-          {% for note in quote_request.notes %}
-            <article class="note-item">
-              <div class="note-header">
-                <div>
-                  <strong>{{ note.author.email }}</strong>
-                  <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
-                </div>
-                {% if note.created_by == current_user.id %}
-                  <div class="note-actions">
-                    <button type="button" class="note-action-link note-edit-toggle" data-note-id="{{ note.id }}" aria-expanded="false" aria-controls="note-edit-panel-{{ note.id }}">Edit</button>
-                    <form method="post" action="{{ url_for('admin.delete_note_route', note_id=note.id) }}" class="inline-form" data-scroll-anchor="notes">
-                      {{ delete_note_forms[note.id].hidden_tag() }}
-                      <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete note">&times;</button>
-                    </form>
-                  </div>
-                {% endif %}
-              </div>
-              <p>{{ note.note_text }}</p>
-              {% if note.created_by == current_user.id %}
-                <div id="note-edit-panel-{{ note.id }}" class="note-edit-panel hidden">
-                  <form method="post" action="{{ url_for('admin.edit_note_route', note_id=note.id) }}" class="stacked-form" data-scroll-anchor="notes">
-                    {{ edit_note_forms[note.id].hidden_tag() }}
-                    <label class="form-field">
-                      {{ edit_note_forms[note.id].note_text(class_="textarea textarea--small") }}
-                      {% for error in edit_note_forms[note.id].note_text.errors %}
-                        <small class="field-error">{{ error }}</small>
-                      {% endfor %}
-                    </label>
-                    {{ edit_note_forms[note.id].submit(class_="btn btn-primary btn-small") }}
-                  </form>
-                </div>
-              {% endif %}
-            </article>
-          {% else %}
-            <div class="empty-state">No internal notes yet.</div>
-          {% endfor %}
-        </div>
-      </article>
     </div>
   </section>
 </main>

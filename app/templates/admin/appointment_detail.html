@@ -86,7 +86,7 @@
                 <span>Request</span>
                 <div>
                   {% if appointment.quote_request_id %}
-                    <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">Request #{{ appointment.quote_request_id }}</a>
+                    <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">{{ appointment.quote_request.request_reference }}</a>
                   {% else %}
                     <strong>None</strong>
                   {% endif %}

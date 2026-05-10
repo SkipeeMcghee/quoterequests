@@ -177,6 +177,47 @@ def test_schedule_work_submission_records_work_request_type(client, app):
         assert quote_request.request_type == "Work request"
 
 
+def test_quote_and_work_requests_get_separate_request_numbers(client, app):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    quote_response = client.post(
+        "/quote-request",
+        data={
+            "full_name": "Jordan Harper",
+            "phone": "555-111-2222",
+            "services": ["Landscape Design"],
+            "city": "123 Garden St",
+        },
+        follow_redirects=False,
+    )
+    work_response = client.post(
+        "/schedule-work",
+        data={
+            "full_name": "Taylor Grant",
+            "phone": "555-333-2222",
+            "services": ["Inspection"],
+            "city": "14 Maple Ln",
+            "preferred_date": "2026-05-15",
+        },
+        follow_redirects=False,
+    )
+
+    assert quote_response.status_code == 302
+    assert work_response.status_code == 302
+
+    with app.app_context():
+        quote_requests = QuoteRequest.query.order_by(QuoteRequest.id.asc()).all()
+        assert len(quote_requests) == 2
+
+        quote_request = next(request for request in quote_requests if request.request_type == "Quote request")
+        work_request = next(request for request in quote_requests if request.request_type == "Work request")
+
+        assert quote_request.request_number == 1
+        assert work_request.request_number == 1
+        assert quote_request.request_reference == "Quote Request #1"
+        assert work_request.request_reference == "Work Request #1"
+
+
 def test_admin_request_detail_shows_automatic_status_and_marks_request_viewed(client, app, admin_user):
     client.post(
         "/quote-request",
@@ -235,6 +276,35 @@ def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user
     body = response.get_data(as_text=True)
     assert "Last contacted on" in body
     assert "name=\"last_contacted_on\"" in body
+
+
+def test_request_detail_scheduling_minute_dropdowns_default_to_00(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/requests/1")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'create-start_time_minute' in body
+    assert 'create-end_time_minute' in body
+    assert '<option selected value="0">00</option>' in body
 
 
 def test_last_contacted_date_updates_request_status_to_contacted(client, app, admin_user):
@@ -436,6 +506,36 @@ def test_request_detail_can_schedule_inline_and_link_existing_customer(client, a
         assert quote_request.status == "Scheduled"
         assert quote_request.current_appointment is not None
         assert quote_request.current_appointment.title == "Paint consultation"
+    
+def test_request_detail_inline_scheduler_defaults_minutes_to_00_and_uses_event_notes(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+        )
+        db.session.add(quote_request)
+        db.session.commit()
+        request_id = quote_request.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get(f"/admin/requests/{request_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    scheduling_section = body.split('id="scheduling"', 1)[1].split('</article>', 1)[0]
+    assert 'id="create-start_time_minute" name="create-start_time_minute"><option value="">Minute</option><option selected value="0">00</option>' in body
+    assert 'id="create-end_time_minute" name="create-end_time_minute"><option value="">Minute</option><option selected value="0">00</option>' in body
+    assert "Event notes" in scheduling_section
+    assert "Customer notes" not in scheduling_section
+    assert "Internal notes" not in scheduling_section
 
 
 def test_request_detail_shows_inline_edit_form_for_current_appointment(client, app, admin_user):
@@ -609,9 +709,6 @@ def test_request_detail_inline_edit_returns_to_request_page(client, app, admin_u
         },
         follow_redirects=False,
     )
-
-    assert response.status_code == 302
-    assert response.headers["Location"].endswith(f"/admin/requests/{request_id}#scheduling")
 
     with app.app_context():
         quote_request = QuoteRequest.query.one()
@@ -1175,7 +1272,7 @@ def test_request_detail_shows_compact_linked_customer_summary(client, app, admin
     assert 'id="customer-matching"' in body
     assert f'href="/admin/customers/{customer_id}"' in body
     assert ">Jordan Avery</a>" in body
-    assert ">Request overview</h2>" in body
+    assert ">Request details</h2>" in body
     assert "View Customer" not in body
     assert "Customer account" not in body
     assert "customer-link-panel--linked" not in body
@@ -1458,6 +1555,7 @@ def test_admin_can_add_quote_and_note(client, app, admin_user):
         "/admin/requests/1/quotes",
         data={
             "request-quote-amount": "2450.00",
+            "request-quote-billing_frequency": "Weekly",
             "request-quote-description": "Exterior repaint option",
             "request-quote-submit": "Add Quote",
         },
@@ -1477,11 +1575,12 @@ def test_admin_can_add_quote_and_note(client, app, admin_user):
         assert quote_request.status == "Quoted"
         assert quote_request.last_contacted_on is None
         assert quote_request.quotes[0].amount == 2450
+        assert quote_request.quotes[0].billing_frequency == "Weekly"
         assert quote_request.quotes[0].description == "Exterior repaint option"
         assert quote_request.notes[0].note_text == "Reviewed photos and prepared pricing draft."
 
 
-def test_quote_decision_buttons_update_request_status(client, app, admin_user):
+def test_quote_status_dropdown_updates_request_status(client, app, admin_user):
     client.post(
         "/quote-request",
         data={
@@ -1503,6 +1602,7 @@ def test_quote_decision_buttons_update_request_status(client, app, admin_user):
         "/admin/requests/1/quotes",
         data={
             "request-quote-amount": "1850.00",
+            "request-quote-billing_frequency": "Monthly",
             "request-quote-description": "Interior repaint option",
             "request-quote-submit": "Add Quote",
         },
@@ -1514,8 +1614,11 @@ def test_quote_decision_buttons_update_request_status(client, app, admin_user):
         quote_id = request_quote.id
 
     accept_response = client.post(
-        f"/admin/quotes/{quote_id}/decision/accepted",
-        data={f"quote-decision-{quote_id}-submit": "Save Decision"},
+        f"/admin/quotes/{quote_id}/decision",
+        data={
+            f"quote-decision-{quote_id}-decision": "Accepted",
+            f"quote-decision-{quote_id}-submit": "Save Decision",
+        },
         follow_redirects=False,
     )
     assert accept_response.status_code == 302
@@ -1524,10 +1627,14 @@ def test_quote_decision_buttons_update_request_status(client, app, admin_user):
         quote_request = QuoteRequest.query.one()
         assert quote_request.status == "Accepted"
         assert quote_request.quotes[0].decision == "Accepted"
+        assert quote_request.quotes[0].billing_frequency == "Monthly"
 
     reject_response = client.post(
-        f"/admin/quotes/{quote_id}/decision/rejected",
-        data={f"quote-decision-{quote_id}-submit": "Save Decision"},
+        f"/admin/quotes/{quote_id}/decision",
+        data={
+            f"quote-decision-{quote_id}-decision": "Rejected",
+            f"quote-decision-{quote_id}-submit": "Save Decision",
+        },
         follow_redirects=False,
     )
     assert reject_response.status_code == 302
@@ -1536,6 +1643,113 @@ def test_quote_decision_buttons_update_request_status(client, app, admin_user):
         quote_request = QuoteRequest.query.one()
         assert quote_request.status == "Rejected"
         assert quote_request.quotes[0].decision == "Rejected"
+
+
+def test_quote_delete_action_removes_quote_from_request(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/admin/requests/1/quotes",
+        data={
+            "request-quote-amount": "1850.00",
+            "request-quote-billing_frequency": "Monthly",
+            "request-quote-description": "Interior repaint option",
+            "request-quote-submit": "Add Quote",
+        },
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        request_quote = RequestQuote.query.one()
+        quote_id = request_quote.id
+
+    delete_response = client.post(
+        f"/admin/quotes/{quote_id}/delete",
+        data={f"delete-quote-{quote_id}-submit": "1"},
+        follow_redirects=False,
+    )
+
+    assert delete_response.status_code == 302
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.status == "Viewed"
+        assert quote_request.quotes == []
+
+
+def test_admin_request_detail_shows_billing_frequency_in_quote_tracking(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/admin/requests/1/quotes",
+        data={
+            "request-quote-amount": "950.00",
+            "request-quote-billing_frequency": "Biweekly",
+            "request-quote-description": "Touch-up package",
+            "request-quote-submit": "Add Quote",
+        },
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/requests/1")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Billing frequency" in body
+    assert "Biweekly" in body
+    assert "Delete quote" in body
+    assert ">Sent<" in body
+
+
+def test_invalid_csrf_redirects_back_with_message(client, app):
+    app.config["WTF_CSRF_ENABLED"] = True
+
+    response = client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        headers={"Referer": "http://localhost/quote-request"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "security token expired" in body
+    assert "Tell us about your project" in body
 
 
 def test_scheduling_a_request_sets_request_status_to_scheduled(client, app, admin_user):

@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from flask import Flask, redirect, render_template_string, request, url_for
+from flask import Flask, flash, redirect, render_template_string, request, url_for
+from flask_wtf.csrf import CSRFError
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -174,6 +175,11 @@ def register_context_processors(app: Flask) -> None:
 
 
 def register_error_handlers(app: Flask) -> None:
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(error: CSRFError):
+        flash("That page sat too long and its security token expired. Reload and try again.", "error")
+        return redirect(request.referrer or url_for("main.index"))
+
     @app.errorhandler(RequestEntityTooLarge)
     def handle_request_entity_too_large(error: RequestEntityTooLarge):
         return render_template_string(

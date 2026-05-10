@@ -2708,6 +2708,12 @@ thead th {
   grid-template-columns: 1fr;
 }
 
+.detail-card__section {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
 .detail-list dt {
   margin-bottom: 0.35rem;
   color: var(--muted);

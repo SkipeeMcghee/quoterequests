@@ -97,6 +97,7 @@ def build_social_links() -> dict[str, dict[str, str | bool]]:
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
+    WTF_CSRF_TIME_LIMIT = 8 * 60 * 60
     RECAPTCHA_ENABLED = parse_bool_env("RECAPTCHA_ENABLED", False)
     RECAPTCHA_SITE_KEY = os.getenv("RECAPTCHA_SITE_KEY", "").strip()
     RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "").strip()

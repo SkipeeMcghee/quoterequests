@@ -45,6 +45,7 @@ from app.services.admin_requests import (
     create_recurring_work,
     create_customer_from_quote_request,
     create_staff_member,
+    delete_request_quote,
     delete_request_note,
     delete_staff_availability,
     find_customer_matches_for_request,
@@ -111,6 +112,16 @@ def _find_customer_option_label(customer_options: list[tuple[int, str]], custome
             return option_label
 
     return None
+
+
+def _set_default_minute_values(form, field_names: tuple[str, ...]) -> None:
+    for field_name in field_names:
+        if not hasattr(form, field_name):
+            continue
+
+        minute_field = getattr(form, field_name)
+        if minute_field.data in (None, ""):
+            minute_field.data = "0"
 
 
 def _calculate_scheduled_hours(
@@ -702,6 +713,7 @@ def new_scheduled_work():
         )
 
     if request.method == "GET":
+        _set_default_minute_values(form, ("start_time_minute", "end_time_minute"))
         if quote_request:
             form.request_id.data = quote_request.id
             if quote_request.customer is not None:
@@ -746,7 +758,7 @@ def new_scheduled_work():
                 scheduled_date=form.scheduled_date.data,
                 start_time=start_time,
                 end_time=end_time,
-                customer_notes=form.customer_notes.data,
+                customer_notes=None,
                 internal_notes=form.internal_notes.data,
             )
         except Exception as exc:
@@ -987,10 +999,13 @@ def request_detail(request_id: int):
     quote_request = mark_quote_request_viewed(request_id)
     note_form = NoteForm()
     request_quote_form = RequestQuoteForm(prefix="request-quote")
-    quote_decision_forms = {
-        quote.id: RequestQuoteDecisionForm(prefix=f"quote-decision-{quote.id}")
-        for quote in quote_request.quotes
-    }
+    quote_decision_forms = {}
+    delete_quote_forms = {}
+    for quote in quote_request.quotes:
+        quote_decision_form = RequestQuoteDecisionForm(prefix=f"quote-decision-{quote.id}")
+        quote_decision_form.decision.data = quote.decision if quote.decision in quote.DECISIONS else "Sent"
+        quote_decision_forms[quote.id] = quote_decision_form
+        delete_quote_forms[quote.id] = ActionForm(prefix=f"delete-quote-{quote.id}")
     last_contacted_form = LastContactedForm(obj=quote_request)
     appointment_form = None
     reschedule_form = None
@@ -1001,6 +1016,8 @@ def request_detail(request_id: int):
                 obj=quote_request.current_appointment,
                 prefix="edit",
             )
+            if not appointment_form.internal_notes.data and quote_request.current_appointment.customer_notes:
+                appointment_form.internal_notes.data = quote_request.current_appointment.customer_notes
             appointment_customer = quote_request.current_appointment.customer or quote_request.customer
             appointment_form.customer_id.choices = [
                 (appointment_customer.id, appointment_customer.primary_name or 'Customer')
@@ -1024,6 +1041,7 @@ def request_detail(request_id: int):
                     *customer_options,
                 ]
             appointment_form.title.data = quote_request.service_list_display or quote_request.request_type
+            _set_default_minute_values(appointment_form, ("start_time_minute", "end_time_minute"))
 
     edit_note_forms = {
         note.id: NoteForm(prefix=f"edit-note-{note.id}", obj=note)
@@ -1059,6 +1077,7 @@ def request_detail(request_id: int):
         note_form=note_form,
         request_quote_form=request_quote_form,
         quote_decision_forms=quote_decision_forms,
+        delete_quote_forms=delete_quote_forms,
         delete_note_forms=delete_note_forms,
         edit_note_forms=edit_note_forms,
         unlink_customer_form=unlink_customer_form,
@@ -1083,24 +1102,29 @@ def create_request_quote_route(request_id: int):
     form = RequestQuoteForm(prefix="request-quote")
     if form.validate_on_submit():
         try:
-            create_request_quote(request_id, form.amount.data, form.description.data)
+            create_request_quote(
+                request_id,
+                form.amount.data,
+                form.billing_frequency.data,
+                form.description.data,
+            )
             flash("Quote added.", "success")
         except Exception as exc:
             flash(str(exc), "error")
     else:
-        flash("Enter a valid quote amount before saving.", "error")
+        flash("Enter a valid quote amount and billing frequency before saving.", "error")
 
     return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="quotes"))
 
 
-@bp.post("/quotes/<int:quote_id>/decision/<decision>")
+@bp.post("/quotes/<int:quote_id>/decision")
 @login_required
-def update_request_quote_decision_route(quote_id: int, decision: str):
+def update_request_quote_decision_route(quote_id: int):
     request_quote = get_request_quote(quote_id)
     form = RequestQuoteDecisionForm(prefix=f"quote-decision-{quote_id}")
     if form.validate_on_submit():
         try:
-            update_request_quote_decision(quote_id, decision)
+            update_request_quote_decision(quote_id, form.decision.data)
             flash("Quote decision updated.", "success")
         except Exception as exc:
             flash(str(exc), "error")
@@ -1108,6 +1132,25 @@ def update_request_quote_decision_route(quote_id: int, decision: str):
         flash("Invalid quote decision request.", "error")
 
     return redirect(url_for("admin.request_detail", request_id=request_quote.quote_request_id, _anchor="quotes"))
+
+
+@bp.post("/quotes/<int:quote_id>/delete")
+@login_required
+def delete_request_quote_route(quote_id: int):
+    request_quote = get_request_quote(quote_id)
+    form = ActionForm(prefix=f"delete-quote-{quote_id}")
+    if form.validate_on_submit():
+        try:
+            request_id = delete_request_quote(quote_id)
+            flash("Quote deleted.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+            request_id = request_quote.quote_request_id
+    else:
+        flash("Invalid quote delete request.", "error")
+        request_id = request_quote.quote_request_id
+
+    return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="quotes"))
 
 @bp.post("/notes/<int:note_id>/edit")
 @login_required
@@ -1195,7 +1238,7 @@ def create_appointment_route(request_id: int):
                 request_id,
                 requested_date=form.requested_date.data,
                 requested_time=form.time_value("requested_time"),
-                customer_notes=(form.customer_notes.data or "").strip() or None,
+                customer_notes=None,
                 internal_notes=(form.internal_notes.data or "").strip() or None,
                 confirmed_date=form.confirmed_date.data,
                 confirmed_time=form.time_value("confirmed_time"),
@@ -2030,8 +2073,6 @@ def edit_appointment_route(appointment_id: int):
             confirmed_time = form.time_value("confirmed_time")
 
         customer_notes = appointment.customer_notes
-        if form.customer_notes.name in request.form:
-            customer_notes = (form.customer_notes.data or "").strip() or None
 
         update_appointment(
             appointment_id,
