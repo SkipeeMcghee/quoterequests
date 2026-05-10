@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date, time, timedelta
 
 from app.extensions import db
-from app.models import Appointment, Customer, QuoteRequest, RecurringWork
-from app.services.admin_requests import create_appointment, generate_recurring_appointments_for_customer, reschedule_appointment, update_appointment, update_appointment_status
+from app.models import Appointment, Customer, QuoteRequest, RecurringWork, ServiceOption, StaffMember
+from app.services.admin_requests import create_appointment, create_scheduled_work, delete_appointment, generate_recurring_appointments_for_customer, reschedule_appointment, update_appointment, update_appointment_status
 
 
 def test_quote_request_can_have_zero_appointments(app):
@@ -181,3 +181,51 @@ def test_update_appointment_marks_requested_work_scheduled_when_date_is_set(app)
 
         assert updated.status == "Scheduled"
         assert db.session.get(Appointment, appointment.id).status == "Scheduled"
+
+
+def test_create_scheduled_work_persists_selected_services_and_staff(app):
+    with app.app_context():
+        service = ServiceOption(name="Window Cleaning")
+        customer = Customer(primary_name="Test User", primary_city="Testville")
+        staff_member = StaffMember(display_name="Alex Assign", worker_type="employee", status="active", services=[service])
+        db.session.add_all([service, customer, staff_member])
+        db.session.commit()
+
+        appointment = create_scheduled_work(
+            customer_id=customer.id,
+            title="Window visit",
+            scheduled_date=date.today() + timedelta(days=2),
+            start_time=time(9, 0),
+            end_time=time(10, 0),
+            internal_notes="Bring ladder.",
+            service_ids=[service.id],
+            staff_ids=[staff_member.id],
+        )
+
+        assert [item.name for item in appointment.services] == ["Window Cleaning"]
+        assert [assignment.staff_member_id for assignment in appointment.staff_assignments] == [staff_member.id]
+
+
+def test_delete_appointment_updates_request_status(app):
+    with app.app_context():
+        quote_request = QuoteRequest(full_name="Test User", phone="555-1234", email="test@example.com", city="Testville")
+        db.session.add(quote_request)
+        db.session.commit()
+
+        appointment = create_appointment(
+            quote_request.id,
+            date.today() + timedelta(days=1),
+            title="On-site visit",
+            scheduled_date=date.today() + timedelta(days=2),
+            start_time=time(14, 0),
+            end_time=time(15, 0),
+        )
+
+        assert quote_request.status == "Scheduled"
+
+        delete_appointment(appointment.id)
+
+        refreshed_request = db.session.get(QuoteRequest, quote_request.id)
+        assert refreshed_request is not None
+        assert refreshed_request.current_appointment is None
+        assert refreshed_request.status == "New"

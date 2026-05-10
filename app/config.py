@@ -122,6 +122,7 @@ class Config:
     BUSINESS_EMAIL = os.getenv("BUSINESS_EMAIL", "hello@example.com")
     SERVICE_AREA = os.getenv("SERVICE_AREA", "your local service area")
     BUSINESS_ADDRESS = os.getenv("BUSINESS_ADDRESS", "123 Service Lane, Suite 100")
+    STAFF_COMPENSATION_CURRENCY = (os.getenv("STAFF_COMPENSATION_CURRENCY", "USD").strip() or "USD").upper()
     SITE_LOGO = {
         "path": normalize_static_asset_path(os.getenv("SITE_LOGO_PATH", DEFAULT_SITE_LOGO_PATH), DEFAULT_SITE_LOGO_PATH),
         "alt": os.getenv("SITE_LOGO_ALT", "").strip(),

@@ -20,6 +20,12 @@ quote_request_service_options = db.Table(
     db.Column("service_option_id", db.Integer, db.ForeignKey("service_options.id"), primary_key=True),
 )
 
+appointment_service_options = db.Table(
+    "appointment_service_options",
+    db.Column("appointment_id", db.Integer, db.ForeignKey("appointments.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("service_option_id", db.Integer, db.ForeignKey("service_options.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class ServiceOption(db.Model):
     __tablename__ = "service_options"
@@ -32,6 +38,12 @@ class ServiceOption(db.Model):
         secondary=quote_request_service_options,
         back_populates="services",
         order_by="QuoteRequest.id",
+    )
+    appointments = db.relationship(
+        "Appointment",
+        secondary=appointment_service_options,
+        back_populates="services",
+        order_by="Appointment.id",
     )
     staff_members = db.relationship(
         "StaffMember",
@@ -208,6 +220,12 @@ class Appointment(db.Model):
         "RecurringWork",
         back_populates="appointments",
         foreign_keys=[recurring_work_id],
+    )
+    services = db.relationship(
+        "ServiceOption",
+        secondary=appointment_service_options,
+        back_populates="appointments",
+        order_by="ServiceOption.name",
     )
     staff_assignments = db.relationship(
         "AppointmentStaffAssignment",

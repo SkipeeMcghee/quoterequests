@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Flask, flash, redirect, render_template_string, request, url_for
+from flask import Flask, flash, jsonify, redirect, render_template_string, request, url_for
 from flask_wtf.csrf import CSRFError
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -166,6 +166,7 @@ def register_context_processors(app: Flask) -> None:
             "email": app.config.get("BUSINESS_EMAIL", ""),
             "service_area": app.config.get("SERVICE_AREA", ""),
             "address": app.config.get("BUSINESS_ADDRESS", ""),
+            "staff_compensation_currency": app.config.get("STAFF_COMPENSATION_CURRENCY", "USD"),
             "site_logo": app.config.get("SITE_LOGO", {}),
             "social_links": app.config.get("SOCIAL_LINKS", {}),
             "enabled_social_links": _get_enabled_social_links(app),
@@ -177,6 +178,9 @@ def register_context_processors(app: Flask) -> None:
 def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(CSRFError)
     def handle_csrf_error(error: CSRFError):
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"ok": False, "error": "That page sat too long and its security token expired. Reload and try again."}), 400
+
         flash("That page sat too long and its security token expired. Reload and try again.", "error")
         return redirect(request.referrer or url_for("main.index"))
 

@@ -1,10 +1,12 @@
+import json
 from calendar import month_name, monthcalendar, monthrange
 from datetime import date, time, timedelta
-from flask import current_app, flash, redirect, render_template, request, url_for
+from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.admin import bp
 from app.auth.routes import handle_admin_login
+from app.date_ranges import DATE_RANGE_PRESET_GROUPS, resolve_date_range_preset
 from app.forms.admin import (
     ActionForm,
     AppointmentForm,
@@ -30,9 +32,11 @@ from app.forms.admin import (
     RescheduleAppointmentForm,
     SetPrimaryFieldForm,
     StaffAvailabilityForm,
+    StaffAvailabilitySyncForm,
     StaffMemberForm,
+    StaffNotesForm,
 )
-from app.models import APPOINTMENT_STATUSES
+from app.models import APPOINTMENT_STATUSES, Appointment, ServiceOption
 from app.services.admin_requests import (
     add_customer_field,
     add_customer_note,
@@ -40,6 +44,7 @@ from app.services.admin_requests import (
     add_staff_availability,
     create_appointment,
     create_customer,
+    delete_appointment,
     create_request_quote,
     create_scheduled_work,
     create_recurring_work,
@@ -65,6 +70,7 @@ from app.services.admin_requests import (
     list_appointments_for_day,
     list_appointments_for_month,
     list_scheduled_appointments,
+    sync_staff_availability,
     set_appointment_staff_assignments,
     link_quote_request_to_customer,
     mark_quote_request_viewed,
@@ -82,6 +88,7 @@ from app.services.admin_requests import (
     update_recurring_work,
     update_request_quote_decision,
     update_staff_member,
+    update_staff_member_notes,
     upload_customer_photos,
     update_last_contacted_on,
     update_request_note,
@@ -92,6 +99,12 @@ from app.services.admin_requests import (
 VALID_SCHEDULE_SOURCES = {"request", "customer", "calendar", "day"}
 VALID_RECURRING_SOURCES = {"customer"}
 WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+AVAILABILITY_MINUTES_PER_DAY = 24 * 60
+AVAILABILITY_BOARD_SLOT_MINUTES = 15
+
+
+def _is_ajax_request() -> bool:
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
 
 def _format_customer_option_label(customer) -> str:
@@ -122,6 +135,160 @@ def _set_default_minute_values(form, field_names: tuple[str, ...]) -> None:
         minute_field = getattr(form, field_name)
         if minute_field.data in (None, ""):
             minute_field.data = "0"
+
+
+def _preview_time_value(form, field_name: str) -> time | None:
+    try:
+        return form.time_value(field_name)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_optional_iso_date(raw_value: str | None) -> date | None:
+    if not raw_value:
+        return None
+
+    try:
+        return date.fromisoformat(raw_value)
+    except ValueError:
+        return None
+
+
+def _format_date_range_caption(start_date: date | None, end_date: date | None) -> str | None:
+    if start_date and end_date:
+        return f"{start_date.strftime('%b %d, %Y')} to {end_date.strftime('%b %d, %Y')}"
+    if start_date:
+        return f"Starting {start_date.strftime('%b %d, %Y')}"
+    if end_date:
+        return f"Through {end_date.strftime('%b %d, %Y')}"
+    return None
+
+
+def _resolve_required_service_options(
+    *,
+    appointment: Appointment | None = None,
+    quote_request=None,
+    service_ids: list[int] | None = None,
+) -> list[ServiceOption]:
+    if service_ids is not None:
+        normalized_service_ids = sorted(set(service_ids))
+        if not normalized_service_ids:
+            return []
+
+        return list(
+            ServiceOption.query.filter(ServiceOption.id.in_(normalized_service_ids)).order_by(ServiceOption.name).all()
+        )
+
+    if appointment is not None and appointment.services:
+        return list(appointment.services)
+
+    if appointment is not None and appointment.quote_request is not None:
+        return list(appointment.quote_request.services)
+
+    if quote_request is not None:
+        return list(quote_request.services)
+
+    return []
+
+
+def _build_staff_assignment_context(
+    *,
+    appointment: Appointment | None = None,
+    quote_request=None,
+    service_ids: list[int] | None = None,
+    selected_staff_ids: list[int] | None = None,
+    scheduled_date: date | None = None,
+    start_time=None,
+    end_time=None,
+) -> dict[str, list]:
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return {
+            "required_service_names": [],
+            "matching_staff_info": [],
+            "other_staff_info": [],
+        }
+
+    required_services = _resolve_required_service_options(
+        appointment=appointment,
+        quote_request=quote_request,
+        service_ids=service_ids,
+    )
+    required_service_ids = {service.id for service in required_services}
+    required_service_names = [service.name for service in required_services]
+    required_service_count = len(required_services)
+
+    reference_appointment = appointment
+    if reference_appointment is None:
+        reference_appointment = Appointment(
+            scheduled_date=scheduled_date,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+    assigned_staff_ids = set(selected_staff_ids or [])
+    if appointment is not None:
+        assigned_staff_ids.update(staff.id for staff in appointment.assigned_staff)
+
+    schedule_reference_date = reference_appointment.scheduled_date or date.today()
+    has_schedule_window = bool(
+        reference_appointment.scheduled_date is not None
+        and reference_appointment.start_time is not None
+        and reference_appointment.end_time is not None
+    )
+    staff_assignment_info = []
+    for staff in list_staff_members():
+        warnings = get_staff_assignment_warnings(reference_appointment, staff)
+        staff_service_ids = {service.id for service in staff.services}
+        matched_service_count = len(staff_service_ids & required_service_ids)
+        can_cover_services = not required_service_ids or matched_service_count > 0
+        if required_service_names:
+            capability_label = "Can perform requested service" if can_cover_services else "No matching service listed"
+        else:
+            capability_label = "Available for general assignment"
+
+        if not has_schedule_window:
+            availability_state = "unknown"
+            availability_label = "Availability unknown"
+        elif warnings:
+            availability_state = "unavailable"
+            availability_label = "Unavailable"
+        else:
+            availability_state = "available"
+            availability_label = "Available"
+
+        staff_assignment_info.append(
+            {
+                "staff": staff,
+                "can_cover_services": can_cover_services,
+                "service_names": [service.name for service in staff.services],
+                "matched_service_count": matched_service_count,
+                "required_service_count": required_service_count,
+                "warnings": warnings,
+                "warning_count": len(warnings),
+                "is_assigned": staff.id in assigned_staff_ids,
+                "is_available": has_schedule_window and not warnings,
+                "availability_state": availability_state,
+                "availability_label": availability_label,
+                "availability_summary": _summarize_availability_days(staff)[1],
+                "schedule_url": _build_staff_schedule_url(staff.id, schedule_reference_date),
+                "capability_label": capability_label,
+            }
+        )
+
+    staff_assignment_info.sort(
+        key=lambda info: (
+            not info["can_cover_services"],
+            info["staff"].status != "active",
+            info["warning_count"],
+            info["staff"].display_name.lower(),
+        )
+    )
+
+    return {
+        "required_service_names": required_service_names,
+        "matching_staff_info": [info for info in staff_assignment_info if info["can_cover_services"]],
+        "other_staff_info": [info for info in staff_assignment_info if not info["can_cover_services"]],
+    }
 
 
 def _calculate_scheduled_hours(
@@ -169,6 +336,71 @@ def _summarize_availability_days(staff_member) -> tuple[list[int], str]:
     if len(availability_days) > 3:
         summary = f"{summary} +{len(availability_days) - 3} more"
     return availability_days, summary
+
+
+def _availability_minutes(value: time) -> int:
+    return value.hour * 60 + value.minute
+
+
+def _format_availability_time(value: time) -> str:
+    return _format_availability_label(_availability_minutes(value))
+
+
+def _format_availability_label(total_minutes: int) -> str:
+    hour_value = (total_minutes // 60) % 24
+    minute_value = total_minutes % 60
+    suffix = "AM" if hour_value < 12 else "PM"
+    display_hour = hour_value % 12 or 12
+    if minute_value:
+        return f"{display_hour}:{minute_value:02d} {suffix}"
+    return f"{display_hour} {suffix}"
+
+
+def _serialize_staff_availability_window(window) -> dict[str, object]:
+    start_minutes = _availability_minutes(window.start_time)
+    end_minutes = _availability_minutes(window.end_time)
+    return {
+        "id": window.id,
+        "day_of_week": window.day_of_week,
+        "start_time": window.start_time.strftime("%H:%M"),
+        "end_time": window.end_time.strftime("%H:%M"),
+        "start_minutes": start_minutes,
+        "end_minutes": end_minutes,
+        "label": f"{_format_availability_time(window.start_time)} – {_format_availability_time(window.end_time)}",
+        "notes": window.notes or "",
+    }
+
+
+def _build_staff_availability_board(staff_member):
+    board_minutes = AVAILABILITY_MINUTES_PER_DAY - AVAILABILITY_BOARD_SLOT_MINUTES
+    windows_by_day: dict[int, list[dict[str, object]]] = {index: [] for index in range(len(WEEKDAY_NAMES))}
+    flat_windows: list[dict[str, object]] = []
+
+    for window in staff_member.availability_windows:
+        serialized_window = _serialize_staff_availability_window(window)
+        windows_by_day[window.day_of_week].append(serialized_window)
+        flat_windows.append(serialized_window)
+
+    for day_windows in windows_by_day.values():
+        day_windows.sort(key=lambda window: (window["start_minutes"], window["end_minutes"], window["id"]))
+
+    week_rows = [
+        {
+            "day_index": index,
+            "day_name": day_name,
+            "day_short": day_name[:3],
+            "windows": windows_by_day[index],
+        }
+        for index, day_name in enumerate(WEEKDAY_NAMES)
+    ]
+    time_axis = [
+        {
+            "label": _format_availability_label(total_minutes),
+            "percent": (total_minutes / board_minutes) * 100,
+        }
+        for total_minutes in range(0, AVAILABILITY_MINUTES_PER_DAY, 180)
+    ]
+    return week_rows, flat_windows, time_axis
 
 
 def _build_schedule_source_args(
@@ -235,6 +467,28 @@ def _redirect_after_inline_appointment_action(appointment, *, anchor: str = "sch
         return redirect(url_for("admin.request_detail", request_id=appointment.quote_request_id, _anchor=anchor))
 
     return redirect(url_for("admin.appointment_detail", appointment_id=appointment.id, **_schedule_source_args_from_request()))
+
+
+def _redirect_after_deleted_appointment_action(appointment):
+    if request.args.get("return_to") == "request" and appointment.quote_request_id is not None:
+        return redirect(url_for("admin.request_detail", request_id=appointment.quote_request_id, _anchor="scheduling"))
+
+    appointment_context_args = _schedule_source_args_from_request()
+    return_url, _ = _resolve_schedule_return(
+        source=appointment_context_args.get("source") if appointment_context_args else None,
+        quote_request=appointment.quote_request,
+        customer=appointment.customer,
+        scheduled_date=appointment.scheduled_date,
+        year=appointment_context_args.get("year") if appointment_context_args else None,
+        month=appointment_context_args.get("month") if appointment_context_args else None,
+        day=appointment_context_args.get("day") if appointment_context_args else None,
+        view=appointment_context_args.get("view") if appointment_context_args else None,
+        show=appointment_context_args.get("show") if appointment_context_args else None,
+        status=appointment_context_args.get("status") if appointment_context_args else None,
+        staff_id=appointment_context_args.get("staff_id") if appointment_context_args else None,
+        sort_by=appointment_context_args.get("sort") if appointment_context_args else None,
+    )
+    return redirect(return_url)
 
 
 def _resolve_schedule_return(
@@ -682,6 +936,14 @@ def new_scheduled_work():
     def render_scheduled_work_page():
         active_customer = customer or (quote_request.customer if quote_request and quote_request.customer else None)
         selected_context_date = form.scheduled_date.data or scheduled_date
+        staffing_context = _build_staff_assignment_context(
+            quote_request=quote_request,
+            service_ids=form.service_ids.data,
+            selected_staff_ids=form.staff_ids.data,
+            scheduled_date=form.scheduled_date.data,
+            start_time=_preview_time_value(form, "start_time"),
+            end_time=_preview_time_value(form, "end_time"),
+        )
         return_url, return_label = _resolve_schedule_return(
             source=source,
             quote_request=quote_request,
@@ -710,6 +972,9 @@ def new_scheduled_work():
             schedule_source_view=calendar_view,
             source_return_url=return_url,
             source_return_label=return_label,
+            required_service_names=staffing_context["required_service_names"],
+            matching_staff_info=staffing_context["matching_staff_info"],
+            other_staff_info=staffing_context["other_staff_info"],
         )
 
     if request.method == "GET":
@@ -723,6 +988,7 @@ def new_scheduled_work():
                 form.new_customer_name.data = quote_request.full_name
                 form.new_customer_city.data = quote_request.city
             form.title.data = quote_request.service_list_display or quote_request.request_type
+            form.service_ids.data = [service.id for service in quote_request.services]
         if customer is not None:
             form.customer_id.data = customer.id
             form.customer_lookup.data = _find_customer_option_label(customer_options, customer.id)
@@ -760,6 +1026,8 @@ def new_scheduled_work():
                 end_time=end_time,
                 customer_notes=None,
                 internal_notes=form.internal_notes.data,
+                service_ids=form.service_ids.data,
+                staff_ids=form.staff_ids.data,
             )
         except Exception as exc:
             flash(str(exc), "error")
@@ -801,18 +1069,7 @@ def appointment_detail(appointment_id: int):
     appointment_form = AppointmentForm(obj=appointment, prefix="edit")
     if not appointment_form.internal_notes.data and appointment.customer_notes:
         appointment_form.internal_notes.data = appointment.customer_notes
-
-    history = []
-    previous = appointment.previous_appointment
-    while previous is not None:
-        history.append(previous)
-        previous = previous.previous_appointment
-    history.reverse()
-
-    future_reschedules = sorted(
-        appointment.rescheduled_appointments,
-        key=lambda item: item.created_at,
-    )
+    delete_appointment_form = ActionForm(prefix="delete-appointment")
 
     appointment_context_args = _schedule_source_args_from_request()
     appointment_return_url, appointment_return_label = _resolve_schedule_return(
@@ -879,43 +1136,10 @@ def appointment_detail(appointment_id: int):
             prefix="assign-staff",
             staff_ids=[staff.id for staff in appointment.assigned_staff],
         )
-
-        all_staff = list_staff_members()
-        required_service_ids = {
-            service.id
-            for service in appointment.quote_request.services
-        } if appointment.quote_request else set()
-        required_service_names = [service.name for service in appointment.quote_request.services] if appointment.quote_request else []
-        staff_assignment_info = []
-        for staff in all_staff:
-            warnings = get_staff_assignment_warnings(appointment, staff)
-            can_cover_services = not required_service_ids or bool({service.id for service in staff.services} & required_service_ids)
-            staff_info = {
-                "staff": staff,
-                "can_cover_services": can_cover_services,
-                "service_names": [service.name for service in staff.services],
-                "warnings": warnings,
-                "warning_count": len(warnings),
-                "is_assigned": any(assigned_staff.id == staff.id for assigned_staff in appointment.assigned_staff),
-                "availability_summary": _summarize_availability_days(staff)[1],
-                "schedule_url": _build_staff_schedule_url(staff.id, appointment.scheduled_date or today_value),
-            }
-            if required_service_names:
-                staff_info["capability_label"] = "Can perform requested service" if can_cover_services else "No matching service listed"
-            else:
-                staff_info["capability_label"] = "Available for general assignment"
-            staff_assignment_info.append(staff_info)
-
-        staff_assignment_info.sort(
-            key=lambda info: (
-                not info["can_cover_services"],
-                info["staff"].status != "active",
-                info["warning_count"],
-                info["staff"].display_name.lower(),
-            )
-        )
-        matching_staff_info = [info for info in staff_assignment_info if info["can_cover_services"]]
-        other_staff_info = [info for info in staff_assignment_info if not info["can_cover_services"]]
+        staffing_context = _build_staff_assignment_context(appointment=appointment)
+        required_service_names = staffing_context["required_service_names"]
+        matching_staff_info = staffing_context["matching_staff_info"]
+        other_staff_info = staffing_context["other_staff_info"]
     else:
         assign_staff_form = None
         required_service_names = []
@@ -930,8 +1154,6 @@ def appointment_detail(appointment_id: int):
         matching_staff_info=matching_staff_info,
         other_staff_info=other_staff_info,
         required_service_names=required_service_names,
-        history=history,
-        future_reschedules=future_reschedules,
         calendar_year=calendar_year,
         calendar_month=calendar_month,
         today=today_value,
@@ -942,6 +1164,8 @@ def appointment_detail(appointment_id: int):
         appointment_day_url=appointment_day_url,
         assign_staff_url=url_for("admin.assign_staff_to_appointment", appointment_id=appointment.id, **appointment_context_args),
         edit_appointment_url=url_for("admin.edit_appointment_route", appointment_id=appointment.id, **appointment_context_args),
+        delete_appointment_url=url_for("admin.delete_appointment_route", appointment_id=appointment.id, **appointment_context_args),
+        delete_appointment_form=delete_appointment_form,
     )
 
 
@@ -1008,6 +1232,11 @@ def request_detail(request_id: int):
         delete_quote_forms[quote.id] = ActionForm(prefix=f"delete-quote-{quote.id}")
     last_contacted_form = LastContactedForm(obj=quote_request)
     appointment_form = None
+    appointment_delete_form = None
+    appointment_assign_staff_form = None
+    schedule_required_service_names = []
+    schedule_matching_staff_info = []
+    schedule_other_staff_info = []
     reschedule_form = None
 
     if current_app.config.get("ENABLE_SCHEDULING"):
@@ -1025,7 +1254,17 @@ def request_detail(request_id: int):
             if appointment_customer:
                 appointment_form.customer_id.data = appointment_customer.id
             appointment_form.submit.label.text = "Save Scheduling Changes"
+            appointment_delete_form = ActionForm(prefix="delete-appointment")
             reschedule_form = RescheduleAppointmentForm(prefix="reschedule")
+            if current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+                appointment_assign_staff_form = AppointmentStaffAssignmentForm(
+                    prefix="assign-staff",
+                    staff_ids=[staff.id for staff in quote_request.current_appointment.assigned_staff],
+                )
+                staffing_context = _build_staff_assignment_context(appointment=quote_request.current_appointment)
+                schedule_required_service_names = staffing_context["required_service_names"]
+                schedule_matching_staff_info = staffing_context["matching_staff_info"]
+                schedule_other_staff_info = staffing_context["other_staff_info"]
         else:
             appointment_form = AppointmentForm(prefix="create")
             appointment_form.submit.label.text = "Schedule Event"
@@ -1042,6 +1281,17 @@ def request_detail(request_id: int):
                 ]
             appointment_form.title.data = quote_request.service_list_display or quote_request.request_type
             _set_default_minute_values(appointment_form, ("start_time_minute", "end_time_minute"))
+            if current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+                staffing_context = _build_staff_assignment_context(
+                    quote_request=quote_request,
+                    selected_staff_ids=appointment_form.staff_ids.data,
+                    scheduled_date=appointment_form.scheduled_date.data,
+                    start_time=_preview_time_value(appointment_form, "start_time"),
+                    end_time=_preview_time_value(appointment_form, "end_time"),
+                )
+                schedule_required_service_names = staffing_context["required_service_names"]
+                schedule_matching_staff_info = staffing_context["matching_staff_info"]
+                schedule_other_staff_info = staffing_context["other_staff_info"]
 
     edit_note_forms = {
         note.id: NoteForm(prefix=f"edit-note-{note.id}", obj=note)
@@ -1054,10 +1304,6 @@ def request_detail(request_id: int):
         if note.created_by == current_user.id
     }
     unlink_customer_form = ActionForm(prefix="unlink-customer")
-    remove_staff_forms = {
-        staff.id: ActionForm(prefix=f"remove-staff-{staff.id}")
-        for staff in (quote_request.current_appointment.assigned_staff if quote_request.current_appointment else [])
-    }
     link_customer_form = LinkCustomerForm(prefix="link-customer")
     manual_customer_options = _build_customer_options()
     create_customer_form = CreateCustomerForm(prefix="create-customer")
@@ -1081,9 +1327,13 @@ def request_detail(request_id: int):
         delete_note_forms=delete_note_forms,
         edit_note_forms=edit_note_forms,
         unlink_customer_form=unlink_customer_form,
-        remove_staff_forms=remove_staff_forms,
         last_contacted_form=last_contacted_form,
         appointment_form=appointment_form,
+        appointment_delete_form=appointment_delete_form,
+        appointment_assign_staff_form=appointment_assign_staff_form,
+        schedule_required_service_names=schedule_required_service_names,
+        schedule_matching_staff_info=schedule_matching_staff_info,
+        schedule_other_staff_info=schedule_other_staff_info,
         reschedule_form=reschedule_form,
         link_customer_form=link_customer_form,
         manual_customer_options=manual_customer_options,
@@ -1124,11 +1374,23 @@ def update_request_quote_decision_route(quote_id: int):
     form = RequestQuoteDecisionForm(prefix=f"quote-decision-{quote_id}")
     if form.validate_on_submit():
         try:
-            update_request_quote_decision(quote_id, form.decision.data)
+            updated_quote = update_request_quote_decision(quote_id, form.decision.data)
+            if _is_ajax_request():
+                return jsonify(
+                    {
+                        "ok": True,
+                        "decision": updated_quote.decision,
+                        "requestStatus": updated_quote.quote_request.status,
+                    }
+                )
             flash("Quote decision updated.", "success")
         except Exception as exc:
+            if _is_ajax_request():
+                return jsonify({"ok": False, "error": str(exc)}), 400
             flash(str(exc), "error")
     else:
+        if _is_ajax_request():
+            return jsonify({"ok": False, "error": "Invalid quote decision request."}), 400
         flash("Invalid quote decision request.", "error")
 
     return redirect(url_for("admin.request_detail", request_id=request_quote.quote_request_id, _anchor="quotes"))
@@ -1246,6 +1508,7 @@ def create_appointment_route(request_id: int):
                 scheduled_date=form.scheduled_date.data,
                 start_time=start_time,
                 end_time=end_time,
+                staff_ids=form.staff_ids.data,
             )
             flash("Appointment created.", "success")
     else:
@@ -1348,10 +1611,8 @@ def staff_list():
         ),
     )
     today = date.today()
-    week_start = today - timedelta(days=today.weekday())
-    week_end = week_start + timedelta(days=6)
-    month_start = date(today.year, today.month, 1)
-    month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
+    this_week_range = resolve_date_range_preset("this_week", reference_date=today)
+    this_month_range = resolve_date_range_preset("this_month", reference_date=today)
     staff_rows = []
     for staff_member in staff_members:
         assigned_appointments = sorted(
@@ -1374,8 +1635,16 @@ def staff_list():
                 "availability_days_count": len(availability_days),
                 "availability_summary": availability_summary,
                 "availability_window_count": len(staff_member.availability_windows),
-                "current_week_hours": _calculate_scheduled_hours(assigned_appointments, start_date=week_start, end_date=week_end),
-                "current_month_hours": _calculate_scheduled_hours(assigned_appointments, start_date=month_start, end_date=month_end),
+                "current_week_hours": _calculate_scheduled_hours(
+                    assigned_appointments,
+                    start_date=this_week_range.start_date,
+                    end_date=this_week_range.end_date,
+                ),
+                "current_month_hours": _calculate_scheduled_hours(
+                    assigned_appointments,
+                    start_date=this_month_range.start_date,
+                    end_date=this_month_range.end_date,
+                ),
                 "schedule_url": _build_staff_schedule_url(staff_member.id, schedule_reference_date),
             }
         )
@@ -1394,9 +1663,10 @@ def new_staff_member():
                 display_name=form.display_name.data,
                 phone=form.phone.data,
                 email=form.email.data,
-                role_title=form.role_title.data,
                 worker_type=form.worker_type.data,
                 status=form.status.data,
+                compensation_amount=form.compensation_amount.data,
+                compensation_frequency=form.compensation_frequency.data,
                 notes=form.notes.data,
                 service_ids=form.services.data,
             )
@@ -1439,60 +1709,72 @@ def staff_detail(staff_member_id: int):
         reverse=True,
     )
 
-    filter_start = request.args.get("start_date")
-    filter_end = request.args.get("end_date")
-    start_date = None
-    end_date = None
-    custom_hours = None
-    if filter_start:
-        try:
-            start_date = date.fromisoformat(filter_start)
-        except ValueError:
-            start_date = None
-    if filter_end:
-        try:
-            end_date = date.fromisoformat(filter_end)
-        except ValueError:
-            end_date = None
+    filter_start = request.args.get("start_date") or ""
+    filter_end = request.args.get("end_date") or ""
+    selected_range_preset = (request.args.get("range_preset") or "").strip().lower()
+    if not selected_range_preset and not filter_start and not filter_end:
+        selected_range_preset = "all_dates"
+    resolved_range_preset = resolve_date_range_preset(selected_range_preset, reference_date=today)
+    start_date = _parse_optional_iso_date(filter_start)
+    end_date = _parse_optional_iso_date(filter_end)
+    filtered_hours = None
+    filtered_hours_label = None
+    filtered_hours_caption = None
 
-    scheduled_hours = _calculate_scheduled_hours(assigned_appointments)
-    week_start = today - timedelta(days=today.weekday())
-    week_end = week_start + timedelta(days=6)
-    current_week_hours = _calculate_scheduled_hours(assigned_appointments, start_date=week_start, end_date=week_end)
-    month_start = date(today.year, today.month, 1)
-    month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
-    current_month_hours = _calculate_scheduled_hours(assigned_appointments, start_date=month_start, end_date=month_end)
-    if start_date is not None or end_date is not None:
-        custom_hours = _calculate_scheduled_hours(assigned_appointments, start_date=start_date, end_date=end_date)
+    if resolved_range_preset is not None:
+        selected_range_preset = resolved_range_preset.key
+        start_date = resolved_range_preset.start_date
+        end_date = resolved_range_preset.end_date
+        filter_start = start_date.isoformat() if start_date else ""
+        filter_end = end_date.isoformat() if end_date else ""
+        filtered_hours = _calculate_scheduled_hours(assigned_appointments, start_date=start_date, end_date=end_date)
+        filtered_hours_label = resolved_range_preset.label
+        filtered_hours_caption = _format_date_range_caption(start_date, end_date)
+    else:
+        selected_range_preset = ""
+        if start_date and end_date and start_date > end_date:
+            start_date, end_date = end_date, start_date
+        if start_date is not None or end_date is not None:
+            filter_start = start_date.isoformat() if start_date else ""
+            filter_end = end_date.isoformat() if end_date else ""
+            filtered_hours = _calculate_scheduled_hours(assigned_appointments, start_date=start_date, end_date=end_date)
+            filtered_hours_label = "Custom Range"
+            filtered_hours_caption = _format_date_range_caption(start_date, end_date)
 
     availability_form = StaffAvailabilityForm(prefix="availability")
-    availability_by_day = []
-    for index, day_name in enumerate(WEEKDAY_NAMES):
-        windows = [window for window in staff_member.availability_windows if window.day_of_week == index]
-        if windows:
-            availability_by_day.append({"day_name": day_name, "windows": windows})
+    _set_default_minute_values(availability_form, ("start_time_minute", "end_time_minute"))
+    if availability_form.day_of_week.data is None:
+        availability_form.day_of_week.data = today.weekday()
+    staff_notes_form = StaffNotesForm(prefix="staff-notes")
+    staff_notes_form.notes.data = staff_member.notes
+    availability_sync_form = StaffAvailabilitySyncForm(prefix="availability-sync")
+    availability_week_rows, availability_week_windows, availability_time_axis = _build_staff_availability_board(staff_member)
 
     schedule_reference_date = upcoming_assignments[0].scheduled_date if upcoming_assignments else today
     return render_template(
         "admin/staff_detail.html",
         staff_member=staff_member,
         availability_form=availability_form,
-        availability_by_day=availability_by_day,
+        staff_notes_form=staff_notes_form,
+        availability_sync_form=availability_sync_form,
+        availability_week_rows=availability_week_rows,
+        availability_week_windows=availability_week_windows,
+        availability_time_axis=availability_time_axis,
         upcoming_assignments=upcoming_assignments,
         recent_completed=recent_completed,
-        scheduled_hours=scheduled_hours,
-        current_week_hours=current_week_hours,
-        current_month_hours=current_month_hours,
-        custom_hours=custom_hours,
+        filtered_hours=filtered_hours,
+        filtered_hours_label=filtered_hours_label,
+        filtered_hours_caption=filtered_hours_caption,
         filter_start=filter_start,
         filter_end=filter_end,
+        selected_range_preset=selected_range_preset,
+        date_range_preset_groups=DATE_RANGE_PRESET_GROUPS,
         today=today,
         weekday_names=WEEKDAY_NAMES,
-        upcoming_assignment_count=len(upcoming_assignments),
+        availability_board_minutes=AVAILABILITY_MINUTES_PER_DAY - AVAILABILITY_BOARD_SLOT_MINUTES,
+        availability_board_slot_minutes=AVAILABILITY_BOARD_SLOT_MINUTES,
         service_count=len(staff_member.services),
-        availability_day_count=len(availability_by_day),
         availability_window_count=len(staff_member.availability_windows),
-        upcoming_scheduled_hours=_calculate_scheduled_hours(upcoming_assignments),
         staff_schedule_url=_build_staff_schedule_url(staff_member.id, schedule_reference_date),
     )
 
@@ -1508,9 +1790,10 @@ def edit_staff_member(staff_member_id: int):
         display_name=staff_member.display_name,
         phone=staff_member.phone,
         email=staff_member.email,
-        role_title=staff_member.role_title,
         worker_type=staff_member.worker_type,
         status=staff_member.status,
+        compensation_amount=staff_member.compensation_amount,
+        compensation_frequency=staff_member.compensation_frequency,
         services=[service.id for service in staff_member.services],
         notes=staff_member.notes,
     )
@@ -1521,9 +1804,10 @@ def edit_staff_member(staff_member_id: int):
                 display_name=form.display_name.data,
                 phone=form.phone.data,
                 email=form.email.data,
-                role_title=form.role_title.data,
                 worker_type=form.worker_type.data,
                 status=form.status.data,
+                compensation_amount=form.compensation_amount.data,
+                compensation_frequency=form.compensation_frequency.data,
                 notes=form.notes.data,
                 service_ids=form.services.data,
             )
@@ -1532,6 +1816,33 @@ def edit_staff_member(staff_member_id: int):
         except Exception as exc:
             flash(str(exc), "error")
     return render_template("admin/staff_form.html", form=form, is_new=False, staff_member=staff_member)
+
+
+@bp.post("/staff/<int:staff_member_id>/notes")
+@login_required
+def update_staff_member_notes_route(staff_member_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+
+    form = StaffNotesForm(prefix="staff-notes")
+    is_ajax_request = request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    if form.validate_on_submit():
+        try:
+            update_staff_member_notes(staff_member_id=staff_member_id, notes=form.notes.data)
+            if is_ajax_request:
+                return jsonify({"ok": True, "message": "Staff notes saved."})
+            flash("Staff notes updated.", "success")
+        except Exception as exc:
+            if is_ajax_request:
+                return jsonify({"ok": False, "error": str(exc)}), 400
+            flash(str(exc), "error")
+    else:
+        error_message = form.notes.errors[0] if form.notes.errors else "Correct the staff notes before saving."
+        if is_ajax_request:
+            return jsonify({"ok": False, "error": error_message}), 400
+        flash(error_message, "error")
+
+    return redirect(url_for("admin.staff_detail", staff_member_id=staff_member_id, _anchor="staff-details"))
 
 
 @bp.post("/staff/<int:staff_member_id>/availability")
@@ -1554,6 +1865,48 @@ def add_staff_availability_route(staff_member_id: int):
             flash(str(exc), "error")
     else:
         flash("Correct the availability details before saving.", "error")
+    return redirect(url_for("admin.staff_detail", staff_member_id=staff_member_id, _anchor="availability"))
+
+
+@bp.post("/staff/<int:staff_member_id>/availability/sync")
+@login_required
+def sync_staff_availability_route(staff_member_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+        return redirect(url_for("admin.dashboard"))
+
+    form = StaffAvailabilitySyncForm(prefix="availability-sync")
+    if not form.validate_on_submit():
+        error_message = "Unable to save weekly availability."
+        if _is_ajax_request():
+            return jsonify({"ok": False, "error": error_message}), 400
+        flash(error_message, "error")
+        return redirect(url_for("admin.staff_detail", staff_member_id=staff_member_id, _anchor="availability"))
+
+    try:
+        windows_payload = json.loads(form.windows_json.data or "[]")
+        sync_staff_availability(staff_member_id, windows_payload)
+        staff_member = get_staff_member(staff_member_id)
+        availability_week_rows, availability_week_windows, _ = _build_staff_availability_board(staff_member)
+    except Exception as exc:
+        if _is_ajax_request():
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        flash(str(exc), "error")
+        return redirect(url_for("admin.staff_detail", staff_member_id=staff_member_id, _anchor="availability"))
+
+    day_count = sum(1 for row in availability_week_rows if row["windows"])
+    window_count = len(availability_week_windows)
+    if _is_ajax_request():
+        return jsonify(
+            {
+                "ok": True,
+                "message": "Availability updated.",
+                "windows": availability_week_windows,
+                "day_count": day_count,
+                "window_count": window_count,
+            }
+        )
+
+    flash("Availability updated.", "success")
     return redirect(url_for("admin.staff_detail", staff_member_id=staff_member_id, _anchor="availability"))
 
 
@@ -2093,6 +2446,27 @@ def edit_appointment_route(appointment_id: int):
 
     appointment = get_appointment(appointment_id)
     return _redirect_after_inline_appointment_action(appointment)
+
+
+@bp.post("/appointments/<int:appointment_id>/delete")
+@login_required
+def delete_appointment_route(appointment_id: int):
+    if not current_app.config.get("ENABLE_SCHEDULING"):
+        return redirect(url_for("admin.dashboard"))
+
+    appointment = get_appointment(appointment_id)
+    redirect_response = _redirect_after_deleted_appointment_action(appointment)
+    form = ActionForm(prefix="delete-appointment")
+    if form.validate_on_submit():
+        try:
+            delete_appointment(appointment_id)
+            flash("Scheduled event deleted.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Invalid delete request.", "error")
+
+    return redirect_response
 
 
 @bp.post("/appointments/<int:appointment_id>/reschedule")

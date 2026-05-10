@@ -1,0 +1,122 @@
+{% macro render_staff_assignment_picker(staff_field_name, matching_staff_info, other_staff_info, required_service_names) %}
+  {% if required_service_names %}
+    <div class="assignment-service-summary">
+      <strong>Requested services</strong>
+      <div class="tag-list">
+        {% for service_name in required_service_names %}
+          <span class="tag-pill">{{ service_name }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if matching_staff_info %}
+    <section class="assignment-group">
+      <div class="section-bar compact-bar">
+        <div>
+          <h4>Can perform requested services</h4>
+          <p class="subtle-text">Best-fit staff appear first, with planning warnings shown inline.</p>
+        </div>
+      </div>
+      <div class="checkbox-grid assignment-checkbox-grid">
+        {% for info in matching_staff_info %}
+          <label class="checkbox-card assignment-card">
+            <input class="checkbox-input" type="checkbox" name="{{ staff_field_name }}" value="{{ info.staff.id }}" {% if info.is_assigned %}checked{% endif %}>
+            <div class="assignment-card__body">
+              <div class="assignment-card__header">
+                <div>
+                  <strong>{{ info.staff.display_name }}</strong>
+                  <div class="subtle-text">{{ info.staff.worker_type.title() }} · {{ info.staff.status.title() }}</div>
+                </div>
+                {% if info.is_assigned %}
+                  <span class="tag-pill">Assigned now</span>
+                {% endif %}
+              </div>
+              <div class="assignment-card__meta">
+                <span class="assignment-fit-badge assignment-fit-badge--match">{{ info.capability_label }}</span>
+                <span class="subtle-text">Weekly availability: {{ info.availability_summary }}</span>
+              </div>
+              {% if info.service_names %}
+                <div class="tag-list">
+                  {% for service_name in info.service_names %}
+                    <span class="tag">{{ service_name }}</span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="subtle-text">No services are assigned on this staff record yet.</div>
+              {% endif %}
+              <div class="button-row assignment-card__actions">
+                <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=info.staff.id) }}">Open Staff Record</a>
+                <a class="btn btn-secondary btn-small" href="{{ info.schedule_url }}">View Schedule</a>
+              </div>
+              {% if info.warnings %}
+                <ul class="assignment-warning-list">
+                  {% for warning in info.warnings %}
+                    <li>{{ warning }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </div>
+          </label>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if other_staff_info %}
+    <section class="assignment-group">
+      <div class="section-bar compact-bar">
+        <div>
+          <h4>Other staff</h4>
+          <p class="subtle-text">These staff records do not list the requested service, but they can still be assigned if needed.</p>
+        </div>
+      </div>
+      <div class="checkbox-grid assignment-checkbox-grid">
+        {% for info in other_staff_info %}
+          <label class="checkbox-card assignment-card assignment-card--secondary">
+            <input class="checkbox-input" type="checkbox" name="{{ staff_field_name }}" value="{{ info.staff.id }}" {% if info.is_assigned %}checked{% endif %}>
+            <div class="assignment-card__body">
+              <div class="assignment-card__header">
+                <div>
+                  <strong>{{ info.staff.display_name }}</strong>
+                  <div class="subtle-text">{{ info.staff.worker_type.title() }} · {{ info.staff.status.title() }}</div>
+                </div>
+                {% if info.is_assigned %}
+                  <span class="tag-pill">Assigned now</span>
+                {% endif %}
+              </div>
+              <div class="assignment-card__meta">
+                <span class="assignment-fit-badge">{{ info.capability_label }}</span>
+                <span class="subtle-text">Weekly availability: {{ info.availability_summary }}</span>
+              </div>
+              {% if info.service_names %}
+                <div class="tag-list">
+                  {% for service_name in info.service_names %}
+                    <span class="tag">{{ service_name }}</span>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="subtle-text">No services are assigned on this staff record yet.</div>
+              {% endif %}
+              <div class="button-row assignment-card__actions">
+                <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=info.staff.id) }}">Open Staff Record</a>
+                <a class="btn btn-secondary btn-small" href="{{ info.schedule_url }}">View Schedule</a>
+              </div>
+              {% if info.warnings %}
+                <ul class="assignment-warning-list">
+                  {% for warning in info.warnings %}
+                    <li>{{ warning }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            </div>
+          </label>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  {% if not matching_staff_info and not other_staff_info %}
+    <p class="subtle-text">No staff records are available for assignment yet.</p>
+  {% endif %}
+{% endmacro %}

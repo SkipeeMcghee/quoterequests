@@ -429,6 +429,42 @@ def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_u
     assert "name=\"scheduled-work-status\"" not in body
     assert "Source request" in body
     assert "Selected date" in body
+    assert "Services" in body
+
+
+def test_admin_new_scheduled_work_supports_services_and_staff_selection(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+    app.config["ENABLE_STAFF_MANAGEMENT"] = True
+
+    with app.app_context():
+        from app.models import ServiceOption, StaffMember
+
+        service = ServiceOption(name="Window Cleaning")
+        staff_member = StaffMember(display_name="Alex Crew", worker_type="employee", status="active", services=[service])
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+            services=[service],
+        )
+        db.session.add_all([service, staff_member, quote_request])
+        db.session.commit()
+        request_id = quote_request.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get(f"/admin/scheduled-work/new?request_id={request_id}&source=request")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Services" in body
+    assert "Assigned staff" in body
+    assert "Window Cleaning" in body
+    assert "Alex Crew" in body
 
 
 def test_admin_request_detail_routes_scheduling_into_shared_scheduled_work_flow(client, app, admin_user):
@@ -578,13 +614,15 @@ def test_request_detail_shows_inline_edit_form_for_current_appointment(client, a
     body = response.get_data(as_text=True)
     assert "Keep the scheduled event current here and open the full event page only when you need deeper tools." in body
     assert f'action="/admin/appointments/{appointment_id}/edit?return_to=request"' in body
+    assert f'action="/admin/appointments/{appointment_id}/delete?return_to=request"' in body
+    assert 'data-confirm-text="Delete Paint consultation?"' in body
     assert 'name="edit-status"' not in body
     assert f"View scheduled event #{appointment_id}" in body
     assert "Open day agenda" in body
     assert "<dt>Agenda</dt>" not in body
 
 
-def test_request_detail_can_remove_assigned_staff_from_current_appointment(client, app, admin_user):
+def test_request_detail_can_update_assigned_staff_for_current_appointment(client, app, admin_user):
     app.config["ENABLE_SCHEDULING"] = True
     app.config["ENABLE_STAFF_MANAGEMENT"] = True
 
@@ -639,20 +677,24 @@ def test_request_detail_can_remove_assigned_staff_from_current_appointment(clien
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert f'/admin/appointments/{appointment_id}/remove-staff/{staff_one_id}?return_to=request' in body
-    assert 'aria-label="Remove Alex Assign from scheduled event"' in body
-    assert 'inline-remove-button inline-remove-button--bare' in body
+    assert f'action="/admin/appointments/{appointment_id}/assign-staff?return_to=request"' in body
+    assert "Alex Assign" in body
+    assert "Morgan Assign" in body
+    assert "Unavailable" in body
+    assert "Save Staff Assignment" not in body
 
     response = client.post(
-        f"/admin/appointments/{appointment_id}/remove-staff/{staff_one_id}?return_to=request",
-        data={},
+        f"/admin/appointments/{appointment_id}/assign-staff?return_to=request",
+        data={
+            "assign-staff-staff_ids": [str(staff_two_id)],
+        },
         follow_redirects=True,
     )
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert f'/admin/appointments/{appointment_id}/remove-staff/{staff_one_id}?return_to=request' not in body
-    assert f'/admin/appointments/{appointment_id}/remove-staff/{staff_two_id}?return_to=request' in body
+    assert "Alex Assign" in body
+    assert "Morgan Assign" in body
 
     with app.app_context():
         from app.models import Appointment
@@ -660,6 +702,58 @@ def test_request_detail_can_remove_assigned_staff_from_current_appointment(clien
         appointment = db.session.get(Appointment, appointment_id)
         assigned_staff_ids = sorted(assignment.staff_member_id for assignment in appointment.staff_assignments)
         assert assigned_staff_ids == [staff_two_id]
+
+
+def test_request_detail_can_delete_current_appointment(client, app, admin_user):
+    app.config["ENABLE_SCHEDULING"] = True
+
+    with app.app_context():
+        from app.models import Appointment
+        from datetime import date, time
+
+        quote_request = QuoteRequest(
+            full_name="Ari Blake",
+            phone="555-444-7777",
+            city="32 Broad St",
+        )
+        db.session.add(quote_request)
+        db.session.flush()
+
+        appointment = Appointment(
+            quote_request_id=quote_request.id,
+            title="Paint consultation",
+            scheduled_date=date(2026, 5, 10),
+            start_time=time(10, 0),
+            end_time=time(11, 30),
+            status="Scheduled",
+        )
+        quote_request.appointments.append(appointment)
+        db.session.commit()
+        request_id = quote_request.id
+        appointment_id = appointment.id
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        f"/admin/appointments/{appointment_id}/delete?return_to=request",
+        data={"delete-appointment-submit": "Delete"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(f"/admin/requests/{request_id}#scheduling")
+
+    with app.app_context():
+        from app.models import Appointment
+
+        quote_request = db.session.get(QuoteRequest, request_id)
+        assert quote_request is not None
+        assert quote_request.current_appointment is None
+        assert db.session.get(Appointment, appointment_id) is None
 
 
 def test_request_detail_inline_edit_returns_to_request_page(client, app, admin_user):
@@ -1415,6 +1509,9 @@ def test_request_detail_includes_scroll_restore_targets_for_inline_forms(client,
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert 'id="customer-matching"' in body
+    assert 'id="request-detail-customer-panel"' in body
+    assert 'id="request-detail-customer-field"' in body
+    assert 'id="request-detail-scheduling-region"' in body
     assert 'id="request-details"' in body
     assert 'id="quotes"' in body
     assert 'id="notes"' in body
@@ -1438,10 +1535,12 @@ def test_request_detail_includes_scroll_restore_targets_for_inline_forms(client,
     assert "Link this request to an existing customer or create a new internal customer account." not in body
     assert "Existing customer matches were found for this request. Confirm a link or select another record." not in body
     assert 'data-scroll-anchor="customer-matching"' in body
+    assert 'data-request-detail-refresh="true"' in body
     assert 'data-scroll-anchor="request-details"' in body
     assert 'data-scroll-anchor="quotes"' in body
     assert 'data-scroll-anchor="notes"' in body
     assert "admin-request-detail-scroll" in body
+    assert "request-detail-customer-panel" in body
 
 
 def test_login_page_renders(client):
@@ -1645,6 +1744,58 @@ def test_quote_status_dropdown_updates_request_status(client, app, admin_user):
         assert quote_request.quotes[0].decision == "Rejected"
 
 
+def test_quote_status_update_route_returns_json_for_ajax_requests(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/admin/requests/1/quotes",
+        data={
+            "request-quote-amount": "1850.00",
+            "request-quote-billing_frequency": "Monthly",
+            "request-quote-description": "Interior repaint option",
+            "request-quote-submit": "Add Quote",
+        },
+        follow_redirects=False,
+    )
+
+    with app.app_context():
+        request_quote = RequestQuote.query.one()
+        quote_id = request_quote.id
+
+    response = client.post(
+        f"/admin/quotes/{quote_id}/decision",
+        data={
+            f"quote-decision-{quote_id}-decision": "Accepted",
+            f"quote-decision-{quote_id}-submit": "Save Decision",
+        },
+        headers={"X-Requested-With": "XMLHttpRequest"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert response.is_json
+    assert response.get_json() == {
+        "ok": True,
+        "decision": "Accepted",
+        "requestStatus": "Accepted",
+    }
+
+
 def test_quote_delete_action_removes_quote_from_request(client, app, admin_user):
     client.post(
         "/quote-request",
@@ -1728,7 +1879,8 @@ def test_admin_request_detail_shows_billing_frequency_in_quote_tracking(client, 
     assert "Billing frequency" in body
     assert "Biweekly" in body
     assert "Delete quote" in body
-    assert ">Sent<" in body
+    assert 'data-auto-submit-on-change="true"' in body
+    assert 'request-quote-item__status-feedback' in body
 
 
 def test_invalid_csrf_redirects_back_with_message(client, app):
@@ -1750,6 +1902,29 @@ def test_invalid_csrf_redirects_back_with_message(client, app):
     body = response.get_data(as_text=True)
     assert "security token expired" in body
     assert "Tell us about your project" in body
+
+
+def test_invalid_csrf_returns_json_for_ajax_requests(client, app):
+    app.config["WTF_CSRF_ENABLED"] = True
+
+    response = client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        headers={"X-Requested-With": "XMLHttpRequest"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 400
+    assert response.is_json
+    assert response.get_json() == {
+        "ok": False,
+        "error": "That page sat too long and its security token expired. Reload and try again.",
+    }
 
 
 def test_scheduling_a_request_sets_request_status_to_scheduled(client, app, admin_user):

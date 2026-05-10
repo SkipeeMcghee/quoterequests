@@ -608,8 +608,10 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
         client,
         appointment_detail_url,
         back_label="Back to Day Agenda",
-        expected_text=("Event notes", "History", "Open Day Agenda"),
+        expected_text=("Event notes", "Open Day Agenda", "Scheduled Event"),
     )
+    assert "History" not in appointment_detail_body
+    assert 'aria-label="Delete scheduled event"' in appointment_detail_body
     assert "Reschedule" not in appointment_detail_body
     assert "Customer notes" not in appointment_detail_body
 

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import json
 from datetime import date, time, timedelta
+from decimal import Decimal
 
+from app.date_ranges import resolve_date_range_preset
 from app.extensions import db
 from app.models import (
     Appointment,
@@ -79,6 +82,7 @@ def test_staff_list_surfaces_schedule_and_availability_context(client, app, admi
     body = response.get_data(as_text=True)
     assert "Scheduled hours are planning hours" in body
     assert "Alex Crew" in body
+    assert "Lead Tech" not in body
     assert "Exterior windows" in body
     assert "Open Day Agenda" in body
     assert "saved window" in body
@@ -104,6 +108,8 @@ def test_staff_detail_prioritizes_workflow_sections(client, app, admin_user):
             role_title="Crew Lead",
             worker_type="contractor",
             status="active",
+            compensation_amount=Decimal("27.50"),
+            compensation_frequency="hourly",
             services=[service_one, service_two],
             notes="Prefers morning exterior work.",
         )
@@ -166,15 +172,374 @@ def test_staff_detail_prioritizes_workflow_sections(client, app, admin_user):
     response = client.get(f"/admin/staff/{staff_member_id}")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Services they can perform" in body
-    assert "Planning view only." in body
-    assert "Scheduled hours this week" in body
+    assert "Staff Details" in body
+    assert "Staff Notes" in body
+    assert "Keep planning context, reminders, and field-specific details easy to update without leaving this record." not in body
+    assert "Save Staff Notes" not in body
+    assert body.count("Services they can perform") == 1
+    assert "Used when matching scheduled work." in body
+    assert "Planning view only." not in body
+    assert "Crew Lead" not in body
+    assert "Contractor" in body
+    assert "Active" in body
+    assert "555-222-3333" in body
+    assert "morgan@example.com" in body
+    assert "Staff Type" in body
+    assert "Compensation" in body
+    assert "Phone" in body
+    assert "Email" in body
+    assert "USD 27.50 / Hourly" in body
+    assert body.index("morgan@example.com") < body.index("Scheduled Work") < body.index("Services they can perform")
+    assert "staff-overview-grid__row" not in body
+    assert body.count("Weekly availability") == 1
+    assert "Hours Last Week" not in body
+    assert "Hours This Week" not in body
+    assert "Scheduled Hours by Date Range" in body
+    assert "Filter scheduled hours" not in body
+    assert "All Dates" in body
+    assert "Preset" in body
+    assert "Today" in body
+    assert "Yesterday" in body
+    assert "Tomorrow" in body
+    assert "This Week to Date" in body
+    assert "Last Month to Date" in body
+    assert 'data-scheduled-hours-filter' in body
+    assert 'data-scheduled-hours-preset' in body
+    assert "Update Scheduled Hours" not in body
+    assert "Total scheduled hours" not in body
+    assert "Scheduled hours this week" not in body
+    assert "Scheduled hours this month" not in body
     assert "Assigned scheduled work" in body
     assert "Recently completed scheduled work" in body
     assert "Add weekly availability" in body
+    assert body.index("Add weekly availability") < body.index("Scheduled Hours by Date Range") < body.index("Assigned scheduled work")
+    assert "Drag across a day to add availability." in body
+    assert 'data-availability-board' in body
+    assert 'data-availability-manual-days' in body
+    assert "Clear all" in body
     assert "Window Cleaning" in body
     assert "General Maintenance" in body
     assert "View Schedule" in body
+
+def test_staff_detail_defaults_scheduled_hours_filter_to_all_dates(client, app, admin_user):
+    app.config.update(
+        ENABLE_SCHEDULING=True,
+        ENABLE_STAFF_MANAGEMENT=True,
+        ENABLE_CALENDAR=True,
+    )
+
+    with app.app_context():
+        customer = Customer(primary_name="All Dates Client", primary_city="Test City")
+        staff_member = StaffMember(
+            display_name="All Dates Planner",
+            worker_type="employee",
+            status="active",
+        )
+        db.session.add_all([customer, staff_member])
+        db.session.flush()
+
+        appointment = Appointment(
+            customer_id=customer.id,
+            title="Any date work",
+            scheduled_date=date.today(),
+            start_time=time(9, 0),
+            end_time=time(12, 0),
+            status="Scheduled",
+        )
+        db.session.add(appointment)
+        db.session.flush()
+        db.session.add(
+            AppointmentStaffAssignment(
+                appointment_id=appointment.id,
+                staff_member_id=staff_member.id,
+            )
+        )
+        db.session.commit()
+        staff_member_id = staff_member.id
+
+    _login_as_admin(client, admin_user)
+
+    response = client.get(f"/admin/staff/{staff_member_id}")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'value="all_dates" selected' in body
+    assert ">3.0<" in body
+    assert "All Dates" in body
+
+
+def test_staff_notes_route_updates_notes(client, app, admin_user):
+    app.config.update(
+        ENABLE_SCHEDULING=True,
+        ENABLE_STAFF_MANAGEMENT=True,
+        ENABLE_CALENDAR=True,
+    )
+
+    with app.app_context():
+        staff_member = StaffMember(
+            display_name="Jordan Notes",
+            worker_type="employee",
+            status="active",
+            notes="Old note",
+        )
+        db.session.add(staff_member)
+        db.session.commit()
+        staff_member_id = staff_member.id
+
+    _login_as_admin(client, admin_user)
+
+    response = client.post(
+        f"/admin/staff/{staff_member_id}/notes",
+        data={
+            "staff-notes-notes": "Updated planning note",
+        },
+        headers={
+            "X-Requested-With": "XMLHttpRequest",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload == {"ok": True, "message": "Staff notes saved."}
+
+    with app.app_context():
+        staff_member = db.session.get(StaffMember, staff_member_id)
+        assert staff_member.notes == "Updated planning note"
+
+
+def test_new_staff_member_saves_compensation_pair(client, app, admin_user):
+    app.config.update(
+        ENABLE_SCHEDULING=True,
+        ENABLE_STAFF_MANAGEMENT=True,
+        STAFF_COMPENSATION_CURRENCY="USD",
+    )
+
+    _login_as_admin(client, admin_user)
+
+    response = client.post(
+        "/admin/staff/new",
+        data={
+            "staff-display_name": "Casey Paid",
+            "staff-phone": "555-444-1212",
+            "staff-email": "casey@example.com",
+            "staff-worker_type": "employee",
+            "staff-status": "active",
+            "staff-compensation_amount": "54000.00",
+            "staff-compensation_frequency": "yearly",
+            "staff-notes": "",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "USD 54000.00 / Yearly" in body
+
+    with app.app_context():
+        staff_member = StaffMember.query.filter_by(display_name="Casey Paid").one()
+        assert staff_member.compensation_amount == Decimal("54000.00")
+        assert staff_member.compensation_frequency == "yearly"
+
+
+def test_staff_detail_applies_range_preset_filter(client, app, admin_user):
+    app.config.update(
+        ENABLE_SCHEDULING=True,
+        ENABLE_STAFF_MANAGEMENT=True,
+        ENABLE_CALENDAR=True,
+    )
+    today = date.today()
+    this_week_range = resolve_date_range_preset("this_week", reference_date=today)
+    next_week_range = resolve_date_range_preset("next_week", reference_date=today)
+
+    with app.app_context():
+        customer = Customer(primary_name="Preset Client", primary_city="Test City")
+        staff_member = StaffMember(
+            display_name="Preset Planner",
+            worker_type="employee",
+            status="active",
+        )
+        db.session.add_all([customer, staff_member])
+        db.session.flush()
+
+        current_week_appointment = Appointment(
+            customer_id=customer.id,
+            title="Current week work",
+            scheduled_date=this_week_range.start_date,
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status="Scheduled",
+        )
+        next_week_appointment = Appointment(
+            customer_id=customer.id,
+            title="Next week work",
+            scheduled_date=next_week_range.start_date,
+            start_time=time(10, 0),
+            end_time=time(13, 0),
+            status="Scheduled",
+        )
+        db.session.add_all([current_week_appointment, next_week_appointment])
+        db.session.flush()
+        db.session.add_all(
+            [
+                AppointmentStaffAssignment(
+                    appointment_id=current_week_appointment.id,
+                    staff_member_id=staff_member.id,
+                ),
+                AppointmentStaffAssignment(
+                    appointment_id=next_week_appointment.id,
+                    staff_member_id=staff_member.id,
+                ),
+            ]
+        )
+        db.session.commit()
+        staff_member_id = staff_member.id
+
+    _login_as_admin(client, admin_user)
+
+    response = client.get(f"/admin/staff/{staff_member_id}?range_preset=next_week")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'name="range_preset"' in body
+    assert 'value="next_week" selected' in body
+    assert "Next Week" in body
+    assert f'value="{next_week_range.start_date.isoformat()}"' in body
+    assert f'value="{next_week_range.end_date.isoformat()}"' in body
+    assert ">3.0<" in body
+
+
+def test_staff_availability_route_accepts_monday_submission(client, app, admin_user):
+    app.config.update(
+        ENABLE_SCHEDULING=True,
+        ENABLE_STAFF_MANAGEMENT=True,
+        ENABLE_CALENDAR=True,
+    )
+
+    with app.app_context():
+        staff_member = StaffMember(
+            display_name="Alex Monday",
+            worker_type="employee",
+            status="active",
+        )
+        db.session.add(staff_member)
+        db.session.commit()
+        staff_member_id = staff_member.id
+
+    _login_as_admin(client, admin_user)
+
+    response = client.post(
+        f"/admin/staff/{staff_member_id}/availability",
+        data={
+            "availability-day_of_week": "0",
+            "availability-start_time_hour": "8",
+            "availability-start_time_minute": "0",
+            "availability-end_time_hour": "16",
+            "availability-end_time_minute": "0",
+            "availability-notes": "Morning shift",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Availability added." in body
+
+    with app.app_context():
+        windows = StaffAvailability.query.filter_by(staff_member_id=staff_member_id).all()
+        assert len(windows) == 1
+        assert windows[0].day_of_week == 0
+        assert windows[0].start_time == time(8, 0)
+        assert windows[0].end_time == time(16, 0)
+        assert windows[0].notes == "Morning shift"
+
+
+def test_staff_availability_sync_route_replaces_week_windows(client, app, admin_user):
+    app.config.update(
+        ENABLE_SCHEDULING=True,
+        ENABLE_STAFF_MANAGEMENT=True,
+        ENABLE_CALENDAR=True,
+    )
+
+    with app.app_context():
+        staff_member = StaffMember(
+            display_name="Morgan Planner",
+            worker_type="employee",
+            status="active",
+        )
+        db.session.add(staff_member)
+        db.session.flush()
+
+        existing_window = StaffAvailability(
+            staff_member_id=staff_member.id,
+            day_of_week=1,
+            start_time=time(8, 0),
+            end_time=time(12, 0),
+            notes="Morning only",
+        )
+        db.session.add(existing_window)
+        db.session.commit()
+        staff_member_id = staff_member.id
+        existing_window_id = existing_window.id
+
+    _login_as_admin(client, admin_user)
+
+    response = client.post(
+        f"/admin/staff/{staff_member_id}/availability/sync",
+        data={
+            "availability-sync-windows_json": json.dumps(
+                [
+                    {
+                        "id": existing_window_id,
+                        "day_of_week": 1,
+                        "start_time": "09:00",
+                        "end_time": "13:00",
+                        "notes": "Morning only",
+                    },
+                    {
+                        "day_of_week": 4,
+                        "start_time": "10:00",
+                        "end_time": "15:00",
+                        "notes": "",
+                    },
+                ]
+            )
+        },
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["window_count"] == 2
+    assert payload["day_count"] == 2
+
+    with app.app_context():
+        windows = StaffAvailability.query.filter_by(staff_member_id=staff_member_id).order_by(StaffAvailability.day_of_week, StaffAvailability.start_time).all()
+        assert len(windows) == 2
+        assert windows[0].id == existing_window_id
+        assert windows[0].day_of_week == 1
+        assert windows[0].start_time == time(9, 0)
+        assert windows[0].end_time == time(13, 0)
+        assert windows[0].notes == "Morning only"
+        assert windows[1].day_of_week == 4
+        assert windows[1].start_time == time(10, 0)
+        assert windows[1].end_time == time(15, 0)
+
+    clear_response = client.post(
+        f"/admin/staff/{staff_member_id}/availability/sync",
+        data={"availability-sync-windows_json": json.dumps([])},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+
+    assert clear_response.status_code == 200
+    clear_payload = clear_response.get_json()
+    assert clear_payload["ok"] is True
+    assert clear_payload["window_count"] == 0
+    assert clear_payload["day_count"] == 0
+
+    with app.app_context():
+        windows = StaffAvailability.query.filter_by(staff_member_id=staff_member_id).all()
+        assert windows == []
 
 
 def test_appointment_detail_groups_assignment_choices_and_warnings(client, app, admin_user):
