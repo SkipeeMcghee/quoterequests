@@ -16,6 +16,9 @@ def app(tmp_path: Path):
         SECRET_KEY="test-key",
         SQLALCHEMY_DATABASE_URI=f"sqlite+pysqlite:///{tmp_path / 'test.db'}",
         UPLOAD_FOLDER=str(tmp_path / "uploads"),
+        RECAPTCHA_ENABLED=False,
+        RECAPTCHA_SITE_KEY="",
+        RECAPTCHA_SECRET_KEY="",
     )
 
     with app.app_context():

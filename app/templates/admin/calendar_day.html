@@ -154,7 +154,7 @@
                   </p>
                 {% endif %}
                 {% if appointment.quote_request_id %}
-                  <p><a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">View request #{{ appointment.quote_request_id }}</a></p>
+                  <p><a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">View {{ appointment.quote_request.request_reference|lower }}</a></p>
                 {% endif %}
                 <p><a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='day', date=view_date.isoformat(), year=view_date.year, month=view_date.month, day=view_date.day) }}">Open scheduled event</a></p>
               </div>

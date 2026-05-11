@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_time_selects.html" import render_time_select %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
+{% from "admin/_staff_assignment_picker.html" import render_staff_assignment_picker %}
 
 {% block title %}Appointment #{{ appointment.id }}{% endblock %}
 
@@ -29,8 +30,20 @@
             <h2>Event #{{ appointment.id }}</h2>
             <p class="subtle-text">Keep the current event details and editable fields on one card so the record stays easy to scan and easy to update.</p>
           </div>
+<<<<<<< HEAD
           <div class="appointment-overview-card__status">
             <span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span>
+=======
+          <div class="appointment-editor-card__header-actions">
+            <div class="appointment-overview-card__status">
+              <span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span>
+              <span class="subtle-text">Event #{{ appointment.id }}</span>
+            </div>
+            <form method="post" action="{{ delete_appointment_url }}" class="inline-form" data-confirm-text="Delete {{ appointment.display_title }}?">
+              {{ delete_appointment_form.hidden_tag() }}
+              <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete scheduled event">x</button>
+            </form>
+>>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
           </div>
         </div>
 
@@ -72,7 +85,7 @@
                 <span>Request</span>
                 <div>
                   {% if appointment.quote_request_id %}
-                    <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">Request #{{ appointment.quote_request_id }}</a>
+                    <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">{{ appointment.quote_request.request_reference }}</a>
                   {% else %}
                     <strong>None</strong>
                   {% endif %}
@@ -158,116 +171,7 @@
         </div>
         <form method="post" action="{{ assign_staff_url }}" class="stacked-form">
           {{ assign_staff_form.hidden_tag() }}
-
-          {% if matching_staff_info %}
-            <section class="assignment-group">
-              <div class="section-bar compact-bar">
-                <div>
-                  <h4>Can perform requested services</h4>
-                  <p class="subtle-text">Best-fit staff appear first, with planning warnings shown inline.</p>
-                </div>
-              </div>
-              <div class="checkbox-grid assignment-checkbox-grid">
-                {% for info in matching_staff_info %}
-                  <label class="checkbox-card assignment-card">
-                    <input class="checkbox-input" type="checkbox" name="{{ assign_staff_form.staff_ids.name }}" value="{{ info.staff.id }}" {% if info.is_assigned %}checked{% endif %}>
-                    <div class="assignment-card__body">
-                      <div class="assignment-card__header">
-                        <div>
-                          <strong>{{ info.staff.display_name }}</strong>
-                          <div class="subtle-text">{{ info.staff.role_title or info.staff.worker_type.title() }} · {{ info.staff.status.title() }}</div>
-                        </div>
-                        {% if info.is_assigned %}
-                          <span class="tag-pill">Assigned now</span>
-                        {% endif %}
-                      </div>
-                      <div class="assignment-card__meta">
-                        <span class="assignment-fit-badge assignment-fit-badge--match">{{ info.capability_label }}</span>
-                        <span class="subtle-text">Weekly availability: {{ info.availability_summary }}</span>
-                      </div>
-                      {% if info.service_names %}
-                        <div class="tag-list">
-                          {% for service_name in info.service_names %}
-                            <span class="tag">{{ service_name }}</span>
-                          {% endfor %}
-                        </div>
-                      {% else %}
-                        <div class="subtle-text">No services are assigned on this staff record yet.</div>
-                      {% endif %}
-                      <div class="button-row assignment-card__actions">
-                        <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=info.staff.id) }}">Open Staff Record</a>
-                        <a class="btn btn-secondary btn-small" href="{{ info.schedule_url }}">View Schedule</a>
-                      </div>
-                      {% if info.warnings %}
-                        <ul class="assignment-warning-list">
-                          {% for warning in info.warnings %}
-                            <li>{{ warning }}</li>
-                          {% endfor %}
-                        </ul>
-                      {% endif %}
-                    </div>
-                  </label>
-                {% endfor %}
-              </div>
-            </section>
-          {% endif %}
-
-          {% if other_staff_info %}
-            <section class="assignment-group">
-              <div class="section-bar compact-bar">
-                <div>
-                  <h4>Other staff</h4>
-                  <p class="subtle-text">These staff records do not list the requested service, but they can still be assigned if needed.</p>
-                </div>
-              </div>
-              <div class="checkbox-grid assignment-checkbox-grid">
-                {% for info in other_staff_info %}
-                  <label class="checkbox-card assignment-card assignment-card--secondary">
-                    <input class="checkbox-input" type="checkbox" name="{{ assign_staff_form.staff_ids.name }}" value="{{ info.staff.id }}" {% if info.is_assigned %}checked{% endif %}>
-                    <div class="assignment-card__body">
-                      <div class="assignment-card__header">
-                        <div>
-                          <strong>{{ info.staff.display_name }}</strong>
-                          <div class="subtle-text">{{ info.staff.role_title or info.staff.worker_type.title() }} · {{ info.staff.status.title() }}</div>
-                        </div>
-                        {% if info.is_assigned %}
-                          <span class="tag-pill">Assigned now</span>
-                        {% endif %}
-                      </div>
-                      <div class="assignment-card__meta">
-                        <span class="assignment-fit-badge">{{ info.capability_label }}</span>
-                        <span class="subtle-text">Weekly availability: {{ info.availability_summary }}</span>
-                      </div>
-                      {% if info.service_names %}
-                        <div class="tag-list">
-                          {% for service_name in info.service_names %}
-                            <span class="tag">{{ service_name }}</span>
-                          {% endfor %}
-                        </div>
-                      {% else %}
-                        <div class="subtle-text">No services are assigned on this staff record yet.</div>
-                      {% endif %}
-                      <div class="button-row assignment-card__actions">
-                        <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=info.staff.id) }}">Open Staff Record</a>
-                        <a class="btn btn-secondary btn-small" href="{{ info.schedule_url }}">View Schedule</a>
-                      </div>
-                      {% if info.warnings %}
-                        <ul class="assignment-warning-list">
-                          {% for warning in info.warnings %}
-                            <li>{{ warning }}</li>
-                          {% endfor %}
-                        </ul>
-                      {% endif %}
-                    </div>
-                  </label>
-                {% endfor %}
-              </div>
-            </section>
-          {% endif %}
-
-          {% if not matching_staff_info and not other_staff_info %}
-            <p class="subtle-text">No staff records are available for assignment yet.</p>
-          {% endif %}
+          {{ render_staff_assignment_picker(assign_staff_form.staff_ids.name, matching_staff_info, other_staff_info, required_service_names) }}
 
           {% for error in assign_staff_form.staff_ids.errors %}
             <small class="field-error">{{ error }}</small>
@@ -277,47 +181,6 @@
         </form>
       </article>
     {% endif %}
-
-    <article class="summary-card">
-      <div class="section-bar compact-bar">
-        <div>
-          <h2>History</h2>
-          <p class="subtle-text">Earlier versions remain visible here after reschedules.</p>
-        </div>
-      </div>
-      {% if history or future_reschedules %}
-        <div class="notes-list">
-          {% for past in history %}
-            <article class="note-item">
-              <div class="note-header">
-                <div>
-                  <strong>Previous version</strong>
-                  <div class="subtle-text">{{ past.scheduled_date.strftime('%b %d, %Y') if past.scheduled_date else 'No date' }}{% if past.start_time and past.end_time %} · {{ past.start_time.strftime('%H:%M') }} – {{ past.end_time.strftime('%H:%M') }}{% endif %}</div>
-                </div>
-              </div>
-              <p>Status: {{ past.status }}</p>
-              <p>{{ past.internal_notes or past.customer_notes or 'No event notes' }}</p>
-              <p class="subtle-text">Rescheduled to appointment #{{ past.id }}</p>
-            </article>
-          {% endfor %}
-          {% for future in future_reschedules %}
-            <article class="note-item">
-              <div class="note-header">
-                <div>
-                  <strong>Rescheduled to</strong>
-                  <div class="subtle-text">{{ future.scheduled_date.strftime('%b %d, %Y') if future.scheduled_date else 'No date' }}{% if future.start_time and future.end_time %} · {{ future.start_time.strftime('%H:%M') }} – {{ future.end_time.strftime('%H:%M') }}{% endif %}</div>
-                </div>
-              </div>
-              <p>Status: {{ future.status }}</p>
-              <p>{{ future.internal_notes or future.customer_notes or 'No event notes' }}</p>
-              <p class="subtle-text">Appointment #{{ future.id }}</p>
-            </article>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="subtle-text">No reschedule history for this appointment.</p>
-      {% endif %}
-    </article>
   </section>
 </main>
 {% endblock %}

@@ -206,7 +206,7 @@
             <tbody>
               {% for request in request_history %}
                 <tr>
-                  <td><a href="{{ url_for('admin.request_detail', request_id=request.id) }}">#{{ request.id }}</a></td>
+                  <td><a href="{{ url_for('admin.request_detail', request_id=request.id) }}">#{{ request.display_request_number }}</a></td>
                   <td>
                     <div class="customer-table-meta">
                       <strong>{{ request.request_type or 'Unknown' }}</strong>
@@ -294,7 +294,7 @@
                   </td>
                   <td>
                     {% if appointment.quote_request_id %}
-                      <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">Request #{{ appointment.quote_request_id }}</a>
+                      <a href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">{{ appointment.quote_request.request_reference }}</a>
                     {% else %}
                       <span class="subtle-text">None</span>
                     {% endif %}

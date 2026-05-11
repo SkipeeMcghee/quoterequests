@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
@@ -253,12 +253,19 @@ def create_staff_member(
     role_title: str | None = None,
     worker_type: str = "employee",
     status: str = "active",
+    compensation_amount=None,
+    compensation_frequency: str | None = None,
     notes: str | None = None,
     service_ids: list[int] | None = None,
 ) -> StaffMember:
     cleaned_name = (display_name or "").strip()
     if not cleaned_name:
         raise BadRequest("Staff member name cannot be blank.")
+
+    normalized_compensation_amount, normalized_compensation_frequency = _normalize_staff_compensation(
+        compensation_amount,
+        compensation_frequency,
+    )
 
     staff_member = StaffMember(
         display_name=cleaned_name,
@@ -267,6 +274,8 @@ def create_staff_member(
         role_title=(role_title or "").strip() or None,
         worker_type=worker_type,
         status=status,
+        compensation_amount=normalized_compensation_amount,
+        compensation_frequency=normalized_compensation_frequency,
         notes=(notes or "").strip() or None,
     )
     if service_ids:
@@ -286,6 +295,8 @@ def update_staff_member(
     role_title: str | None = None,
     worker_type: str = "employee",
     status: str = "active",
+    compensation_amount=None,
+    compensation_frequency: str | None = None,
     notes: str | None = None,
     service_ids: list[int] | None = None,
 ) -> StaffMember:
@@ -297,12 +308,19 @@ def update_staff_member(
     if not cleaned_name:
         raise BadRequest("Staff member name cannot be blank.")
 
+    normalized_compensation_amount, normalized_compensation_frequency = _normalize_staff_compensation(
+        compensation_amount,
+        compensation_frequency,
+    )
+
     staff_member.display_name = cleaned_name
     staff_member.phone = (phone or "").strip() or None
     staff_member.email = (email or "").strip().lower() or None
     staff_member.role_title = (role_title or "").strip() or None
     staff_member.worker_type = worker_type
     staff_member.status = status
+    staff_member.compensation_amount = normalized_compensation_amount
+    staff_member.compensation_frequency = normalized_compensation_frequency
     staff_member.notes = (notes or "").strip() or None
     if service_ids is not None:
         staff_member.services = list(
@@ -310,6 +328,43 @@ def update_staff_member(
         )
     db.session.commit()
     return staff_member
+
+
+def update_staff_member_notes(staff_member_id: int, notes: str | None = None) -> StaffMember:
+    staff_member = db.session.get(StaffMember, staff_member_id)
+    if staff_member is None:
+        raise NotFound("Staff member not found.")
+
+    staff_member.notes = (notes or "").strip() or None
+    db.session.commit()
+    return staff_member
+
+
+def _normalize_staff_compensation(compensation_amount, compensation_frequency: str | None) -> tuple[Decimal | None, str | None]:
+    normalized_frequency = (compensation_frequency or "").strip().lower() or None
+
+    if compensation_amount is not None and compensation_amount != "":
+        try:
+            normalized_amount = Decimal(str(compensation_amount))
+        except (InvalidOperation, ValueError):
+            raise BadRequest("Enter a valid compensation amount.")
+        if normalized_amount < 0:
+            raise BadRequest("Compensation amount cannot be negative.")
+    else:
+        normalized_amount = None
+
+    if normalized_amount is None and normalized_frequency is None:
+        return None, None
+    if normalized_amount is None:
+        raise BadRequest("Enter a compensation amount.")
+    if normalized_frequency is None:
+        raise BadRequest("Choose a compensation frequency.")
+
+    valid_frequencies = {value for value, _label in StaffMember.COMPENSATION_FREQUENCY_CHOICES}
+    if normalized_frequency not in valid_frequencies:
+        raise BadRequest("Choose a valid compensation frequency.")
+
+    return normalized_amount, normalized_frequency
 
 
 def set_appointment_staff_assignments(appointment_id: int, staff_ids: list[int] | None) -> Appointment:
@@ -329,6 +384,32 @@ def set_appointment_staff_assignments(appointment_id: int, staff_ids: list[int] 
 
     db.session.commit()
     return appointment
+
+
+def _resolve_service_options(service_ids: list[int] | None) -> list[ServiceOption]:
+    if not service_ids:
+        return []
+
+    normalized_service_ids = sorted(set(service_ids))
+    service_options = list(
+        ServiceOption.query.filter(ServiceOption.id.in_(normalized_service_ids)).order_by(ServiceOption.name).all()
+    )
+    if len(service_options) != len(normalized_service_ids):
+        raise NotFound("One or more services were not found.")
+    return service_options
+
+
+def _resolve_staff_members(staff_ids: list[int] | None) -> list[StaffMember]:
+    if not staff_ids:
+        return []
+
+    normalized_staff_ids = sorted(set(staff_ids))
+    staff_members = list(
+        StaffMember.query.filter(StaffMember.id.in_(normalized_staff_ids)).order_by(StaffMember.display_name).all()
+    )
+    if len(staff_members) != len(normalized_staff_ids):
+        raise NotFound("One or more staff members were not found.")
+    return staff_members
 
 
 def find_staff_for_service_options(service_option_ids: list[int]) -> list[StaffMember]:
@@ -406,6 +487,10 @@ def add_staff_availability(
         raise BadRequest("Start and end times are required.")
     if end_time <= start_time:
         raise BadRequest("End time must be after start time.")
+    existing_windows = [window for window in staff_member.availability_windows if window.day_of_week == day_of_week]
+    for window in existing_windows:
+        if start_time < window.end_time and window.start_time < end_time:
+            raise BadRequest("Availability windows cannot overlap on the same day.")
 
     availability = StaffAvailability(
         staff_member_id=staff_member_id,
@@ -427,6 +512,104 @@ def delete_staff_availability(staff_availability_id: int) -> None:
     db.session.commit()
 
 
+def _coerce_staff_availability_time(value) -> time:
+    if isinstance(value, time):
+        return value.replace(second=0, microsecond=0)
+    if not isinstance(value, str):
+        raise BadRequest("Availability times must be valid HH:MM values.")
+    try:
+        return time.fromisoformat(value).replace(second=0, microsecond=0)
+    except ValueError as exc:
+        raise BadRequest("Availability times must be valid HH:MM values.") from exc
+
+
+def sync_staff_availability(staff_member_id: int, windows_payload: list[dict]) -> list[StaffAvailability]:
+    staff_member = db.session.get(StaffMember, staff_member_id)
+    if staff_member is None:
+        raise NotFound("Staff member not found.")
+    if not isinstance(windows_payload, list):
+        raise BadRequest("Availability data must be a list of windows.")
+
+    existing_windows = {window.id: window for window in staff_member.availability_windows}
+    normalized_windows = []
+    seen_ids: set[int] = set()
+
+    for item in windows_payload:
+        if not isinstance(item, dict):
+            raise BadRequest("Availability windows must be objects.")
+
+        raw_id = item.get("id")
+        availability_id = None
+        if raw_id not in (None, ""):
+            try:
+                availability_id = int(raw_id)
+            except (TypeError, ValueError) as exc:
+                raise BadRequest("Availability window ids must be valid integers.") from exc
+            if availability_id in seen_ids:
+                raise BadRequest("Duplicate availability windows were submitted.")
+            if availability_id not in existing_windows:
+                raise NotFound("Staff availability not found.")
+            seen_ids.add(availability_id)
+
+        try:
+            day_of_week = int(item.get("day_of_week"))
+        except (TypeError, ValueError) as exc:
+            raise BadRequest("Availability day values must be between 0 and 6.") from exc
+        if day_of_week < 0 or day_of_week > 6:
+            raise BadRequest("Availability day values must be between 0 and 6.")
+
+        start_time = _coerce_staff_availability_time(item.get("start_time"))
+        end_time = _coerce_staff_availability_time(item.get("end_time"))
+        if end_time <= start_time:
+            raise BadRequest("Availability end time must be after the start time.")
+
+        normalized_windows.append(
+            {
+                "id": availability_id,
+                "day_of_week": day_of_week,
+                "start_time": start_time,
+                "end_time": end_time,
+                "notes": (item.get("notes") or "").strip() or None,
+            }
+        )
+
+    sorted_windows = sorted(
+        normalized_windows,
+        key=lambda item: (
+            item["day_of_week"],
+            item["start_time"],
+            item["end_time"],
+            item["id"] or 0,
+        ),
+    )
+    previous_by_day: dict[int, dict] = {}
+    for item in sorted_windows:
+        previous = previous_by_day.get(item["day_of_week"])
+        if previous is not None and item["start_time"] < previous["end_time"]:
+            raise BadRequest("Availability windows cannot overlap on the same day.")
+        previous_by_day[item["day_of_week"]] = item
+
+    for existing_id, existing_window in existing_windows.items():
+        if existing_id not in seen_ids:
+            db.session.delete(existing_window)
+
+    for item in normalized_windows:
+        if item["id"] is None:
+            availability = StaffAvailability(staff_member_id=staff_member_id)
+            db.session.add(availability)
+        else:
+            availability = existing_windows[item["id"]]
+
+        availability.day_of_week = item["day_of_week"]
+        availability.start_time = item["start_time"]
+        availability.end_time = item["end_time"]
+        availability.notes = item["notes"]
+
+    db.session.commit()
+    db.session.refresh(staff_member)
+    return list(staff_member.availability_windows)
+
+
 def create_scheduled_work(
     request_id: int | None = None,
     customer_id: int | None = None,
@@ -440,6 +623,8 @@ def create_scheduled_work(
     status: str = "Scheduled",
     customer_notes: str | None = None,
     internal_notes: str | None = None,
+    service_ids: list[int] | None = None,
+    staff_ids: list[int] | None = None,
 ) -> Appointment:
     if status not in APPOINTMENT_STATUSES:
         raise BadRequest("Choose a valid appointment status.")
@@ -451,6 +636,9 @@ def create_scheduled_work(
     quote_request = None
     if request_id is not None:
         quote_request = get_quote_request(request_id)
+
+    selected_services = _resolve_service_options(service_ids)
+    selected_staff = _resolve_staff_members(staff_ids)
 
     customer = None
     if customer_id is not None:
@@ -483,6 +671,9 @@ def create_scheduled_work(
         internal_notes=(internal_notes or "").strip() or None,
     )
     db.session.add(appointment)
+    appointment.services = selected_services or (list(quote_request.services) if quote_request is not None else [])
+    for staff_member in selected_staff:
+        appointment.staff_assignments.append(AppointmentStaffAssignment(staff_member_id=staff_member.id))
     if quote_request is not None:
         quote_request.appointments.append(appointment)
         quote_request.sync_status()
@@ -725,6 +916,7 @@ def get_appointment(appointment_id: int) -> Appointment:
         select(Appointment)
         .where(Appointment.id == appointment_id)
         .options(
+            selectinload(Appointment.services),
             selectinload(Appointment.quote_request),
             selectinload(Appointment.customer),
             selectinload(Appointment.recurring_work),
@@ -769,11 +961,15 @@ def create_appointment(
     end_time=None,
     status: str | None = None,
     previous_appointment_id: int | None = None,
+    staff_ids: list[int] | None = None,
+    service_ids: list[int] | None = None,
 ) -> Appointment:
     if start_time is not None and end_time is not None and end_time <= start_time:
         raise BadRequest("End time must be after the start time.")
 
     quote_request = get_quote_request(request_id)
+    selected_services = _resolve_service_options(service_ids)
+    selected_staff = _resolve_staff_members(staff_ids)
     appointment = Appointment(
         customer_id=quote_request.customer_id,
         quote_request_id=quote_request.id,
@@ -792,6 +988,9 @@ def create_appointment(
         ),
         previous_appointment_id=previous_appointment_id,
     )
+    appointment.services = selected_services or list(quote_request.services)
+    for staff_member in selected_staff:
+        appointment.staff_assignments.append(AppointmentStaffAssignment(staff_member_id=staff_member.id))
     quote_request.appointments.append(appointment)
     quote_request.sync_status()
     db.session.commit()
@@ -883,6 +1082,23 @@ def update_appointment_status(appointment_id: int, status: str) -> Appointment:
     appointment.status = status
     if appointment.quote_request is not None:
         appointment.quote_request.sync_status()
+    db.session.commit()
+    return appointment
+
+
+def delete_appointment(appointment_id: int) -> Appointment:
+    appointment = get_appointment(appointment_id)
+
+    for rescheduled_appointment in list(appointment.rescheduled_appointments):
+        rescheduled_appointment.previous_appointment_id = appointment.previous_appointment_id
+
+    quote_request = appointment.quote_request
+    db.session.delete(appointment)
+    db.session.flush()
+
+    if quote_request is not None:
+        quote_request.sync_status()
+
     db.session.commit()
     return appointment
 
@@ -1167,6 +1383,7 @@ def list_scheduled_appointments(
         order_clause = [Customer.primary_name, Appointment.scheduled_date, Appointment.start_time, Appointment.id]
 
     statement = statement.options(
+        selectinload(Appointment.services),
         selectinload(Appointment.quote_request),
         selectinload(Appointment.customer),
         selectinload(Appointment.assigned_staff),
@@ -1219,7 +1436,12 @@ def get_request_quote(quote_id: int) -> RequestQuote:
     return request_quote
 
 
-def create_request_quote(request_id: int, amount, description: str | None = None) -> RequestQuote:
+def create_request_quote(
+    request_id: int,
+    amount,
+    billing_frequency: str,
+    description: str | None = None,
+) -> RequestQuote:
     quote_request = get_quote_request(request_id)
     if amount is None:
         raise BadRequest("Enter a quote amount before saving.")
@@ -1232,14 +1454,19 @@ def create_request_quote(request_id: int, amount, description: str | None = None
     if amount < 0:
         raise BadRequest("Quote amount cannot be negative.")
 
+    normalized_billing_frequency = (billing_frequency or "").strip().title()
+    if normalized_billing_frequency not in RequestQuote.BILLING_FREQUENCIES:
+        raise BadRequest("Choose a valid billing frequency.")
+
     if quote_request.first_viewed_at is None:
         quote_request.first_viewed_at = datetime.now(timezone.utc)
 
     request_quote = RequestQuote(
         quote_request_id=quote_request.id,
         amount=amount,
+        billing_frequency=normalized_billing_frequency,
         description=(description or "").strip() or None,
-        decision="Pending",
+        decision="Sent",
     )
     db.session.add(request_quote)
     quote_request.quotes.append(request_quote)
@@ -1258,6 +1485,24 @@ def update_request_quote_decision(quote_id: int, decision: str) -> RequestQuote:
     request_quote.quote_request.sync_status()
     db.session.commit()
     return request_quote
+
+
+def delete_request_quote(quote_id: int) -> int:
+    request_quote = get_request_quote(quote_id)
+    quote_request = request_quote.quote_request
+    request_id = quote_request.id
+    db.session.delete(request_quote)
+    db.session.flush()
+    if not quote_request.quotes and quote_request.status in {"Quoted", "Accepted", "Rejected"}:
+        if quote_request.last_contacted_on:
+            quote_request.status = "Contacted"
+        elif quote_request.first_viewed_at:
+            quote_request.status = "Viewed"
+        else:
+            quote_request.status = "New"
+    quote_request.sync_status()
+    db.session.commit()
+    return request_id
 
 
 def get_request_note(note_id: int) -> RequestNote:

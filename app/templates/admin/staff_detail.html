@@ -7,224 +7,230 @@
 {% block content %}
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
-    title='Staff Record',
+    title='Staff Details',
     description='Review contact details, service coverage, weekly availability, assigned scheduled work, and scheduled hours for planning.',
     nav_mode='sub',
     return_url=url_for('admin.staff_list'),
     return_label='Back to Staff',
-    meta=staff_member.display_name ~ ((' · ' ~ staff_member.role_title) if staff_member.role_title else '')
+    meta=staff_member.display_name
   ) %}
-      <a class="btn btn-secondary" href="{{ staff_schedule_url }}">Scheduled Work</a>
-      <a class="btn btn-primary" href="{{ url_for('admin.edit_staff_member', staff_member_id=staff_member.id) }}">Edit</a>
   {% endcall %}
 
-  <section class="summary-card staff-overview-card">
-    <div class="staff-overview-card__header">
-      <div>
-        <p class="eyebrow">Staff record</p>
-        <h2>{{ staff_member.display_name }}</h2>
-        <p class="subtle-text">{{ staff_member.role_title or 'No role title set yet' }}</p>
-      </div>
-      <div class="staff-overview-card__badges">
-        <span class="tag-pill">{{ staff_member.worker_type.title() }}</span>
-        <span class="tag-pill">{{ staff_member.status.title() }}</span>
-      </div>
-    </div>
-
-    <div class="staff-overview-grid">
-      <article>
-        <strong>Contact info</strong>
-        <span>{{ staff_member.phone or 'No phone on file' }}</span>
-        <span>{{ staff_member.email or 'No email on file' }}</span>
-      </article>
-      <article>
-        <strong>Services they can perform</strong>
-        <span>{{ service_count }}</span>
-        <span class="subtle-text">{{ 'Service assigned' if service_count == 1 else 'Services assigned' }}</span>
-      </article>
-      <article>
-        <strong>Weekly availability</strong>
-        <span>{{ availability_window_count }}</span>
-        <span class="subtle-text">{{ availability_day_count }} day{% if availability_day_count != 1 %}s{% endif %} with saved availability</span>
-      </article>
-      <article>
-        <strong>Assigned scheduled work</strong>
-        <span>{{ upcoming_assignment_count }}</span>
-        <span class="subtle-text">{{ upcoming_scheduled_hours|round(2) }} upcoming scheduled hours</span>
-      </article>
-    </div>
-  </section>
-
-  <section class="summary-grid staff-detail-grid">
-    <div class="detail-grid">
-      <article class="summary-card">
-        <div class="section-bar compact-bar">
-          <div>
-            <h2>Contact info</h2>
-            <p class="subtle-text">Keep contact details, worker type, and notes visible before editing assignments or availability.</p>
-          </div>
-        </div>
-        <dl class="detail-list vertical-list">
-          <div>
-            <dt>Name</dt>
-            <dd>{{ staff_member.display_name }}</dd>
-          </div>
-          <div>
-            <dt>Role / title</dt>
-            <dd>{{ staff_member.role_title or 'No role title set' }}</dd>
-          </div>
-          <div>
-            <dt>Worker type</dt>
-            <dd>{{ staff_member.worker_type.title() }}</dd>
-          </div>
-          <div>
-            <dt>Status</dt>
-            <dd>{{ staff_member.status.title() }}</dd>
-          </div>
-          <div>
-            <dt>Phone</dt>
-            <dd>{% if staff_member.phone %}<a href="tel:{{ staff_member.phone }}">{{ staff_member.phone }}</a>{% else %}Not provided{% endif %}</dd>
-          </div>
-          <div>
-            <dt>Email</dt>
-            <dd>{% if staff_member.email %}<a href="mailto:{{ staff_member.email }}">{{ staff_member.email }}</a>{% else %}Not provided{% endif %}</dd>
-          </div>
-          <div>
-            <dt>Notes</dt>
-            <dd>{{ staff_member.notes or 'No planning notes yet.' }}</dd>
-          </div>
-        </dl>
-      </article>
-
-      <article class="summary-card">
-        <div class="section-bar compact-bar">
-          <div>
-            <h2>Services they can perform</h2>
-            <p class="subtle-text">These services are used when matching staff to scheduled events.</p>
-          </div>
-        </div>
-        {% if staff_member.services %}
-          <div class="tag-list staff-service-list">
-            {% for service in staff_member.services %}
-              <span class="tag-pill">{{ service.name }}</span>
-            {% endfor %}
-          </div>
-        {% else %}
-          <p class="subtle-text">No services assigned yet. Update the staff record before using service-based assignment matching.</p>
-        {% endif %}
-      </article>
-
-      <article class="summary-card">
-        <div class="section-bar compact-bar">
-          <div>
-            <h2>Scheduled hours</h2>
-            <p class="subtle-text">Planning view only. These are scheduled hours from assigned events, not payroll, time clock, or invoicing data.</p>
-          </div>
-        </div>
-        <div class="staff-hours-grid">
-          <article class="staff-hours-card">
-            <strong>{{ scheduled_hours|round(2) }}</strong>
-            <span>Total scheduled hours</span>
-          </article>
-          <article class="staff-hours-card">
-            <strong>{{ current_week_hours|round(2) }}</strong>
-            <span>Scheduled hours this week</span>
-          </article>
-          <article class="staff-hours-card">
-            <strong>{{ current_month_hours|round(2) }}</strong>
-            <span>Scheduled hours this month</span>
-          </article>
-          {% if custom_hours is not none %}
-            <article class="staff-hours-card">
-              <strong>{{ custom_hours|round(2) }}</strong>
-              <span>Scheduled hours in filtered range</span>
-            </article>
-          {% endif %}
-        </div>
-        <div class="section-bar compact-bar">
-          <h3>Filter scheduled hours</h3>
-        </div>
-        <form method="get" class="stacked-form">
-          <div class="form-grid">
-            <label class="form-field">
-              <span>Start date</span>
-              <input type="date" name="start_date" value="{{ filter_start or '' }}" class="input" />
-            </label>
-            <label class="form-field">
-              <span>End date</span>
-              <input type="date" name="end_date" value="{{ filter_end or '' }}" class="input" />
-            </label>
-          </div>
-          <div class="button-row">
-            <button type="submit" class="btn btn-secondary btn-small">Update Scheduled Hours</button>
-            {% if filter_start or filter_end %}
-              <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=staff_member.id) }}">Clear</a>
+    <article class="summary-card staff-overview-card" id="staff-details">
+      <div class="staff-overview-card__header">
+        <div class="staff-overview-card__identity">
+          <h2>{{ staff_member.display_name }}</h2>
+          <div class="staff-overview-card__identity-details">
+            <div class="staff-overview-card__identity-detail">
+              <span class="subtle-text">Staff Type</span>
+              <strong>{{ staff_member.worker_type.title() }}</strong>
+            </div>
+            <div class="staff-overview-card__identity-detail">
+              <span class="subtle-text">Status</span>
+              <strong>{{ staff_member.status.title() }}</strong>
+            </div>
+            <div class="staff-overview-card__identity-detail">
+              <span class="subtle-text">Phone</span>
+              {% if staff_member.phone %}
+                <a href="tel:{{ staff_member.phone }}"><strong>{{ staff_member.phone }}</strong></a>
+              {% else %}
+                <strong>No phone</strong>
+              {% endif %}
+            </div>
+            <div class="staff-overview-card__identity-detail">
+              <span class="subtle-text">Email</span>
+              {% if staff_member.email %}
+                <a href="mailto:{{ staff_member.email }}"><strong>{{ staff_member.email }}</strong></a>
+              {% else %}
+                <strong>No email</strong>
+              {% endif %}
+            </div>
+            {% if staff_member.compensation_amount is not none and staff_member.compensation_frequency %}
+              <div class="staff-overview-card__identity-detail">
+                <span class="subtle-text">Compensation</span>
+                <strong>{{ staff_compensation_currency }} {{ '%.2f'|format(staff_member.compensation_amount) }} / {{ staff_member.compensation_frequency_label }}</strong>
+              </div>
             {% endif %}
           </div>
-        </form>
-      </article>
-    </div>
-
-    <div class="detail-grid">
-      <article class="summary-card" id="availability">
-        <div class="section-bar compact-bar">
-          <div>
-            <h2>Weekly availability</h2>
-            <p class="subtle-text">Use weekly availability to guide scheduling conflicts and assignment decisions.</p>
-          </div>
         </div>
-        {% if availability_by_day %}
-          <div class="staff-availability-grid">
-            {% for day in availability_by_day %}
-              <article class="staff-availability-day">
-                <strong>{{ day.day_name }}</strong>
-                <div class="staff-availability-day__windows">
-                  {% for availability in day.windows %}
-                    <div class="staff-availability-window">
-                      <div>
-                        <span>{{ availability.start_time.strftime('%H:%M') }} – {{ availability.end_time.strftime('%H:%M') }}</span>
-                        {% if availability.notes %}
-                          <div class="subtle-text">{{ availability.notes }}</div>
-                        {% endif %}
-                      </div>
-                      <form method="post" action="{{ url_for('admin.delete_staff_availability_route', staff_member_id=staff_member.id, availability_id=availability.id) }}" class="inline-form">
-                        <button type="submit" class="btn btn-danger btn-small">Delete</button>
-                      </form>
-                    </div>
-                  {% endfor %}
+        <div class="detail-actions">
+          <a class="btn btn-secondary" href="{{ staff_schedule_url }}">Scheduled Work</a>
+          <a class="btn btn-primary" href="{{ url_for('admin.edit_staff_member', staff_member_id=staff_member.id) }}">Edit</a>
+        </div>
+      </div>
+
+      <div class="staff-profile-grid">
+        <section class="staff-profile-services">
+          <strong>Services they can perform</strong>
+          <p class="subtle-text">Used when matching scheduled work.</p>
+          {% if staff_member.services %}
+            <div class="tag-list staff-service-list">
+              {% for service in staff_member.services %}
+                <span class="tag-pill">{{ service.name }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="subtle-text">No services assigned yet.</p>
+          {% endif %}
+        </section>
+
+        <section class="staff-profile-note-editor">
+          <form method="post" action="{{ url_for('admin.update_staff_member_notes_route', staff_member_id=staff_member.id) }}" class="stacked-form" data-staff-notes-form>
+            {{ staff_notes_form.hidden_tag() }}
+            <label class="form-field">
+              <span>Staff Notes</span>
+              {{ staff_notes_form.notes(class_="textarea", data_staff_notes_input="true") }}
+              {% for error in staff_notes_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <span class="subtle-text staff-profile-note-editor__status" data-staff-notes-status aria-live="polite"></span>
+          </form>
+        </section>
+      </div>
+    </article>
+
+    <article class="summary-card" id="availability">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Weekly availability</h2>
+          <p class="subtle-text">Use weekly availability to guide scheduling conflicts and assignment decisions.</p>
+        </div>
+        <div class="availability-section-actions">
+          <span class="subtle-text availability-board__status" data-availability-status aria-live="polite"></span>
+          <button type="button" class="btn btn-secondary btn-small" data-availability-clear {% if availability_window_count == 0 %}disabled{% endif %}>Clear all</button>
+        </div>
+      </div>
+      <div class="availability-board" data-availability-board data-slot-minutes="{{ availability_board_slot_minutes }}" data-board-minutes="{{ availability_board_minutes }}">
+        <form method="post" action="{{ url_for('admin.sync_staff_availability_route', staff_member_id=staff_member.id) }}" data-availability-sync-form hidden>
+          {{ availability_sync_form.hidden_tag() }}
+        </form>
+        <script type="application/json" data-availability-board-state>{{ availability_week_windows|tojson }}</script>
+        <div class="availability-board__scroll">
+          <div class="availability-board__sheet">
+            <div class="availability-board__axis">
+              <div></div>
+              <div class="availability-board__timeline">
+                {% for tick in availability_time_axis %}
+                  <span class="availability-board__tick" style="left: {{ tick.percent|round(4) }}%;">{{ tick.label }}</span>
+                {% endfor %}
+              </div>
+            </div>
+            {% for day in availability_week_rows %}
+              <div class="availability-board__row">
+                <div class="availability-board__day">
+                  <strong>{{ day.day_short }}</strong>
+                  <span class="subtle-text">{{ day.day_name }}</span>
                 </div>
-              </article>
+                <div class="availability-board__lane" data-day-index="{{ day.day_index }}" aria-label="{{ day.day_name }} availability lane">
+                  <div class="availability-board__blocks" data-day-blocks>
+                    {% for availability in day.windows %}
+                      <div
+                        class="availability-block{% if availability.end_minutes - availability.start_minutes <= 60 %} availability-block--compact{% endif %}"
+                        data-window-id="{{ availability.id }}"
+                        style="left: {{ ((availability.start_minutes / availability_board_minutes) * 100)|round(4) }}%; width: {{ (((availability.end_minutes - availability.start_minutes) / availability_board_minutes) * 100)|round(4) }}%;"
+                        title="{{ availability.label }}{% if availability.notes %} — {{ availability.notes }}{% endif %}"
+                      >
+                        <button type="button" class="availability-block__handle availability-block__handle--start" data-availability-handle="start" aria-label="Resize availability start"></button>
+                        <span class="availability-block__label">{{ availability.label }}</span>
+                        <button type="button" class="availability-block__delete" data-availability-delete aria-label="Delete availability">x</button>
+                        <button type="button" class="availability-block__handle availability-block__handle--end" data-availability-handle="end" aria-label="Resize availability end"></button>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
             {% endfor %}
           </div>
-        {% else %}
-          <p class="subtle-text">No weekly availability has been saved yet.</p>
-        {% endif %}
-        <div class="section-bar compact-bar">
-          <h3>Add weekly availability</h3>
         </div>
-        <form method="post" action="{{ url_for('admin.add_staff_availability_route', staff_member_id=staff_member.id) }}" class="stacked-form">
-          {{ availability_form.hidden_tag() }}
-          <div class="form-grid">
-            <label class="form-field">
-              <span>Day of week</span>
-              {{ availability_form.day_of_week(class_="select") }}
-              {% for error in availability_form.day_of_week.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-            {{ render_time_select(availability_form.start_time_hour, availability_form.start_time_minute, "Start time") }}
-            {{ render_time_select(availability_form.end_time_hour, availability_form.end_time_minute, "End time") }}
-          </div>
-          <label class="form-field">
-            <span>Notes</span>
-            {{ availability_form.notes(class_="textarea") }}
-            {% for error in availability_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
-          {{ availability_form.submit(class_="btn btn-primary", value="Add Availability") }}
-        </form>
-      </article>
-    </div>
-  </section>
+        {% if availability_window_count == 0 %}
+          <p class="subtle-text" data-availability-empty-state>No weekly availability has been saved yet. Drag across a day to add a block.</p>
+        {% else %}
+          <p class="subtle-text" data-availability-empty-state hidden>No weekly availability has been saved yet. Drag across a day to add a block.</p>
+        {% endif %}
+        <p class="subtle-text">Drag across a day to add availability. Drag a saved block to move it, drag either edge to resize it, and use x to remove it. Snaps in 15-minute increments. Use manual entry below when you need a more exact time.</p>
+      </div>
 
-  <section class="detail-grid staff-assignment-sections">
+      <details class="availability-manual-editor">
+        <summary class="availability-manual-editor__summary">
+          <span class="availability-manual-editor__summary-title">Add weekly availability manually</span>
+        </summary>
+        <div class="availability-manual-editor__body">
+          <div class="availability-manual-days" data-availability-manual-days></div>
+        </div>
+      </details>
+
+      <noscript>
+        <section class="availability-manual-editor availability-manual-editor--noscript">
+          <div class="section-bar compact-bar">
+            <div>
+              <h3>Fallback manual entry</h3>
+              <p class="subtle-text">JavaScript is required for the visual planner, but you can still add a single weekly window here.</p>
+            </div>
+          </div>
+          <form method="post" action="{{ url_for('admin.add_staff_availability_route', staff_member_id=staff_member.id) }}" class="stacked-form availability-manual-entry__form">
+            {{ availability_form.hidden_tag() }}
+            <div class="form-grid">
+              <label class="form-field">
+                <span>Day of week</span>
+                {{ availability_form.day_of_week(class_="select") }}
+                {% for error in availability_form.day_of_week.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+              {{ render_time_select(availability_form.start_time_hour, availability_form.start_time_minute, "Start time") }}
+              {{ render_time_select(availability_form.end_time_hour, availability_form.end_time_minute, "End time") }}
+            </div>
+            <label class="form-field">
+              <span>Notes</span>
+              {{ availability_form.notes(class_="textarea") }}
+              {% for error in availability_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            {{ availability_form.submit(class_="btn btn-primary", value="Add Availability") }}
+          </form>
+        </section>
+      </noscript>
+    </article>
+
+    <article class="summary-card staff-scheduled-hours">
+      <div class="section-bar compact-bar">
+        <h2>Scheduled Hours by Date Range</h2>
+      </div>
+      <div class="staff-hours-stack">
+        <article class="staff-hours-card">
+          <strong>{{ filtered_hours|round(2) }}</strong>
+          <span>{{ filtered_hours_label }}</span>
+          {% if filtered_hours_caption %}<span class="subtle-text">{{ filtered_hours_caption }}</span>{% endif %}
+        </article>
+      </div>
+      <form method="get" class="stacked-form staff-scheduled-hours__filter" data-scheduled-hours-filter>
+        <div class="staff-scheduled-hours__fields">
+          <label class="form-field">
+            <span>Preset</span>
+            <select name="range_preset" class="select" data-scheduled-hours-preset>
+              {% for group_label, group_options in date_range_preset_groups %}
+                <optgroup label="{{ group_label }}">
+                  {% for preset_key, preset_label in group_options %}
+                    <option value="{{ preset_key }}" {% if preset_key == selected_range_preset %}selected{% endif %}>{{ preset_label }}</option>
+                  {% endfor %}
+                </optgroup>
+              {% endfor %}
+              <option value="">Custom range</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>Start date</span>
+            <input type="date" name="start_date" value="{{ filter_start or '' }}" class="input" data-scheduled-hours-start />
+          </label>
+          <label class="form-field">
+            <span>End date</span>
+            <input type="date" name="end_date" value="{{ filter_end or '' }}" class="input" data-scheduled-hours-end />
+          </label>
+        </div>
+        <div class="button-row staff-scheduled-hours__actions">
+          {% if (selected_range_preset and selected_range_preset != 'all_dates') or filter_start or filter_end %}
+            <a class="btn btn-secondary btn-small" href="{{ url_for('admin.staff_detail', staff_member_id=staff_member.id) }}">Clear</a>
+          {% endif %}
+        </div>
+      </form>
+    </article>
+
     <article class="summary-card">
       <div class="section-bar compact-bar">
         <div>
@@ -319,4 +325,1079 @@
     </article>
   </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const notesForm = document.querySelector('[data-staff-notes-form]');
+  if (!notesForm || !window.fetch) {
+    return;
+  }
+
+  const notesInput = notesForm.querySelector('[data-staff-notes-input]');
+  const statusElement = notesForm.querySelector('[data-staff-notes-status]');
+  if (!notesInput || !statusElement) {
+    return;
+  }
+
+  const saveDelayMs = 700;
+  let savedValue = notesInput.value;
+  let saveTimer = null;
+  let statusTimer = null;
+  let isSaving = false;
+  let queuedSave = false;
+
+  function setStatus(message, options) {
+    const settings = options || {};
+    window.clearTimeout(statusTimer);
+    statusElement.textContent = message || '';
+    statusElement.dataset.state = settings.isError ? 'error' : (settings.isPending ? '' : (message ? 'success' : ''));
+
+    if (message && !settings.isError && !settings.isPending) {
+      statusTimer = window.setTimeout(function () {
+        if (statusElement.textContent === message) {
+          statusElement.textContent = '';
+          statusElement.dataset.state = '';
+        }
+      }, 1800);
+    }
+  }
+
+  function saveNotes() {
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
+
+    if (isSaving) {
+      queuedSave = true;
+      return;
+    }
+
+    if (notesInput.value === savedValue) {
+      setStatus('', {});
+      return;
+    }
+
+    const pendingValue = notesInput.value;
+    isSaving = true;
+    queuedSave = false;
+    setStatus('Saving...', { isPending: true });
+
+    fetch(notesForm.action, {
+      method: 'POST',
+      body: new FormData(notesForm),
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    }).then(function (response) {
+      return response.json().catch(function () {
+        return { ok: false, error: 'Unable to save staff notes right now.' };
+      }).then(function (payload) {
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || 'Unable to save staff notes right now.');
+        }
+        return payload;
+      });
+    }).then(function (payload) {
+      savedValue = pendingValue;
+      setStatus(payload.message || 'Staff notes saved.', {});
+    }).catch(function (error) {
+      setStatus(error.message || 'Unable to save staff notes right now.', { isError: true });
+    }).finally(function () {
+      isSaving = false;
+      if (queuedSave || notesInput.value !== savedValue) {
+        saveNotes();
+      }
+    });
+  }
+
+  notesInput.addEventListener('input', function () {
+    if (notesInput.value === savedValue) {
+      queuedSave = false;
+      window.clearTimeout(saveTimer);
+      saveTimer = null;
+      setStatus('', {});
+      return;
+    }
+
+    setStatus('Saving...', { isPending: true });
+    window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(saveNotes, saveDelayMs);
+  });
+
+  notesInput.addEventListener('blur', saveNotes);
+})();
+</script>
+
+<script>
+(function () {
+  const scheduledHoursForm = document.querySelector('[data-scheduled-hours-filter]');
+  if (!scheduledHoursForm) {
+    return;
+  }
+
+  const scheduledHoursScrollKey = 'staff-detail-scheduled-hours-scroll';
+  const presetInput = scheduledHoursForm.querySelector('[data-scheduled-hours-preset]');
+  const startDateInput = scheduledHoursForm.querySelector('[data-scheduled-hours-start]');
+  const endDateInput = scheduledHoursForm.querySelector('[data-scheduled-hours-end]');
+
+  function persistScheduledHoursScroll() {
+    try {
+      sessionStorage.setItem(scheduledHoursScrollKey, JSON.stringify({
+        path: window.location.pathname,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+      }));
+    } catch (error) {
+      sessionStorage.removeItem(scheduledHoursScrollKey);
+    }
+  }
+
+  try {
+    const savedScrollState = sessionStorage.getItem(scheduledHoursScrollKey);
+    if (savedScrollState) {
+      sessionStorage.removeItem(scheduledHoursScrollKey);
+      const scrollState = JSON.parse(savedScrollState);
+      if (scrollState && scrollState.path === window.location.pathname) {
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            window.scrollTo(scrollState.scrollX || 0, scrollState.scrollY || 0);
+          });
+        });
+      }
+    }
+  } catch (error) {
+    sessionStorage.removeItem(scheduledHoursScrollKey);
+  }
+
+  scheduledHoursForm.addEventListener('submit', function () {
+    persistScheduledHoursScroll();
+  });
+
+  function submitScheduledHoursForm() {
+    if (scheduledHoursForm.dataset.isSubmitting === 'true') {
+      return;
+    }
+
+    scheduledHoursForm.dataset.isSubmitting = 'true';
+    if (scheduledHoursForm.requestSubmit) {
+      scheduledHoursForm.requestSubmit();
+      return;
+    }
+
+    persistScheduledHoursScroll();
+    HTMLFormElement.prototype.submit.call(scheduledHoursForm);
+  }
+
+  if (presetInput) {
+    presetInput.addEventListener('change', function () {
+      if (!presetInput.value) {
+        return;
+      }
+
+      submitScheduledHoursForm();
+    });
+  }
+
+  [startDateInput, endDateInput].forEach(function (input) {
+    if (!input) {
+      return;
+    }
+
+    input.addEventListener('change', function () {
+      if (presetInput) {
+        presetInput.value = '';
+      }
+
+      if (!startDateInput || !endDateInput || !startDateInput.value || !endDateInput.value) {
+        return;
+      }
+
+      submitScheduledHoursForm();
+    });
+  });
+})();
+</script>
+
+<script>
+(function () {
+  const board = document.querySelector('[data-availability-board]');
+  if (!board || !window.fetch || !window.PointerEvent) {
+    return;
+  }
+
+  const weekdayNames = {{ weekday_names|tojson }};
+  const stateNode = board.querySelector('[data-availability-board-state]');
+  const syncForm = board.querySelector('[data-availability-sync-form]');
+  const windowsInput = syncForm ? syncForm.querySelector('input[name$="windows_json"]') : null;
+  const statusElement = document.querySelector('[data-availability-status]');
+  const emptyState = document.querySelector('[data-availability-empty-state]');
+  const manualDaysContainer = document.querySelector('[data-availability-manual-days]');
+  const clearButton = document.querySelector('[data-availability-clear]');
+  const boardMinutes = Number(board.dataset.boardMinutes || '1435');
+  const slotMinutes = Number(board.dataset.slotMinutes || '15');
+  const compactThresholdMinutes = 60;
+  const defaultManualDurationMinutes = 60;
+  const hourOptions = Array.from({ length: 24 }, function (_, hourValue) {
+    return { value: hourValue, label: formatDisplayTime(hourValue * 60) };
+  });
+  const minuteOptions = Array.from({ length: 60 / slotMinutes }, function (_, minuteIndex) {
+    const minuteValue = minuteIndex * slotMinutes;
+    return { value: minuteValue, label: pad(minuteValue) };
+  });
+  let tempId = 0;
+  let committedWindows = normalizeWindows(readBoardState());
+  let workingWindows = cloneWindows(committedWindows);
+  let interaction = null;
+  let isSaving = false;
+  let pendingFocusRestore = null;
+  let statusTimer = null;
+
+  function readBoardState() {
+    if (!stateNode) {
+      return [];
+    }
+
+    try {
+      return JSON.parse(stateNode.textContent || '[]');
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function cloneWindows(source) {
+    return source.map(function (windowItem) {
+      return Object.assign({}, windowItem);
+    });
+  }
+
+  function compareWindows(left, right) {
+    return (
+      left.dayIndex - right.dayIndex
+      || left.startMinutes - right.startMinutes
+      || left.endMinutes - right.endMinutes
+      || String(left.key).localeCompare(String(right.key))
+    );
+  }
+
+  function clampDayIndex(value) {
+    if (Number.isNaN(value)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(6, value));
+  }
+
+  function normalizeWindows(source) {
+    if (!Array.isArray(source)) {
+      return [];
+    }
+
+    return source.map(function (windowItem) {
+      const numericId = windowItem.id === null || windowItem.id === undefined || windowItem.id === ''
+        ? null
+        : Number(windowItem.id);
+      const rawStartMinutes = Number(windowItem.start_minutes);
+      const rawEndMinutes = Number(windowItem.end_minutes);
+      const startMinutes = Math.max(0, Math.min(boardMinutes - slotMinutes, Number.isNaN(rawStartMinutes) ? 0 : rawStartMinutes));
+      const endMinutes = Math.max(startMinutes + slotMinutes, Math.min(boardMinutes, Number.isNaN(rawEndMinutes) ? startMinutes + slotMinutes : rawEndMinutes));
+      return {
+        id: Number.isNaN(numericId) ? null : numericId,
+        key: windowItem.key || (numericId !== null && !Number.isNaN(numericId) ? 'saved-' + numericId : 'temp-' + (++tempId)),
+        dayIndex: clampDayIndex(Number(windowItem.day_of_week)),
+        startMinutes: startMinutes,
+        endMinutes: endMinutes,
+        notes: windowItem.notes || '',
+      };
+    }).sort(compareWindows);
+  }
+
+  function pad(value) {
+    return String(value).padStart(2, '0');
+  }
+
+  function minutesToIso(minutes) {
+    const safeMinutes = Math.max(0, Math.min(boardMinutes, minutes));
+    const hourValue = Math.floor(safeMinutes / 60);
+    const minuteValue = safeMinutes % 60;
+    return pad(hourValue) + ':' + pad(minuteValue);
+  }
+
+  function formatDisplayTime(minutes) {
+    const safeMinutes = Math.max(0, Math.min(boardMinutes, minutes));
+    const hourValue = Math.floor(safeMinutes / 60);
+    const minuteValue = safeMinutes % 60;
+    const suffix = hourValue < 12 ? 'AM' : 'PM';
+    const displayHour = hourValue % 12 || 12;
+    if (minuteValue) {
+      return displayHour + ':' + pad(minuteValue) + ' ' + suffix;
+    }
+    return displayHour + ' ' + suffix;
+  }
+
+  function formatRange(windowItem) {
+    return formatDisplayTime(windowItem.startMinutes) + ' – ' + formatDisplayTime(windowItem.endMinutes);
+  }
+
+  function serializeWindows(source) {
+    return source.slice().sort(compareWindows).map(function (windowItem) {
+      return {
+        id: windowItem.id,
+        day_of_week: windowItem.dayIndex,
+        start_time: minutesToIso(windowItem.startMinutes),
+        end_time: minutesToIso(windowItem.endMinutes),
+        notes: windowItem.notes || '',
+      };
+    });
+  }
+
+  function setStatus(message, isError, persist) {
+    if (!statusElement) {
+      return;
+    }
+
+    window.clearTimeout(statusTimer);
+    statusElement.textContent = message || '';
+    statusElement.dataset.state = isError ? 'error' : (message ? 'success' : '');
+    if (message && !isError && !persist) {
+      statusTimer = window.setTimeout(function () {
+        if (statusElement.textContent === message) {
+          statusElement.textContent = '';
+          statusElement.dataset.state = '';
+        }
+      }, 1800);
+    }
+  }
+
+  function updateAvailabilitySummary(source) {
+    const windows = source || workingWindows;
+    if (emptyState) {
+      emptyState.hidden = windows.length > 0;
+    }
+    if (clearButton) {
+      clearButton.disabled = windows.length === 0 || isSaving;
+    }
+  }
+
+  function buildBlock(windowItem) {
+    const block = document.createElement('div');
+    block.className = 'availability-block';
+    if (windowItem.endMinutes - windowItem.startMinutes <= compactThresholdMinutes) {
+      block.classList.add('availability-block--compact');
+    }
+    if (interaction && interaction.key === windowItem.key) {
+      block.classList.add('availability-block--active');
+    }
+    block.dataset.windowKey = windowItem.key;
+    block.style.left = ((windowItem.startMinutes / boardMinutes) * 100) + '%';
+    block.style.width = (((windowItem.endMinutes - windowItem.startMinutes) / boardMinutes) * 100) + '%';
+    block.title = windowItem.notes ? formatRange(windowItem) + ' — ' + windowItem.notes : formatRange(windowItem);
+
+    const startHandle = document.createElement('button');
+    startHandle.type = 'button';
+    startHandle.className = 'availability-block__handle availability-block__handle--start';
+    startHandle.dataset.availabilityHandle = 'start';
+    startHandle.setAttribute('aria-label', 'Resize availability start');
+    block.appendChild(startHandle);
+
+    const label = document.createElement('span');
+    label.className = 'availability-block__label';
+    label.textContent = formatRange(windowItem);
+    block.appendChild(label);
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'availability-block__delete';
+    deleteButton.dataset.availabilityDelete = 'true';
+    deleteButton.setAttribute('aria-label', 'Delete availability');
+    deleteButton.textContent = 'x';
+    block.appendChild(deleteButton);
+
+    const endHandle = document.createElement('button');
+    endHandle.type = 'button';
+    endHandle.className = 'availability-block__handle availability-block__handle--end';
+    endHandle.dataset.availabilityHandle = 'end';
+    endHandle.setAttribute('aria-label', 'Resize availability end');
+    block.appendChild(endHandle);
+
+    return block;
+  }
+
+  function createSelect(options, selectedValue, datasetValues) {
+    const select = document.createElement('select');
+    select.className = 'select availability-day-row__select';
+    Object.keys(datasetValues).forEach(function (key) {
+      select.dataset[key] = datasetValues[key];
+    });
+
+    options.forEach(function (option) {
+      const optionElement = document.createElement('option');
+      optionElement.value = String(option.value);
+      optionElement.textContent = option.label;
+      if (String(option.value) === String(selectedValue)) {
+        optionElement.selected = true;
+      }
+      select.appendChild(optionElement);
+    });
+
+    return select;
+  }
+
+  function buildTimeEditor(labelText, boundary, totalMinutes) {
+    const wrapper = document.createElement('label');
+    wrapper.className = 'availability-day-row__time';
+
+    const label = document.createElement('span');
+    label.textContent = labelText;
+    wrapper.appendChild(label);
+
+    const selects = document.createElement('div');
+    selects.className = 'availability-day-row__time-selects';
+    selects.appendChild(createSelect(hourOptions, Math.floor(totalMinutes / 60), { manualBoundary: boundary, manualPart: 'hour' }));
+    selects.appendChild(createSelect(minuteOptions, totalMinutes % 60, { manualBoundary: boundary, manualPart: 'minute' }));
+    wrapper.appendChild(selects);
+
+    return wrapper;
+  }
+
+  function buildManualRow(windowItem) {
+    const row = document.createElement('div');
+    row.className = 'availability-day-row';
+    row.dataset.manualWindowKey = windowItem.key;
+    row.dataset.manualDayIndex = String(windowItem.dayIndex);
+    row.dataset.manualStartMinutes = String(windowItem.startMinutes);
+    row.dataset.manualEndMinutes = String(windowItem.endMinutes);
+
+    const fields = document.createElement('div');
+    fields.className = 'availability-day-row__fields';
+    fields.appendChild(buildTimeEditor('Start', 'start', windowItem.startMinutes));
+    fields.appendChild(buildTimeEditor('End', 'end', windowItem.endMinutes));
+    row.appendChild(fields);
+
+    const actions = document.createElement('div');
+    actions.className = 'availability-day-row__actions';
+
+    const range = document.createElement('span');
+    range.className = 'subtle-text availability-day-row__summary';
+    range.textContent = formatRange(windowItem);
+    actions.appendChild(range);
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'btn btn-secondary btn-small';
+    removeButton.dataset.manualRemove = windowItem.key;
+    removeButton.textContent = 'Remove';
+    actions.appendChild(removeButton);
+
+    row.appendChild(actions);
+    return row;
+  }
+
+  function createManualFocusSnapshot(details) {
+    return {
+      kind: 'select',
+      windowKey: details.windowKey || null,
+      dayIndex: String(details.dayIndex),
+      startMinutes: String(details.startMinutes),
+      endMinutes: String(details.endMinutes),
+      boundary: details.boundary,
+      part: details.part,
+      windowScrollX: window.scrollX,
+      windowScrollY: window.scrollY,
+    };
+  }
+
+  function createManualButtonSnapshot(dayIndex) {
+    return {
+      kind: 'button',
+      dayIndex: String(dayIndex),
+      windowScrollX: window.scrollX,
+      windowScrollY: window.scrollY,
+    };
+  }
+
+  function createScrollSnapshot() {
+    return {
+      kind: 'scroll',
+      windowScrollX: window.scrollX,
+      windowScrollY: window.scrollY,
+    };
+  }
+
+  function captureManualFocus() {
+    if (!manualDaysContainer) {
+      return null;
+    }
+
+    const activeElement = document.activeElement;
+    if (!activeElement || !manualDaysContainer.contains(activeElement)) {
+      return null;
+    }
+
+    const row = activeElement.closest('[data-manual-window-key]');
+    if (!row || !activeElement.matches('select[data-manual-boundary][data-manual-part]')) {
+      return null;
+    }
+
+    return {
+      windowKey: row.dataset.manualWindowKey,
+      dayIndex: row.dataset.manualDayIndex,
+      startMinutes: row.dataset.manualStartMinutes,
+      endMinutes: row.dataset.manualEndMinutes,
+      boundary: activeElement.dataset.manualBoundary,
+      part: activeElement.dataset.manualPart,
+      windowScrollX: window.scrollX,
+      windowScrollY: window.scrollY,
+    };
+  }
+
+  function restoreManualFocus(snapshot) {
+    if (!snapshot || !manualDaysContainer) {
+      return;
+    }
+
+    if (snapshot.kind === 'scroll') {
+      window.scrollTo(snapshot.windowScrollX, snapshot.windowScrollY);
+      return;
+    }
+
+    if (snapshot.kind === 'button') {
+      const addButton = manualDaysContainer.querySelector('[data-manual-add-day="' + snapshot.dayIndex + '"]');
+      window.scrollTo(snapshot.windowScrollX, snapshot.windowScrollY);
+      if (addButton) {
+        addButton.focus({ preventScroll: true });
+      }
+      return;
+    }
+
+    let select = null;
+    if (snapshot.windowKey) {
+      const selector = '[data-manual-window-key="' + snapshot.windowKey + '"] '
+        + 'select[data-manual-boundary="' + snapshot.boundary + '"][data-manual-part="' + snapshot.part + '"]';
+      select = manualDaysContainer.querySelector(selector);
+    }
+    if (!select) {
+      const fallbackSelector = '[data-manual-day-index="' + snapshot.dayIndex + '"]'
+        + '[data-manual-start-minutes="' + snapshot.startMinutes + '"]'
+        + '[data-manual-end-minutes="' + snapshot.endMinutes + '"] '
+        + 'select[data-manual-boundary="' + snapshot.boundary + '"][data-manual-part="' + snapshot.part + '"]';
+      select = manualDaysContainer.querySelector(fallbackSelector);
+    }
+    if (!select) {
+      return;
+    }
+
+    window.scrollTo(snapshot.windowScrollX, snapshot.windowScrollY);
+    select.focus({ preventScroll: true });
+  }
+
+  function createDefaultWindow(dayIndex) {
+    const dayWindows = workingWindows.filter(function (windowItem) {
+      return windowItem.dayIndex === dayIndex;
+    }).sort(compareWindows);
+    let startMinutes = 9 * 60;
+    if (dayWindows.length) {
+      startMinutes = dayWindows[dayWindows.length - 1].endMinutes;
+    }
+    startMinutes = Math.max(0, Math.min(boardMinutes - defaultManualDurationMinutes, snapMinutes(startMinutes)));
+    return {
+      id: null,
+      key: 'temp-' + (++tempId),
+      dayIndex: dayIndex,
+      startMinutes: startMinutes,
+      endMinutes: Math.min(boardMinutes, startMinutes + defaultManualDurationMinutes),
+      notes: '',
+    };
+  }
+
+  function renderManualEditor() {
+    if (!manualDaysContainer) {
+      return;
+    }
+
+    manualDaysContainer.replaceChildren();
+    weekdayNames.forEach(function (dayName, dayIndex) {
+      const dayWindows = workingWindows.filter(function (windowItem) {
+        return windowItem.dayIndex === dayIndex;
+      }).sort(compareWindows);
+
+      const daySection = document.createElement('section');
+      daySection.className = 'availability-day-editor';
+
+      const header = document.createElement('div');
+      header.className = 'availability-day-editor__header';
+
+      const title = document.createElement('div');
+      title.className = 'availability-day-editor__title';
+      const strong = document.createElement('strong');
+      strong.textContent = dayName;
+      title.appendChild(strong);
+      const summary = document.createElement('span');
+      summary.className = 'subtle-text';
+      summary.textContent = dayWindows.length
+        ? dayWindows.length + ' saved block' + (dayWindows.length === 1 ? '' : 's')
+        : 'No availability saved yet';
+      title.appendChild(summary);
+      header.appendChild(title);
+
+      const addButton = document.createElement('button');
+      addButton.type = 'button';
+      addButton.className = 'btn btn-secondary btn-small';
+      addButton.dataset.manualAddDay = String(dayIndex);
+      addButton.textContent = '+';
+      addButton.setAttribute('aria-label', 'Add availability block for ' + dayName);
+      header.appendChild(addButton);
+      daySection.appendChild(header);
+
+      const rows = document.createElement('div');
+      rows.className = 'availability-day-editor__rows';
+      if (!dayWindows.length) {
+        const empty = document.createElement('p');
+        empty.className = 'subtle-text';
+        empty.textContent = 'No blocks saved for this day yet.';
+        rows.appendChild(empty);
+      } else {
+        dayWindows.forEach(function (windowItem) {
+          rows.appendChild(buildManualRow(windowItem));
+        });
+      }
+      daySection.appendChild(rows);
+      manualDaysContainer.appendChild(daySection);
+    });
+  }
+
+  function renderBoard(focusOverride) {
+    const focusSnapshot = focusOverride || pendingFocusRestore || captureManualFocus();
+    pendingFocusRestore = null;
+
+    board.querySelectorAll('[data-day-blocks]').forEach(function (blockHost) {
+      const lane = blockHost.closest('.availability-board__lane');
+      const dayIndex = Number(lane.dataset.dayIndex);
+      blockHost.replaceChildren();
+      workingWindows.filter(function (windowItem) {
+        return windowItem.dayIndex === dayIndex;
+      }).sort(compareWindows).forEach(function (windowItem) {
+        blockHost.appendChild(buildBlock(windowItem));
+      });
+    });
+
+    updateAvailabilitySummary(workingWindows);
+    renderManualEditor();
+
+    if (focusSnapshot) {
+      requestAnimationFrame(function () {
+        restoreManualFocus(focusSnapshot);
+      });
+    }
+  }
+
+  function snapMinutes(rawMinutes) {
+    return Math.round(rawMinutes / slotMinutes) * slotMinutes;
+  }
+
+  function findLaneFromPoint(clientX, clientY) {
+    const target = document.elementFromPoint(clientX, clientY);
+    return target ? target.closest('.availability-board__lane') : null;
+  }
+
+  function minuteFromPointer(event, lane) {
+    const rect = lane.getBoundingClientRect();
+    const ratio = rect.width <= 0 ? 0 : (event.clientX - rect.left) / rect.width;
+    const boundedRatio = Math.max(0, Math.min(1, ratio));
+    return snapMinutes(boundedRatio * boardMinutes);
+  }
+
+  function getWindowByKey(key) {
+    return workingWindows.find(function (windowItem) {
+      return windowItem.key === key;
+    }) || null;
+  }
+
+  function hasOverlaps(source) {
+    const sortedWindows = source.slice().sort(compareWindows);
+    for (let index = 1; index < sortedWindows.length; index += 1) {
+      const previous = sortedWindows[index - 1];
+      const current = sortedWindows[index];
+      if (previous.dayIndex === current.dayIndex && current.startMinutes < previous.endMinutes) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function beginInteraction(nextInteraction) {
+    interaction = nextInteraction;
+    board.classList.add('availability-board--dragging');
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', cancelInteraction);
+  }
+
+  function resetInteractionState() {
+    board.classList.remove('availability-board--dragging');
+    window.removeEventListener('pointermove', handlePointerMove);
+    window.removeEventListener('pointerup', handlePointerUp);
+    window.removeEventListener('pointercancel', cancelInteraction);
+    interaction = null;
+  }
+
+  function finishInteraction(shouldSave) {
+    resetInteractionState();
+
+    if (!shouldSave) {
+      workingWindows = cloneWindows(committedWindows);
+      renderBoard();
+      return;
+    }
+
+    if (hasOverlaps(workingWindows)) {
+      workingWindows = cloneWindows(committedWindows);
+      renderBoard();
+      setStatus('Availability windows cannot overlap on the same day.', true, true);
+      return;
+    }
+
+    if (JSON.stringify(serializeWindows(workingWindows)) === JSON.stringify(serializeWindows(committedWindows))) {
+      renderBoard();
+      return;
+    }
+
+    saveWindows();
+  }
+
+  function cancelInteraction() {
+    finishInteraction(false);
+  }
+
+  function updateDraggedWindow(event) {
+    if (!interaction) {
+      return;
+    }
+
+    const targetWindow = getWindowByKey(interaction.key);
+    if (!targetWindow) {
+      return;
+    }
+
+    if (interaction.mode === 'create') {
+      const currentMinutes = minuteFromPointer(event, interaction.lane);
+      let startMinutes = Math.min(interaction.anchorMinutes, currentMinutes);
+      let endMinutes = Math.max(interaction.anchorMinutes, currentMinutes);
+      if (endMinutes - startMinutes < slotMinutes) {
+        if (currentMinutes >= interaction.anchorMinutes) {
+          endMinutes = Math.min(boardMinutes, startMinutes + slotMinutes);
+        } else {
+          startMinutes = Math.max(0, endMinutes - slotMinutes);
+        }
+      }
+      targetWindow.startMinutes = Math.max(0, Math.min(boardMinutes - slotMinutes, startMinutes));
+      targetWindow.endMinutes = Math.max(targetWindow.startMinutes + slotMinutes, Math.min(boardMinutes, endMinutes));
+      renderBoard();
+      return;
+    }
+
+    if (interaction.mode === 'move') {
+      const lane = findLaneFromPoint(event.clientX, event.clientY) || interaction.lane;
+      const duration = interaction.durationMinutes;
+      const pointerMinutes = minuteFromPointer(event, lane);
+      const nextStart = Math.max(0, Math.min(boardMinutes - duration, pointerMinutes - interaction.offsetMinutes));
+      targetWindow.dayIndex = Number(lane.dataset.dayIndex);
+      targetWindow.startMinutes = nextStart;
+      targetWindow.endMinutes = nextStart + duration;
+      renderBoard();
+      return;
+    }
+
+    if (interaction.mode === 'resize-start') {
+      const pointerMinutes = minuteFromPointer(event, interaction.lane);
+      targetWindow.startMinutes = Math.max(0, Math.min(targetWindow.endMinutes - slotMinutes, pointerMinutes));
+      renderBoard();
+      return;
+    }
+
+    if (interaction.mode === 'resize-end') {
+      const pointerMinutes = minuteFromPointer(event, interaction.lane);
+      targetWindow.endMinutes = Math.max(targetWindow.startMinutes + slotMinutes, Math.min(boardMinutes, pointerMinutes));
+      renderBoard();
+    }
+  }
+
+  function handlePointerMove(event) {
+    if (!interaction) {
+      return;
+    }
+
+    event.preventDefault();
+    updateDraggedWindow(event);
+  }
+
+  function handlePointerUp(event) {
+    if (!interaction) {
+      return;
+    }
+
+    event.preventDefault();
+    updateDraggedWindow(event);
+    finishInteraction(true);
+  }
+
+  function saveWindows() {
+    if (!syncForm || !windowsInput || isSaving) {
+      return;
+    }
+
+    const focusSnapshot = pendingFocusRestore || captureManualFocus();
+
+    isSaving = true;
+    windowsInput.value = JSON.stringify(serializeWindows(workingWindows));
+    setStatus('Saving...', false, true);
+    updateAvailabilitySummary(workingWindows);
+
+    fetch(syncForm.action, {
+      method: 'POST',
+      body: new FormData(syncForm),
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    }).then(function (response) {
+      return response.json().catch(function () {
+        return { ok: false, error: 'Unable to save weekly availability right now.' };
+      }).then(function (payload) {
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || 'Unable to save weekly availability right now.');
+        }
+        return payload;
+      });
+    }).then(function (payload) {
+      committedWindows = normalizeWindows(payload.windows || []);
+      workingWindows = cloneWindows(committedWindows);
+      pendingFocusRestore = focusSnapshot;
+      renderBoard();
+      setStatus(payload.message || 'Availability updated.', false);
+    }).catch(function (error) {
+      workingWindows = cloneWindows(committedWindows);
+      pendingFocusRestore = focusSnapshot;
+      renderBoard();
+      setStatus(error.message || 'Unable to save weekly availability right now.', true, true);
+    }).finally(function () {
+      isSaving = false;
+    });
+  }
+
+  board.addEventListener('click', function (event) {
+    const deleteButton = event.target.closest('[data-availability-delete]');
+    if (!deleteButton || isSaving) {
+      return;
+    }
+
+    const block = deleteButton.closest('.availability-block');
+    if (!block) {
+      return;
+    }
+
+    event.preventDefault();
+    const focusSnapshot = createScrollSnapshot();
+    workingWindows = workingWindows.filter(function (windowItem) {
+      return windowItem.key !== block.dataset.windowKey;
+    });
+    renderBoard(focusSnapshot);
+    pendingFocusRestore = focusSnapshot;
+    saveWindows();
+  });
+
+  if (clearButton) {
+    clearButton.addEventListener('click', function () {
+      if (isSaving || workingWindows.length === 0) {
+        return;
+      }
+
+      const focusSnapshot = createScrollSnapshot();
+      workingWindows = [];
+      renderBoard(focusSnapshot);
+      pendingFocusRestore = focusSnapshot;
+      saveWindows();
+    });
+  }
+
+  if (manualDaysContainer) {
+    manualDaysContainer.addEventListener('click', function (event) {
+      const addButton = event.target.closest('[data-manual-add-day]');
+      if (addButton && !isSaving) {
+        const dayIndex = Number(addButton.dataset.manualAddDay);
+        const nextWindow = createDefaultWindow(dayIndex);
+        const focusSnapshot = createManualFocusSnapshot({
+          windowKey: nextWindow.key,
+          dayIndex: nextWindow.dayIndex,
+          startMinutes: nextWindow.startMinutes,
+          endMinutes: nextWindow.endMinutes,
+          boundary: 'start',
+          part: 'hour',
+        });
+        workingWindows = cloneWindows(committedWindows);
+        workingWindows.push(nextWindow);
+        workingWindows.sort(compareWindows);
+        renderBoard(focusSnapshot);
+        pendingFocusRestore = focusSnapshot;
+        saveWindows();
+        return;
+      }
+
+      const removeButton = event.target.closest('[data-manual-remove]');
+      if (removeButton && !isSaving) {
+        const windowKey = removeButton.dataset.manualRemove;
+        const row = removeButton.closest('[data-manual-window-key]');
+        let focusSnapshot = createScrollSnapshot();
+
+        if (row) {
+          const siblingRows = Array.from(row.parentElement.querySelectorAll('[data-manual-window-key]'));
+          const rowIndex = siblingRows.findIndex(function (candidate) {
+            return candidate.dataset.manualWindowKey === windowKey;
+          });
+          const nextRow = siblingRows[rowIndex + 1] || siblingRows[rowIndex - 1];
+          if (nextRow) {
+            focusSnapshot = createManualFocusSnapshot({
+              windowKey: nextRow.dataset.manualWindowKey,
+              dayIndex: nextRow.dataset.manualDayIndex,
+              startMinutes: nextRow.dataset.manualStartMinutes,
+              endMinutes: nextRow.dataset.manualEndMinutes,
+              boundary: 'start',
+              part: 'hour',
+            });
+          } else {
+            focusSnapshot = createManualButtonSnapshot(row.dataset.manualDayIndex);
+          }
+        }
+
+        workingWindows = workingWindows.filter(function (windowItem) {
+          return windowItem.key !== windowKey;
+        });
+        renderBoard(focusSnapshot);
+        pendingFocusRestore = focusSnapshot;
+        saveWindows();
+      }
+    });
+
+    manualDaysContainer.addEventListener('change', function (event) {
+      const select = event.target.closest('select[data-manual-boundary]');
+      if (!select || isSaving) {
+        return;
+      }
+
+      const row = select.closest('[data-manual-window-key]');
+      if (!row) {
+        return;
+      }
+
+      const windowItem = getWindowByKey(row.dataset.manualWindowKey);
+      if (!windowItem) {
+        return;
+      }
+
+      const focusSnapshot = captureManualFocus();
+
+      let startMinutes = (
+        Number(row.querySelector('select[data-manual-boundary="start"][data-manual-part="hour"]').value) * 60
+        + Number(row.querySelector('select[data-manual-boundary="start"][data-manual-part="minute"]').value)
+      );
+      let endMinutes = (
+        Number(row.querySelector('select[data-manual-boundary="end"][data-manual-part="hour"]').value) * 60
+        + Number(row.querySelector('select[data-manual-boundary="end"][data-manual-part="minute"]').value)
+      );
+
+      if (endMinutes <= startMinutes) {
+        if (select.dataset.manualBoundary === 'start') {
+          endMinutes = Math.min(boardMinutes, startMinutes + defaultManualDurationMinutes);
+          if (endMinutes <= startMinutes) {
+            startMinutes = Math.max(0, endMinutes - defaultManualDurationMinutes);
+          }
+        } else {
+          startMinutes = Math.max(0, endMinutes - defaultManualDurationMinutes);
+        }
+      }
+
+      windowItem.startMinutes = Math.max(0, Math.min(boardMinutes - slotMinutes, snapMinutes(startMinutes)));
+      windowItem.endMinutes = Math.max(windowItem.startMinutes + slotMinutes, Math.min(boardMinutes, snapMinutes(endMinutes)));
+      renderBoard(focusSnapshot);
+      pendingFocusRestore = focusSnapshot;
+      saveWindows();
+    });
+  }
+
+  board.addEventListener('pointerdown', function (event) {
+    if (isSaving || event.button !== 0) {
+      return;
+    }
+
+    const deleteButton = event.target.closest('[data-availability-delete]');
+    if (deleteButton) {
+      return;
+    }
+
+    const handle = event.target.closest('[data-availability-handle]');
+    const block = event.target.closest('.availability-block');
+
+    if (handle && block) {
+      const key = block.dataset.windowKey;
+      const targetWindow = getWindowByKey(key);
+      if (!targetWindow) {
+        return;
+      }
+
+      event.preventDefault();
+      beginInteraction({
+        key: key,
+        mode: handle.dataset.availabilityHandle === 'start' ? 'resize-start' : 'resize-end',
+        lane: block.closest('.availability-board__lane'),
+      });
+      return;
+    }
+
+    if (block) {
+      const key = block.dataset.windowKey;
+      const targetWindow = getWindowByKey(key);
+      const lane = block.closest('.availability-board__lane');
+      if (!targetWindow || !lane) {
+        return;
+      }
+
+      event.preventDefault();
+      beginInteraction({
+        key: key,
+        mode: 'move',
+        lane: lane,
+        durationMinutes: targetWindow.endMinutes - targetWindow.startMinutes,
+        offsetMinutes: minuteFromPointer(event, lane) - targetWindow.startMinutes,
+      });
+      return;
+    }
+
+    const lane = event.target.closest('.availability-board__lane');
+    if (!lane) {
+      return;
+    }
+
+    const anchorMinutes = minuteFromPointer(event, lane);
+    const key = 'temp-' + (++tempId);
+    workingWindows = cloneWindows(committedWindows);
+    workingWindows.push({
+      id: null,
+      key: key,
+      dayIndex: Number(lane.dataset.dayIndex),
+      startMinutes: Math.max(0, Math.min(boardMinutes - slotMinutes, anchorMinutes)),
+      endMinutes: Math.max(slotMinutes, Math.min(boardMinutes, anchorMinutes + slotMinutes)),
+      notes: '',
+    });
+    renderBoard();
+    event.preventDefault();
+    beginInteraction({
+      key: key,
+      mode: 'create',
+      lane: lane,
+      anchorMinutes: anchorMinutes,
+    });
+  });
+
+  renderBoard();
+})();
+</script>
 {% endblock %}

@@ -27,7 +27,7 @@
         <thead>
           <tr>
             <th>Staff</th>
-            <th>Role &amp; status</th>
+            <th>Staff type &amp; status</th>
             <th>Services</th>
             <th>Weekly availability</th>
             <th>Next scheduled event</th>
@@ -46,9 +46,8 @@
               </td>
               <td>
                 <div class="staff-directory-meta">
-                  <strong>{{ staff_member.role_title or 'No role title' }}</strong>
+                  <strong>{{ staff_member.worker_type.title() }}</strong>
                   <div class="tag-list">
-                    <span class="tag-pill">{{ staff_member.worker_type.title() }}</span>
                     <span class="tag-pill">{{ staff_member.status.title() }}</span>
                   </div>
                 </div>

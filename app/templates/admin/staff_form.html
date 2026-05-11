@@ -7,7 +7,7 @@
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Add Staff Member' if is_new else 'Edit Staff Member',
-    description='Create or update staff contact details, services, and notes.',
+    description='Create or update staff contact details, compensation, status, services, and staff notes.',
     nav_mode='sub',
     return_url=url_for('admin.staff_list'),
     return_label='Back to Staff',
@@ -35,11 +35,6 @@
 
           <div class="form-grid">
             <label class="form-field">
-              <span>Role / title</span>
-              {{ form.role_title(class_="input") }}
-              {% for error in form.role_title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-            <label class="form-field">
               <span>Worker type</span>
               {{ form.worker_type(class_="select") }}
               {% for error in form.worker_type.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
@@ -62,6 +57,20 @@
             {% for error in form.email.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
 
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Compensation Amount</span>
+              {{ form.compensation_amount(class_="input") }}
+              <small class="field-help">Currency: {{ staff_compensation_currency }}</small>
+              {% for error in form.compensation_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span>Frequency</span>
+              {{ form.compensation_frequency(class_="select") }}
+              {% for error in form.compensation_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+          </div>
+
           <div class="form-field">
             <span>Services</span>
             <div class="checkbox-grid">
@@ -77,7 +86,7 @@
           </div>
 
           <label class="form-field">
-            <span>Notes</span>
+            <span>Staff Notes</span>
             {{ form.notes(class_="textarea") }}
             {% for error in form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>

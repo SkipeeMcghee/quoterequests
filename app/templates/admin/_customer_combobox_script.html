@@ -1,6 +1,11 @@
 <script>
 (function () {
   function setupCustomerCombobox(customerCombobox) {
+    if (customerCombobox.dataset.customerComboboxInitialized === 'true') {
+      return;
+    }
+
+    customerCombobox.dataset.customerComboboxInitialized = 'true';
     const customerLookupInput = customerCombobox.querySelector('[data-customer-combobox-input]');
     const customerIdInput = customerCombobox.querySelector('[data-customer-id-input]');
     const customerPanel = customerCombobox.querySelector('[data-customer-combobox-panel]');
@@ -262,6 +267,10 @@
     }
   }
 
-  document.querySelectorAll('[data-customer-combobox]').forEach(setupCustomerCombobox);
+  window.initializeCustomerComboboxes = function (root) {
+    (root || document).querySelectorAll('[data-customer-combobox]').forEach(setupCustomerCombobox);
+  };
+
+  window.initializeCustomerComboboxes(document);
 })();
 </script>

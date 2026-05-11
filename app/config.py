@@ -97,6 +97,7 @@ def build_social_links() -> dict[str, dict[str, str | bool]]:
 
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
+    WTF_CSRF_TIME_LIMIT = 8 * 60 * 60
     RECAPTCHA_ENABLED = parse_bool_env("RECAPTCHA_ENABLED", False)
     RECAPTCHA_SITE_KEY = os.getenv("RECAPTCHA_SITE_KEY", "").strip()
     RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "").strip()
@@ -121,6 +122,7 @@ class Config:
     BUSINESS_EMAIL = os.getenv("BUSINESS_EMAIL", "hello@example.com")
     SERVICE_AREA = os.getenv("SERVICE_AREA", "your local service area")
     BUSINESS_ADDRESS = os.getenv("BUSINESS_ADDRESS", "123 Service Lane, Suite 100")
+    STAFF_COMPENSATION_CURRENCY = (os.getenv("STAFF_COMPENSATION_CURRENCY", "USD").strip() or "USD").upper()
     SITE_LOGO = {
         "path": normalize_static_asset_path(os.getenv("SITE_LOGO_PATH", DEFAULT_SITE_LOGO_PATH), DEFAULT_SITE_LOGO_PATH),
         "alt": os.getenv("SITE_LOGO_ALT", "").strip(),

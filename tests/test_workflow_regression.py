@@ -317,6 +317,15 @@ def test_incoming_request_workflow_end_to_end(client, app, admin_user):
     assert "Reschedule" not in appointment_body
     assert "Customer notes" not in appointment_body
 
+    scheduled_work_page = client.get(schedule_url)
+    assert scheduled_work_page.status_code == 200
+    scheduled_work_body = scheduled_work_page.get_data(as_text=True)
+    scheduling_form_section = scheduled_work_body.split('<article class="summary-card schedule-form-card">', 1)[1].split('</article>', 1)[0]
+    assert "Event notes" in scheduling_form_section
+    assert "Customer notes" not in scheduling_form_section
+    assert "Internal notes" not in scheduling_form_section
+    assert 'id="scheduled-work-start_time_minute" name="scheduled-work-start_time_minute"><option value="">Minute</option><option selected value="0">00</option>' in scheduled_work_body
+
     day_url = f"/admin/calendar/{scheduled_date.year}/{scheduled_date.month:02d}/{scheduled_date.day:02d}"
     day_body = _assert_page_contract(
         client,
@@ -602,8 +611,14 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
         client,
         appointment_detail_url,
         back_label="Back to Day Agenda",
+<<<<<<< HEAD
         expected_text=(f"Event #{appointment_id}", "Event notes", "History", "Day View"),
+=======
+        expected_text=("Event notes", "Open Day Agenda", "Scheduled Event"),
+>>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
     )
+    assert "History" not in appointment_detail_body
+    assert 'aria-label="Delete scheduled event"' in appointment_detail_body
     assert "Reschedule" not in appointment_detail_body
     assert "Customer notes" not in appointment_detail_body
 
