@@ -416,7 +416,6 @@ def test_request_detail_can_schedule_inline_and_link_existing_customer(client, a
         f"/admin/requests/{request_id}/appointments",
         data={
             "create-customer_id": str(customer_id),
-            "create-title": "Paint consultation",
             "create-scheduled_date": "2026-05-10",
             "create-start_time_hour": "10",
             "create-start_time_minute": "0",
@@ -435,7 +434,7 @@ def test_request_detail_can_schedule_inline_and_link_existing_customer(client, a
         assert quote_request.customer_id == customer_id
         assert quote_request.status == "Scheduled"
         assert quote_request.current_appointment is not None
-        assert quote_request.current_appointment.title == "Paint consultation"
+        assert quote_request.current_appointment.title is None
 
 
 def test_request_detail_shows_inline_edit_form_for_current_appointment(client, app, admin_user):
@@ -478,6 +477,7 @@ def test_request_detail_shows_inline_edit_form_for_current_appointment(client, a
     body = response.get_data(as_text=True)
     assert "Keep the scheduled event current here and open the full event page only when you need deeper tools." in body
     assert f'action="/admin/appointments/{appointment_id}/edit?return_to=request"' in body
+    assert 'name="edit-title"' not in body
     assert 'name="edit-status"' not in body
     assert f"View scheduled event #{appointment_id}" in body
     assert "Open day agenda" in body
@@ -599,7 +599,6 @@ def test_request_detail_inline_edit_returns_to_request_page(client, app, admin_u
     response = client.post(
         f"/admin/appointments/{appointment_id}/edit?return_to=request",
         data={
-            "edit-title": "Paint consultation updated",
             "edit-scheduled_date": "2026-05-12",
             "edit-start_time_hour": "12",
             "edit-start_time_minute": "0",
@@ -616,7 +615,7 @@ def test_request_detail_inline_edit_returns_to_request_page(client, app, admin_u
     with app.app_context():
         quote_request = QuoteRequest.query.one()
         assert quote_request.current_appointment is not None
-        assert quote_request.current_appointment.title == "Paint consultation updated"
+        assert quote_request.current_appointment.title is None
 
 
 def test_admin_calendar_view_and_list_view_render_as_alternates(client, app, admin_user):
@@ -659,7 +658,14 @@ def test_admin_calendar_view_and_list_view_render_as_alternates(client, app, adm
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Calendar View" in body
+    assert "May 2026" in body
+    assert "8:00 AM – 9:00 AM" in body
     assert "Upcoming scheduled events" not in body
+    assert "Schedule overview" not in body
+    assert "Open any day to review the full agenda" not in body
+    assert 'data-scroll-anchor="schedule-view"' in body
+    assert "#schedule-view" not in body
+    assert f"/admin/calendar?year={date.today().year}&amp;month={date.today().month}&amp;view=calendar" in body
 
     response = client.get("/admin/calendar?year=2026&month=5&view=list")
     assert response.status_code == 200
@@ -668,6 +674,7 @@ def test_admin_calendar_view_and_list_view_render_as_alternates(client, app, adm
     assert "Sorted from soonest to latest by default." in body
     assert "Update List" in body
     assert "Open Day Agenda" not in body
+    assert 'data-scroll-anchor="schedule-view"' in body
 
 
 def test_admin_day_agenda_and_appointment_detail_preserve_schedule_navigation(client, app, admin_user):
@@ -711,8 +718,16 @@ def test_admin_day_agenda_and_appointment_detail_preserve_schedule_navigation(cl
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Today at a glance" in body
+    assert "Start" in body
+    assert "End" in body
+    assert "8:00 AM" in body
+    assert "9:00 AM" in body
+    assert date(2026, 5, 12).strftime("%A, %B %d, %Y") in body
     assert f"/admin/appointments/{appointment_id}?source=day&amp;date=2026-05-12&amp;year=2026&amp;month=5&amp;day=12" in body
     assert "/admin/calendar?year=2026&amp;month=5&amp;view=list&amp;show=upcoming&amp;status=all&amp;staff_id=0&amp;sort=soonest" in body
+    assert f"/admin/calendar/{date.today().year}/{date.today().month}/{date.today().day}" in body
+    assert "/admin/calendar?year=2026&amp;month=5&amp;view=calendar" not in body
+    assert 'data-scroll-anchor="day-agenda-view"' in body
 
     response = client.get(
         f"/admin/appointments/{appointment_id}?source=calendar&year=2026&month=5&view=list&show=upcoming&status=all&staff_id=0&sort=soonest"
@@ -720,9 +735,9 @@ def test_admin_day_agenda_and_appointment_detail_preserve_schedule_navigation(cl
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Back to List View" in body
-    assert "Open Calendar View" in body
-    assert "Open List View" in body
-    assert "Open Day Agenda" in body
+    assert "Calendar View" in body
+    assert "List View" in body
+    assert "Day View" in body
 
 
 def test_admin_can_edit_and_delete_own_internal_note(client, app, admin_user):
@@ -1569,7 +1584,6 @@ def test_scheduling_a_request_sets_request_status_to_scheduled(client, app, admi
         data={
             "scheduled-work-request_id": str(request_id),
             "scheduled-work-customer_id": str(customer_id),
-            "scheduled-work-title": "Paint consultation",
             "scheduled-work-scheduled_date": "2026-05-10",
             "scheduled-work-start_time_hour": "10",
             "scheduled-work-start_time_minute": "0",

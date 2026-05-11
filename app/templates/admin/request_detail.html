@@ -371,11 +371,6 @@
 
             <form method="post" action="{{ url_for('admin.edit_appointment_route', appointment_id=appointment.id, return_to='request') }}" class="stacked-form" data-scroll-anchor="scheduling">
               {{ appointment_form.hidden_tag() }}
-              <label class="form-field">
-                <span>Work title / summary</span>
-                {{ appointment_form.title(class_="input") }}
-                {% for error in appointment_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-              </label>
               <div class="form-grid">
                 <label class="form-field">
                   <span>Scheduled date</span>
@@ -476,11 +471,6 @@
                   {% for error in appointment_form.customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
                 </label>
               {% endif %}
-              <label class="form-field">
-                <span class="field-label-row">Work title or service <span class="required-pill">Required</span></span>
-                {{ appointment_form.title(class_="input", required=true) }}
-                {% for error in appointment_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-              </label>
               <div class="form-grid">
                 <label class="form-field">
                   <span class="field-label-row">Scheduled date <span class="required-pill">Required</span></span>

@@ -83,11 +83,6 @@
             {% endif %}
           </label>
 
-          <label class="form-field">
-            <span class="field-label-row">Work title or service <span class="required-pill">Required</span></span>
-            {{ form.title(class_="input", required=true) }}
-            {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
           <div class="form-grid">
             <label class="form-field">
               <span class="field-label-row">Scheduled date <span class="required-pill">Required</span></span>

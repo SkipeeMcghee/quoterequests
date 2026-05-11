@@ -4,23 +4,42 @@
 {% block title %}Agenda for {{ view_date.strftime('%b %d, %Y') }}{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main class="shell dashboard-shell" id="day-agenda-view">
   {% call render_admin_page_header(
-    title='Daily Agenda',
-    description='Review scheduled work for ' ~ view_date.strftime('%A, %b %d, %Y') ~ ' with a visual timeline and a quick event list.',
+    title=view_date.strftime('%A, %B %d, %Y'),
+    description='Daily Agenda',
     nav_mode='sub',
     return_url=url_for('admin.calendar_view', year=view_date.year, month=view_date.month),
     return_label='Back to Calendar View',
-    actions_class='detail-actions calendar-day-nav'
+    actions_class='calendar-day-nav schedule-view-panel__toolbar'
   ) %}
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=prev_date.year, month=prev_date.month, day=prev_date.day) }}">Previous Day</a>
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month, view='calendar') }}">Calendar View</a>
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month, view='list', show='upcoming', status='all', staff_id=0, sort='soonest') }}">List View</a>
-      <a class="btn btn-secondary" href="{{ url_for('admin.calendar_day_view', year=next_date.year, month=next_date.month, day=next_date.day) }}">Next Day</a>
+      <div class="schedule-toolbar-group schedule-toolbar-group--view">
+        <div class="schedule-view-toggle" aria-label="Daily agenda view links">
+          <a class="btn btn-secondary btn-toggle" href="{{ url_for('admin.calendar_view', year=view_date.year, month=view_date.month, view='list', show='upcoming', status='all', staff_id=0, sort='soonest') }}">List View</a>
+        </div>
+      </div>
+      <div class="schedule-toolbar-group schedule-toolbar-group--nav">
+        <div class="calendar-nav" aria-label="Daily schedule navigation">
+          <a class="btn btn-secondary calendar-nav__arrow" aria-label="Previous day" title="Previous day" href="{{ url_for('admin.calendar_day_view', year=prev_date.year, month=prev_date.month, day=prev_date.day) }}" data-scroll-anchor="day-agenda-view">&larr;</a>
+          <a class="btn btn-secondary calendar-nav__current" href="{{ url_for('admin.calendar_day_view', year=today.year, month=today.month, day=today.day) }}" data-scroll-anchor="day-agenda-view">Today</a>
+          <a class="btn btn-secondary calendar-nav__arrow" aria-label="Next day" title="Next day" href="{{ url_for('admin.calendar_day_view', year=next_date.year, month=next_date.month, day=next_date.day) }}" data-scroll-anchor="day-agenda-view">&rarr;</a>
+        </div>
+      </div>
       {% if enable_scheduling %}
-        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', source='day', date=view_date.isoformat(), year=view_date.year, month=view_date.month, day=view_date.day) }}">Add Work</a>
+        <div class="schedule-toolbar-group schedule-toolbar-group--action">
+          <a class="btn btn-primary schedule-toolbar__action" href="{{ url_for('admin.new_scheduled_work', source='day', date=view_date.isoformat(), year=view_date.year, month=view_date.month, day=view_date.day) }}">Add Work</a>
+        </div>
       {% endif %}
   {% endcall %}
+
+  {% set preview_start_label = 'No timed work' %}
+  {% set preview_end_label = 'No timed work' %}
+  {% if appointments %}
+    {% set first_preview_appointment = appointments|first %}
+    {% set last_preview_appointment = appointments|last %}
+    {% set preview_start_label = first_preview_appointment.start_time.strftime('%I:%M %p').lstrip('0') if first_preview_appointment.start_time else 'All day' %}
+    {% set preview_end_label = last_preview_appointment.end_time.strftime('%I:%M %p').lstrip('0') if last_preview_appointment.end_time else 'All day' %}
+  {% endif %}
 
   <section class="agenda-snapshot-grid">
     <article class="summary-card agenda-snapshot-card">
@@ -28,8 +47,12 @@
       <span>Timed events</span>
     </article>
     <article class="summary-card agenda-snapshot-card">
-      <strong>{% if scheduled_appointments %}{{ scheduled_appointments[0].appointment.start_time.strftime('%H:%M') }}{% else %}No timed work{% endif %}</strong>
-      <span>First start</span>
+      <strong>{{ preview_start_label }}</strong>
+      <span>Start</span>
+    </article>
+    <article class="summary-card agenda-snapshot-card">
+      <strong>{{ preview_end_label }}</strong>
+      <span>End</span>
     </article>
     <article class="summary-card agenda-snapshot-card">
       <strong>{{ unscheduled_appointments|length }}</strong>
@@ -90,7 +113,7 @@
               <a class="agenda-quick-item" href="{{ url_for('admin.appointment_detail', appointment_id=appt.id, source='day', date=view_date.isoformat(), year=view_date.year, month=view_date.month, day=view_date.day) }}">
                 <div class="agenda-quick-item__time">{{ appt.start_time.strftime('%H:%M') }}&nbsp;–&nbsp;{{ appt.end_time.strftime('%H:%M') }}</div>
                 <div class="agenda-quick-item__copy">
-                  <strong>{{ appt.title or appt.display_title }}</strong>
+                  <strong>{{ appt.display_title }}</strong>
                   <span>{{ appt.customer.primary_name or appt.quote_request.full_name or 'Customer' }}</span>
                   {% if enable_staff_management and appt.assigned_staff %}
                     <span>
@@ -142,4 +165,71 @@
     </div>
   </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const calendarDayScrollKey = 'admin-calendar-day-scroll';
+
+  function saveDayScroll(anchorId, destinationPath) {
+    const target = anchorId ? document.getElementById(anchorId) : null;
+    if (!target) {
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(calendarDayScrollKey, JSON.stringify({
+        anchorId,
+        destinationPath: destinationPath || window.location.pathname,
+        expiresAt: Date.now() + 15000,
+        topOffset: target.getBoundingClientRect().top,
+      }));
+    } catch (error) {
+      // Ignore storage failures and fall back to the browser default navigation.
+    }
+  }
+
+  document.querySelectorAll('a[data-scroll-anchor]').forEach((link) => {
+    link.addEventListener('click', function (event) {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      saveDayScroll(link.dataset.scrollAnchor, link.pathname);
+    });
+  });
+
+  try {
+    const savedScrollState = sessionStorage.getItem(calendarDayScrollKey);
+    if (!savedScrollState) {
+      return;
+    }
+
+    sessionStorage.removeItem(calendarDayScrollKey);
+    const scrollState = JSON.parse(savedScrollState);
+    if (!scrollState || scrollState.destinationPath !== window.location.pathname || !scrollState.anchorId) {
+      return;
+    }
+
+    if (scrollState.expiresAt && scrollState.expiresAt < Date.now()) {
+      return;
+    }
+
+    const target = document.getElementById(scrollState.anchorId);
+    if (!target) {
+      return;
+    }
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        const desiredTop = window.scrollY + target.getBoundingClientRect().top - (scrollState.topOffset || 0);
+        window.scrollTo(0, Math.max(0, desiredTop));
+      });
+    });
+  } catch (error) {
+    sessionStorage.removeItem(calendarDayScrollKey);
+  }
+})();
+</script>
 {% endblock %}

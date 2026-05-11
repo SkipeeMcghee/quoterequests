@@ -193,13 +193,9 @@ class Appointment(db.Model):
 
     @property
     def display_title(self) -> str:
-        if self.title:
-            return self.title
-        if self.quote_request and self.quote_request.full_name:
-            return f"Appointment for {self.quote_request.full_name}"
-        if self.customer and self.customer.primary_name:
-            return f"Appointment for {self.customer.primary_name}"
-        return "Scheduled work"
+        if self.id is not None:
+            return f"Event #{self.id}"
+        return "Scheduled event"
 
     def __repr__(self) -> str:
         return (

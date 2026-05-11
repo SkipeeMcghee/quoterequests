@@ -434,7 +434,6 @@ def create_scheduled_work(
     new_customer_phone: str | None = None,
     new_customer_email: str | None = None,
     new_customer_city: str | None = None,
-    title: str | None = None,
     scheduled_date=None,
     start_time=None,
     end_time=None,
@@ -476,7 +475,6 @@ def create_scheduled_work(
     appointment = Appointment(
         customer_id=customer.id,
         quote_request_id=quote_request.id if quote_request is not None else None,
-        title=(title or "").strip() or None,
         scheduled_date=scheduled_date,
         start_time=start_time,
         end_time=end_time,
@@ -766,7 +764,6 @@ def create_appointment(
     internal_notes: str | None = None,
     confirmed_date=None,
     confirmed_time=None,
-    title: str | None = None,
     scheduled_date=None,
     start_time=None,
     end_time=None,
@@ -780,7 +777,6 @@ def create_appointment(
     appointment = Appointment(
         customer_id=quote_request.customer_id,
         quote_request_id=quote_request.id,
-        title=title,
         scheduled_date=scheduled_date,
         start_time=start_time,
         end_time=end_time,
@@ -822,7 +818,6 @@ def reschedule_appointment(
         customer_id=appointment.customer_id,
         quote_request_id=appointment.quote_request_id,
         recurring_work_id=appointment.recurring_work_id,
-        title=appointment.title,
         scheduled_date=scheduled_date,
         start_time=start_time,
         end_time=end_time,
@@ -845,7 +840,6 @@ def reschedule_appointment(
 def update_appointment(
     appointment_id: int,
     requested_date=None,
-    title: str | None = None,
     requested_time=None,
     confirmed_date=None,
     confirmed_time=None,
@@ -860,7 +854,7 @@ def update_appointment(
     if start_time is not None and end_time is not None and end_time <= start_time:
         raise BadRequest("End time must be after the start time.")
 
-    appointment.title = title
+    appointment.title = None
     appointment.requested_date = requested_date
     appointment.requested_time = requested_time
     appointment.confirmed_date = confirmed_date

@@ -582,10 +582,12 @@ def calendar_day_view(year: int, month: int, day: int):
     return render_template(
         "admin/calendar_day.html",
         view_date=view_date,
+        appointments=appointments,
         scheduled_appointments=scheduled_appointments,
         unscheduled_appointments=unscheduled_appointments,
         prev_date=prev_date,
         next_date=next_date,
+        today=date.today(),
         year=year,
         month=month,
         day_start=6,
@@ -710,7 +712,6 @@ def new_scheduled_work():
             else:
                 form.new_customer_name.data = quote_request.full_name
                 form.new_customer_city.data = quote_request.city
-            form.title.data = quote_request.service_list_display or quote_request.request_type
         if customer is not None:
             form.customer_id.data = customer.id
             form.customer_lookup.data = _find_customer_option_label(customer_options, customer.id)
@@ -742,7 +743,6 @@ def new_scheduled_work():
                 new_customer_phone=form.new_customer_phone.data,
                 new_customer_email=form.new_customer_email.data,
                 new_customer_city=form.new_customer_city.data,
-                title=form.title.data,
                 scheduled_date=form.scheduled_date.data,
                 start_time=start_time,
                 end_time=end_time,
@@ -1023,7 +1023,6 @@ def request_detail(request_id: int):
                     (0, "Choose an existing customer"),
                     *customer_options,
                 ]
-            appointment_form.title.data = quote_request.service_list_display or quote_request.request_type
 
     edit_note_forms = {
         note.id: NoteForm(prefix=f"edit-note-{note.id}", obj=note)
@@ -1182,8 +1181,6 @@ def create_appointment_route(request_id: int):
         end_time = form.time_value("end_time")
         if quote_request.customer_id is None and not form.customer_id.data:
             flash("Choose a customer or link the request before scheduling.", "error")
-        elif not (form.title.data or "").strip():
-            flash("Enter a work title before saving.", "error")
         elif not form.scheduled_date.data:
             flash("Enter a scheduled date before saving.", "error")
         elif start_time is None or end_time is None:
@@ -1199,7 +1196,6 @@ def create_appointment_route(request_id: int):
                 internal_notes=(form.internal_notes.data or "").strip() or None,
                 confirmed_date=form.confirmed_date.data,
                 confirmed_time=form.time_value("confirmed_time"),
-                title=(form.title.data or "").strip() or None,
                 scheduled_date=form.scheduled_date.data,
                 start_time=start_time,
                 end_time=end_time,
@@ -2035,7 +2031,6 @@ def edit_appointment_route(appointment_id: int):
 
         update_appointment(
             appointment_id,
-            title=(form.title.data or "").strip() or None,
             requested_date=requested_date,
             requested_time=requested_time,
             confirmed_date=confirmed_date,

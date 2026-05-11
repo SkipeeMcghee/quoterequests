@@ -70,6 +70,7 @@ def test_staff_list_surfaces_schedule_and_availability_context(client, app, admi
                 staff_member_id=staff_member.id,
             )
         )
+        appointment_id = appointment.id
         db.session.commit()
 
     _login_as_admin(client, admin_user)
@@ -79,7 +80,7 @@ def test_staff_list_surfaces_schedule_and_availability_context(client, app, admi
     body = response.get_data(as_text=True)
     assert "Scheduled hours are planning hours" in body
     assert "Alex Crew" in body
-    assert "Exterior windows" in body
+    assert f"Event #{appointment_id}" in body
     assert "Open Day Agenda" in body
     assert "saved window" in body
 

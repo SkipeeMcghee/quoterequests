@@ -253,7 +253,7 @@
                     <div class="subtle-text">{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'No time' }}{% if appointment.end_time %} – {{ appointment.end_time.strftime('%H:%M') }}{% endif %}</div>
                   </td>
                   <td>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</td>
-                  <td>{{ appointment.title or appointment.display_title }}</td>
+                  <td>{{ appointment.display_title }}</td>
                   <td><span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span></td>
                   <td class="actions-cell">
                     <div class="button-group">
@@ -299,7 +299,7 @@
                     <div class="subtle-text">{{ appointment.start_time.strftime('%H:%M') if appointment.start_time else 'No time' }}{% if appointment.end_time %} – {{ appointment.end_time.strftime('%H:%M') }}{% endif %}</div>
                   </td>
                   <td>{{ appointment.customer.primary_name or appointment.quote_request.full_name or 'Customer' }}</td>
-                  <td>{{ appointment.title or appointment.display_title }}</td>
+                  <td>{{ appointment.display_title }}</td>
                   <td class="actions-cell">
                     <div class="button-group">
                       <a class="btn btn-secondary btn-small" href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='day', date=appointment.scheduled_date.isoformat(), year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open Event</a>

@@ -11,7 +11,9 @@
     <div class="admin-page-header__body{% if header_actions|trim %} split-intro{% endif %}">
       <div class="admin-page-header__copy">
         <h1>{{ title }}</h1>
-        <p class="admin-page-header__description">{{ description }}</p>
+        {% if description %}
+          <p class="admin-page-header__description">{{ description }}</p>
+        {% endif %}
         {% if meta %}
           <p class="admin-page-header__meta subtle-text">{{ meta }}</p>
         {% endif %}

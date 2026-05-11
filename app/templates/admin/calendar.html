@@ -6,48 +6,33 @@
 {% block content %}
 <main class="shell dashboard-shell">
   {% set list_sort = 'soonest' %}
-  {% call render_admin_page_header(
+  {{ render_admin_page_header(
     title='Schedule',
     description='View and manage scheduled work.',
     nav_mode='main'
-  ) %}
-      {% if enable_scheduling %}
-        <a class="btn btn-primary" href="{{ url_for('admin.new_scheduled_work', source='calendar', year=year, month=month, view=view, show=show, status=status, staff_id=staff_id, sort=sort_by) }}">Add Work</a>
-      {% endif %}
-  {% endcall %}
+  ) }}
 
   <section class="summary-card schedule-view-panel" id="schedule-view">
-    <div class="schedule-view-panel__header">
-      <div>
-        <p class="eyebrow">Schedule overview</p>
-        <h2>{% if view == 'calendar' %}Calendar View{% else %}List View{% endif %}</h2>
-        <p class="subtle-text">
-          {% if view == 'calendar' %}
-            Open any day to review the full agenda for {{ month_name }} {{ year }}.
-          {% else %}
-            Upcoming events are listed in chronological order so the next stop is always first.
-          {% endif %}
-        </p>
+    <div class="schedule-view-panel__toolbar">
+      <div class="schedule-toolbar-group schedule-toolbar-group--view">
+        <div class="schedule-view-toggle" role="tablist" aria-label="Schedule views">
+          <a class="btn btn-secondary btn-toggle{% if view == 'calendar' %} active{% endif %}"{% if view == 'calendar' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='calendar') }}" data-scroll-anchor="schedule-view">Calendar View</a>
+          <a class="btn btn-secondary btn-toggle{% if view == 'list' %} active{% endif %}"{% if view == 'list' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">List View</a>
+        </div>
       </div>
-      <div class="schedule-view-toggle" role="tablist" aria-label="Schedule views">
-        <a class="btn btn-secondary btn-toggle{% if view == 'calendar' %} active{% endif %}"{% if view == 'calendar' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='calendar') }}#schedule-view">Calendar View</a>
-        <a class="btn btn-secondary btn-toggle{% if view == 'list' %} active{% endif %}"{% if view == 'list' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">List View</a>
-      </div>
-    </div>
-
-    <div class="schedule-view-panel__footer">
-      <div class="calendar-nav" aria-label="Schedule month navigation">
-        <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">Previous</a>
-        <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=year, month=month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">This Month</a>
-        <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">Next</a>
-      </div>
-      <p class="subtle-text schedule-view-note">
-        {% if view == 'calendar' %}
-          Days show compact previews and an obvious path into the Day Agenda.
-        {% else %}
-          Keep filters light: range, status, and staff only.
+      <div class="schedule-toolbar-group schedule-toolbar-group--action">
+        <a class="btn btn-secondary calendar-nav__current" href="{{ url_for('admin.calendar_view', year=today.year, month=today.month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">This Month</a>
+        {% if enable_scheduling %}
+          <a class="btn btn-primary schedule-toolbar__action" href="{{ url_for('admin.new_scheduled_work', source='calendar', year=year, month=month, view=view, show=show, status=status, staff_id=staff_id, sort=sort_by) }}">Add Work</a>
         {% endif %}
-      </p>
+      </div>
+      <div class="schedule-toolbar-group schedule-toolbar-group--period">
+        <div class="calendar-period-nav" aria-label="Schedule month navigation">
+          <a class="btn btn-secondary calendar-nav__arrow" aria-label="Previous month" title="Previous month" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">&larr;</a>
+          <h2 class="schedule-period-heading">{{ month_name }} {{ year }}</h2>
+          <a class="btn btn-secondary calendar-nav__arrow" aria-label="Next month" title="Next month" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">&rarr;</a>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -66,12 +51,12 @@
         </p>
       </div>
       <div class="schedule-list-scope">
-        <a class="btn btn-secondary btn-toggle{% if show == 'upcoming' %} active{% endif %}"{% if show == 'upcoming' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='upcoming', status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">Upcoming</a>
-        <a class="btn btn-secondary btn-toggle{% if show == 'all' %} active{% endif %}"{% if show == 'all' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='all', status=status, staff_id=staff_id, sort=list_sort) }}#schedule-view">All Events</a>
+        <a class="btn btn-secondary btn-toggle{% if show == 'upcoming' %} active{% endif %}"{% if show == 'upcoming' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='upcoming', status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">Upcoming</a>
+        <a class="btn btn-secondary btn-toggle{% if show == 'all' %} active{% endif %}"{% if show == 'all' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show='all', status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">All Events</a>
       </div>
     </div>
     <div class="section-bar section-bar--compact filter-toolbar">
-      <form method="get" class="table-filters">
+      <form method="get" class="table-filters" data-scroll-anchor="schedule-view">
         <input type="hidden" name="view" value="list">
         <input type="hidden" name="year" value="{{ year }}">
         <input type="hidden" name="month" value="{{ month }}">
@@ -101,7 +86,7 @@
           <div class="filter-actions">
             <button class="btn btn-secondary btn-small" type="submit">Update List</button>
             {% if status != 'all' or (enable_staff_management and staff_id != 0) %}
-              <a class="btn btn-secondary btn-small" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status='all', staff_id=0, sort=list_sort) }}#schedule-view">Clear</a>
+              <a class="btn btn-secondary btn-small" href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status='all', staff_id=0, sort=list_sort) }}" data-scroll-anchor="schedule-view">Clear</a>
             {% endif %}
           </div>
         </div>
@@ -146,8 +131,8 @@
                 {% endif %}
               </td>
               <td>
-                <strong class="row-title">{{ appointment.title or appointment.display_title }}</strong>
-                {% if appointment.quote_request and appointment.quote_request.service_list_display and appointment.quote_request.service_list_display != (appointment.title or appointment.display_title) %}
+                <strong class="row-title">{{ appointment.display_title }}</strong>
+                {% if appointment.quote_request and appointment.quote_request.service_list_display and appointment.quote_request.service_list_display != appointment.display_title %}
                   <div class="subtle-text">{{ appointment.quote_request.service_list_display }}</div>
                 {% elif appointment.quote_request and appointment.quote_request.service_list_display %}
                   <div class="tag-list">
@@ -218,9 +203,11 @@
                 {% if day_appointments %}
                   {% set first_appointment = day_appointments|first %}
                   {% set last_appointment = day_appointments|last %}
+                  {% set preview_start_label = first_appointment.start_time.strftime('%I:%M %p').lstrip('0') if first_appointment.start_time else 'All day' %}
+                  {% set preview_end_label = last_appointment.end_time.strftime('%I:%M %p').lstrip('0') if last_appointment.end_time else 'All day' %}
                   <article class="calendar-appointment-preview">
                     <span class="calendar-time">
-                      {{ first_appointment.start_time.strftime('%H:%M') if first_appointment.start_time else 'All day' }} – {{ last_appointment.end_time.strftime('%H:%M') if last_appointment.end_time else 'All day' }}
+                      {{ preview_start_label }} – {{ preview_end_label }}
                     </span>
                   </article>
                 {% endif %}
@@ -238,4 +225,77 @@
   </div>
   {% endif %}
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const scheduleScrollKey = 'admin-schedule-scroll';
+
+  function saveScheduleScroll(anchorId, destinationPath) {
+    const target = anchorId ? document.getElementById(anchorId) : null;
+    if (!target) {
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(scheduleScrollKey, JSON.stringify({
+        anchorId,
+        destinationPath: destinationPath || window.location.pathname,
+        expiresAt: Date.now() + 15000,
+        topOffset: target.getBoundingClientRect().top,
+      }));
+    } catch (error) {
+      // Ignore storage issues and fall back to the browser's default navigation.
+    }
+  }
+
+  document.querySelectorAll('a[data-scroll-anchor]').forEach((link) => {
+    link.addEventListener('click', function (event) {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+
+      saveScheduleScroll(link.dataset.scrollAnchor, link.pathname);
+    });
+  });
+
+  document.querySelectorAll('form[data-scroll-anchor]').forEach((form) => {
+    form.addEventListener('submit', function () {
+      saveScheduleScroll(form.dataset.scrollAnchor, window.location.pathname);
+    });
+  });
+
+  try {
+    const savedScrollState = sessionStorage.getItem(scheduleScrollKey);
+    if (!savedScrollState) {
+      return;
+    }
+
+    sessionStorage.removeItem(scheduleScrollKey);
+    const scrollState = JSON.parse(savedScrollState);
+    if (!scrollState || scrollState.destinationPath !== window.location.pathname || !scrollState.anchorId) {
+      return;
+    }
+
+    if (scrollState.expiresAt && scrollState.expiresAt < Date.now()) {
+      return;
+    }
+
+    const target = document.getElementById(scrollState.anchorId);
+    if (!target) {
+      return;
+    }
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        const desiredTop = window.scrollY + target.getBoundingClientRect().top - (scrollState.topOffset || 0);
+        window.scrollTo(0, Math.max(0, desiredTop));
+      });
+    });
+  } catch (error) {
+    sessionStorage.removeItem(scheduleScrollKey);
+  }
+})();
+</script>
 {% endblock %}

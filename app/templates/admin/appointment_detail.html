@@ -8,22 +8,16 @@
 <main class="shell dashboard-shell">
   {% set location = appointment.quote_request.city if appointment.quote_request and appointment.quote_request.city else appointment.customer.primary_city if appointment.customer and appointment.customer.primary_city else None %}
   {% call render_admin_page_header(
-    title='Scheduled Event',
-    description='Keep the live event record current in one place.',
+    title='Event #' ~ appointment.id,
+    description=None,
     nav_mode='sub',
     return_url=appointment_return_url,
     return_label=appointment_return_label,
-    meta='#' ~ appointment.id ~ ' · ' ~ appointment.display_title
+    actions_class='detail-actions appointment-detail-links'
   ) %}
-      <a class="btn btn-secondary" href="{{ appointment_calendar_url }}">Open Calendar View</a>
-      <a class="btn btn-secondary" href="{{ appointment_list_url }}">Open List View</a>
-      <a class="btn btn-secondary" href="{{ appointment_day_url }}">Open Day Agenda</a>
-      {% if appointment.customer %}
-        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=appointment.customer.id) }}">View Customer</a>
-      {% endif %}
-      {% if appointment.quote_request_id %}
-        <a class="btn btn-secondary" href="{{ url_for('admin.request_detail', request_id=appointment.quote_request_id) }}">View Request</a>
-      {% endif %}
+      <a class="btn btn-secondary" href="{{ appointment_calendar_url }}">Calendar View</a>
+      <a class="btn btn-secondary" href="{{ appointment_list_url }}">List View</a>
+      <a class="btn btn-secondary" href="{{ appointment_day_url }}">Day View</a>
   {% endcall %}
 
   <section class="detail-grid appointment-detail-stack">
@@ -32,24 +26,16 @@
         {{ appointment_form.hidden_tag() }}
         <div class="appointment-editor-card__header">
           <div>
-            <p class="eyebrow">Scheduled event</p>
-            <h2>{{ appointment.title or appointment.display_title }}</h2>
+            <h2>Event #{{ appointment.id }}</h2>
             <p class="subtle-text">Keep the current event details and editable fields on one card so the record stays easy to scan and easy to update.</p>
           </div>
           <div class="appointment-overview-card__status">
             <span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span>
-            <span class="subtle-text">Event #{{ appointment.id }}</span>
           </div>
         </div>
 
         <div class="appointment-editor-layout">
           <div class="appointment-editor-main">
-            <label class="form-field">
-              <span>Event title</span>
-              {{ appointment_form.title(class_="input") }}
-              {% for error in appointment_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-
             <div class="form-grid appointment-editor-schedule-grid">
               <label class="form-field">
                 <span>Scheduled date</span>
