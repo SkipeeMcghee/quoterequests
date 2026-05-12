@@ -265,8 +265,6 @@ class CreateScheduledWorkForm(TimeSelectMixin, FlaskForm):
     new_customer_phone = StringField("Phone", validators=[Optional(), Length(max=50)])
     new_customer_email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
     new_customer_city = StringField("City", validators=[Optional(), Length(max=255)])
-<<<<<<< HEAD
-=======
     title = StringField("Work title / summary", validators=[DataRequired(), Length(max=255)])
     service_ids = SelectMultipleField(
         "Services",
@@ -275,7 +273,6 @@ class CreateScheduledWorkForm(TimeSelectMixin, FlaskForm):
         widget=ListWidget(prefix_label=False),
         option_widget=CheckboxInputWithoutRequired(),
     )
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
     scheduled_date = DateField("Scheduled date", validators=[DataRequired()])
     start_time_hour = SelectField("Start time hour", validators=[Optional()])
     start_time_minute = SelectField("Start time minute", validators=[Optional()])
@@ -375,8 +372,6 @@ class AppointmentForm(TimeSelectMixin, FlaskForm):
 
     customer_id = SelectField("Customer", coerce=int, validators=[Optional()])
     customer_lookup = StringField("Customer", validators=[Optional()])
-<<<<<<< HEAD
-=======
     title = StringField("Work title / summary", validators=[Optional(), Length(max=255)])
     staff_ids = SelectMultipleField(
         "Assigned staff",
@@ -385,7 +380,6 @@ class AppointmentForm(TimeSelectMixin, FlaskForm):
         widget=ListWidget(prefix_label=False),
         option_widget=CheckboxInputWithoutRequired(),
     )
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
     scheduled_date = DateField("Scheduled date", validators=[Optional()])
     start_time_hour = SelectField("Start time hour", validators=[Optional()])
     start_time_minute = SelectField("Start time minute", validators=[Optional()])

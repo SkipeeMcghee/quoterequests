@@ -23,6 +23,9 @@
 
   <section class="detail-grid appointment-detail-stack">
     <article class="summary-card appointment-editor-card">
+      <form id="delete-appointment-form" method="post" action="{{ delete_appointment_url }}" data-confirm-text="Delete {{ appointment.display_title }}?">
+        {{ delete_appointment_form.hidden_tag() }}
+      </form>
       <form method="post" action="{{ edit_appointment_url }}" class="stacked-form appointment-editor-form">
         {{ appointment_form.hidden_tag() }}
         <div class="appointment-editor-card__header">
@@ -30,20 +33,11 @@
             <h2>Event #{{ appointment.id }}</h2>
             <p class="subtle-text">Keep the current event details and editable fields on one card so the record stays easy to scan and easy to update.</p>
           </div>
-<<<<<<< HEAD
-          <div class="appointment-overview-card__status">
-            <span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span>
-=======
           <div class="appointment-editor-card__header-actions">
             <div class="appointment-overview-card__status">
               <span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span>
-              <span class="subtle-text">Event #{{ appointment.id }}</span>
             </div>
-            <form method="post" action="{{ delete_appointment_url }}" class="inline-form" data-confirm-text="Delete {{ appointment.display_title }}?">
-              {{ delete_appointment_form.hidden_tag() }}
-              <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete scheduled event">x</button>
-            </form>
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
+            <button type="submit" form="delete-appointment-form" class="inline-remove-button inline-remove-button--bare" aria-label="Delete scheduled event">x</button>
           </div>
         </div>
 

@@ -13,11 +13,18 @@
   ) }}
 
   <section class="summary-card schedule-view-panel" id="schedule-view">
-    <div class="schedule-view-panel__toolbar">
+    <div class="schedule-view-panel__toolbar schedule-view-panel__toolbar--calendar">
       <div class="schedule-toolbar-group schedule-toolbar-group--view">
         <div class="schedule-view-toggle" role="tablist" aria-label="Schedule views">
           <a class="btn btn-secondary btn-toggle{% if view == 'calendar' %} active{% endif %}"{% if view == 'calendar' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='calendar') }}" data-scroll-anchor="schedule-view">Calendar View</a>
           <a class="btn btn-secondary btn-toggle{% if view == 'list' %} active{% endif %}"{% if view == 'list' %} aria-current="page"{% endif %} href="{{ url_for('admin.calendar_view', year=year, month=month, view='list', show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">List View</a>
+        </div>
+      </div>
+      <div class="schedule-toolbar-group schedule-toolbar-group--period">
+        <div class="calendar-period-nav calendar-period-nav--calendar" aria-label="Schedule month navigation">
+          <a class="btn btn-secondary calendar-nav__arrow" aria-label="Previous month" title="Previous month" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">&larr;</a>
+          <h2 class="schedule-period-heading schedule-period-heading--fit" data-fit-text data-fit-max-size="2.3" data-fit-min-size="1.35">{{ month_name }} {{ year }}</h2>
+          <a class="btn btn-secondary calendar-nav__arrow" aria-label="Next month" title="Next month" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">&rarr;</a>
         </div>
       </div>
       <div class="schedule-toolbar-group schedule-toolbar-group--action">
@@ -25,13 +32,6 @@
         {% if enable_scheduling %}
           <a class="btn btn-primary schedule-toolbar__action" href="{{ url_for('admin.new_scheduled_work', source='calendar', year=year, month=month, view=view, show=show, status=status, staff_id=staff_id, sort=sort_by) }}">Add Work</a>
         {% endif %}
-      </div>
-      <div class="schedule-toolbar-group schedule-toolbar-group--period">
-        <div class="calendar-period-nav" aria-label="Schedule month navigation">
-          <a class="btn btn-secondary calendar-nav__arrow" aria-label="Previous month" title="Previous month" href="{{ url_for('admin.calendar_view', year=prev_year, month=prev_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">&larr;</a>
-          <h2 class="schedule-period-heading">{{ month_name }} {{ year }}</h2>
-          <a class="btn btn-secondary calendar-nav__arrow" aria-label="Next month" title="Next month" href="{{ url_for('admin.calendar_view', year=next_year, month=next_month, view=view, show=show, status=status, staff_id=staff_id, sort=list_sort) }}" data-scroll-anchor="schedule-view">&rarr;</a>
-        </div>
       </div>
     </div>
   </section>
@@ -205,10 +205,14 @@
                   {% set last_appointment = day_appointments|last %}
                   {% set preview_start_label = first_appointment.start_time.strftime('%I:%M %p').lstrip('0') if first_appointment.start_time else 'All day' %}
                   {% set preview_end_label = last_appointment.end_time.strftime('%I:%M %p').lstrip('0') if last_appointment.end_time else 'All day' %}
-                  <article class="calendar-appointment-preview">
-                    <span class="calendar-time">
-                      {{ preview_start_label }} – {{ preview_end_label }}
+                  <article class="calendar-appointment-preview" aria-label="{{ preview_start_label }} to {{ preview_end_label }}">
+                    <span class="calendar-time calendar-time--start">{{ preview_start_label }}</span>
+                    <span class="calendar-time-flow" aria-hidden="true">
+                      <span class="calendar-time-flow__line"></span>
+                      <span class="calendar-time-flow__marker"></span>
+                      <span class="calendar-time-flow__line"></span>
                     </span>
+                    <span class="calendar-time calendar-time--end">{{ preview_end_label }}</span>
                   </article>
                 {% endif %}
                 {% if day_appointments|length > 2 %}
@@ -265,6 +269,30 @@
       saveScheduleScroll(form.dataset.scrollAnchor, window.location.pathname);
     });
   });
+
+  const fitTextTargets = Array.from(document.querySelectorAll('[data-fit-text]'));
+
+  function fitHeading(target) {
+    const maxSize = parseFloat(target.dataset.fitMaxSize || '2.3');
+    const minSize = parseFloat(target.dataset.fitMinSize || '1.35');
+    const step = 0.05;
+    let fontSize = maxSize;
+
+    target.style.fontSize = fontSize + 'rem';
+    while (target.scrollWidth > target.clientWidth + 1 && fontSize > minSize) {
+      fontSize = Math.max(minSize, fontSize - step);
+      target.style.fontSize = fontSize.toFixed(2) + 'rem';
+    }
+  }
+
+  if (fitTextTargets.length) {
+    const refreshFitTextTargets = function () {
+      fitTextTargets.forEach(fitHeading);
+    };
+
+    refreshFitTextTargets();
+    window.addEventListener('resize', refreshFitTextTargets);
+  }
 
   try {
     const savedScrollState = sessionStorage.getItem(scheduleScrollKey);

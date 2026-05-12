@@ -29,11 +29,17 @@
       </div>
     </div>
     <div class="table-scroll">
-      <table>
+      <table class="request-queue-table">
+        <colgroup>
+          <col class="request-queue-table__customer-col">
+          <col class="request-queue-table__services-col">
+          <col class="request-queue-table__contact-col">
+          <col class="request-queue-table__meta-col">
+          <col class="request-queue-table__submitted-col">
+        </colgroup>
         <thead>
           <tr>
             <th>Customer</th>
-            <th>Type</th>
             <th>Services</th>
             <th>Contact</th>
             <th>Status</th>
@@ -42,44 +48,74 @@
         </thead>
         <tbody>
           {% for item in quote_requests %}
-            <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ url_for('admin.request_detail', request_id=item.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.request_detail', request_id=item.id) }}'">
+            {% set normalized_request_type = item.normalized_request_type %}
+            {% set request_kind_label = 'Lead' if normalized_request_type == 'Quote request' else 'Work' if normalized_request_type == 'Work request' else 'Request' %}
+            {% set request_kind_tone = 'brand' if normalized_request_type == 'Quote request' else 'accent' if normalized_request_type == 'Work request' else 'neutral' %}
+            {% set request_status_tone = 'neutral' %}
+            {% if item.status in ('Contacted', 'Quoted') %}
+              {% set request_status_tone = 'info' %}
+            {% elif item.status in ('Accepted', 'Scheduled') %}
+              {% set request_status_tone = 'accent' %}
+            {% elif item.status == 'Rejected' %}
+              {% set request_status_tone = 'brand' %}
+            {% endif %}
+            <tr class="clickable-row request-queue-row request-queue-row--{{ request_status_tone }}" tabindex="0" data-row-href="{{ url_for('admin.request_detail', request_id=item.id) }}">
               <td>
                 <strong class="row-title">{{ item.full_name }}</strong>
                 <div class="subtle-text">{{ item.city }}</div>
               </td>
-              <td>
-                <span class="tag-pill">{{ (item.request_type or 'Unknown')|replace(' request', '')|lower }}</span>
-              </td>
-              <td>
-                {% if item.service_list_display %}
-                  <div class="tag-list">
-                    {% for service in item.service_list_display.split(', ') %}
-                      <span class="tag-pill">{{ service }}</span>
-                    {% endfor %}
+              <td class="request-queue__services-cell">
+                {% if item.service_names %}
+                  <div
+                    class="request-queue-service-summary"
+                    data-service-summary
+                    data-services='{{ item.service_names|tojson|forceescape }}'
+                    title="{{ item.service_list_display }}"
+                    aria-label="Services: {{ item.service_list_display }}"
+                  >
+                    <span class="request-queue-service-summary__text" data-service-summary-text>{{ item.service_list_display }}</span>
+                    <span class="request-queue-service-summary__overflow" data-service-summary-overflow hidden></span>
                   </div>
                 {% else %}
-                  <span class="subtle-text">No services selected</span>
+                  <div class="request-queue-service-summary request-queue-service-summary--empty">
+                    <span class="request-queue-service-summary__text subtle-text">No services selected</span>
+                  </div>
                 {% endif %}
               </td>
-              <td>
-                <div class="contact-block">
-                  {% if item.email %}
-                    <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ item.email }}</span></div>
-                  {% endif %}
-                  {% if item.phone %}
-                    <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ item.phone }}</span></div>
-                  {% endif %}
-                  {% if not item.email and not item.phone %}
-                    <div class="subtle-text">No contact info</div>
-                  {% endif %}
+              <td class="request-queue__contact-cell">
+                <div class="request-queue-contact" aria-label="Contact details">
+                  <div class="request-queue-contact__row">
+                    {% if item.email %}
+                      <a class="request-queue-contact__link" href="mailto:{{ item.email }}" title="{{ item.email }}">{{ item.email }}</a>
+                    {% else %}
+                      <span class="request-queue-contact__placeholder subtle-text">No email</span>
+                    {% endif %}
+                  </div>
+                  <div class="request-queue-contact__row">
+                    {% if item.phone %}
+                      <a class="request-queue-contact__link" href="tel:{{ item.phone|replace(' ', '')|replace('-', '')|replace('(', '')|replace(')', '')|replace('.', '') }}" title="{{ item.phone }}">{{ item.phone }}</a>
+                    {% else %}
+                      <span class="request-queue-contact__placeholder subtle-text">No phone</span>
+                    {% endif %}
+                  </div>
                 </div>
               </td>
-              <td><span class="status-badge status-{{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</span></td>
-              <td>{{ item.created_at.strftime('%b %d, %Y %I:%M %p') }}</td>
+              <td class="request-queue__meta-cell">
+                <div class="request-queue-meta">
+                  <span class="request-queue-kind-badge request-queue-kind-badge--{{ request_kind_tone }}">{{ request_kind_label }}</span>
+                  <span class="status-badge request-queue-status-badge request-queue-status-badge--{{ request_status_tone }} status-{{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</span>
+                </div>
+              </td>
+              <td class="request-queue__submitted-cell">
+                <div class="request-queue-datetime">
+                  <span>{{ item.created_at.strftime('%b %d, %Y') }}</span>
+                  <span class="subtle-text">{{ item.created_at.strftime('%I:%M %p') }}</span>
+                </div>
+              </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="6" class="empty-state">No quote requests yet.</td>
+              <td colspan="5" class="empty-state">No quote requests yet.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -91,25 +127,133 @@
 {% block scripts %}
 <script>
 (function () {
-  const toolbar = document.querySelector('.dashboard-view-toolbar');
-  const requestsPanel = document.getElementById('requests-panel');
-  if (!toolbar || !requestsPanel) {
+  const rows = Array.from(document.querySelectorAll('[data-row-href]'));
+  const interactiveSelector = 'a, button, input, select, textarea, summary, label';
+
+  rows.forEach(function (row) {
+    row.addEventListener('click', function (event) {
+      if (event.target instanceof Element && event.target.closest(interactiveSelector)) {
+        return;
+      }
+
+      window.location.href = row.dataset.rowHref;
+    });
+
+    row.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter' || event.target !== row) {
+        return;
+      }
+
+      event.preventDefault();
+      window.location.href = row.dataset.rowHref;
+    });
+  });
+
+  const summaries = Array.from(document.querySelectorAll('[data-service-summary]'));
+  if (!summaries.length) {
     return;
   }
 
-  toolbar.addEventListener('click', function (event) {
-    const button = event.target.closest('button[data-view]');
-    if (!button) {
+  const measurementHost = document.createElement('div');
+  measurementHost.className = 'request-queue-service-summary request-queue-service-summary--measure';
+  measurementHost.setAttribute('aria-hidden', 'true');
+  measurementHost.innerHTML = [
+    '<span class="request-queue-service-summary__text"></span>',
+    '<span class="request-queue-service-summary__overflow"></span>',
+  ].join('');
+  document.body.appendChild(measurementHost);
+
+  const measurementText = measurementHost.querySelector('.request-queue-service-summary__text');
+  const measurementOverflow = measurementHost.querySelector('.request-queue-service-summary__overflow');
+
+  function measureWidth(element, value) {
+    element.textContent = value;
+    return element.getBoundingClientRect().width;
+  }
+
+  function measureHeight(value, width) {
+    measurementText.style.width = Math.max(width, 0) + 'px';
+    measurementText.textContent = value;
+    return measurementText.getBoundingClientRect().height;
+  }
+
+  function updateSummary(summary) {
+    const textNode = summary.querySelector('[data-service-summary-text]');
+    const overflowNode = summary.querySelector('[data-service-summary-overflow]');
+    if (!textNode || !overflowNode) {
       return;
     }
 
-    toolbar.querySelectorAll('.button-toggle').forEach((btn) => {
-      btn.classList.toggle('active', btn === button);
+    let services;
+    try {
+      services = JSON.parse(summary.dataset.services || '[]');
+    } catch (error) {
+      services = [];
+    }
+
+    if (!Array.isArray(services) || !services.length) {
+      return;
+    }
+
+    const fullText = services.join(', ');
+    const availableWidth = summary.getBoundingClientRect().width;
+    const lineHeight = parseFloat(window.getComputedStyle(textNode).lineHeight || '0');
+    const maxTextHeight = lineHeight * 2 + 1;
+
+    textNode.textContent = fullText;
+    overflowNode.textContent = '';
+    overflowNode.hidden = true;
+    summary.classList.remove('request-queue-service-summary--has-overflow');
+    summary.style.removeProperty('--request-queue-overflow-width');
+
+    if (!availableWidth || !lineHeight || measureHeight(fullText, availableWidth) <= maxTextHeight || services.length === 1) {
+      return;
+    }
+
+    for (let visibleCount = services.length - 1; visibleCount >= 1; visibleCount -= 1) {
+      const hiddenCount = services.length - visibleCount;
+      const summaryText = services.slice(0, visibleCount).join(', ') + ', …';
+      const overflowText = '+' + hiddenCount;
+      const overflowWidth = measureWidth(measurementOverflow, overflowText);
+      const remainingWidth = availableWidth - overflowWidth - 8;
+
+      if (remainingWidth > 0 && measureHeight(summaryText, remainingWidth) <= maxTextHeight) {
+        textNode.textContent = summaryText;
+        overflowNode.textContent = overflowText;
+        overflowNode.hidden = false;
+        summary.classList.add('request-queue-service-summary--has-overflow');
+        summary.style.setProperty('--request-queue-overflow-width', overflowWidth + 'px');
+        return;
+      }
+    }
+
+    textNode.textContent = '…';
+    overflowNode.textContent = '+' + services.length;
+    overflowNode.hidden = false;
+    summary.classList.add('request-queue-service-summary--has-overflow');
+    summary.style.setProperty('--request-queue-overflow-width', measureWidth(measurementOverflow, overflowNode.textContent) + 'px');
+  }
+
+  const refreshSummaries = function () {
+    summaries.forEach(updateSummary);
+  };
+
+  refreshSummaries();
+
+  if ('ResizeObserver' in window) {
+    const observer = new ResizeObserver(function (entries) {
+      entries.forEach(function (entry) {
+        updateSummary(entry.target);
+      });
     });
 
-    const view = button.dataset.view;
-    requestsPanel.style.display = view === 'requests' ? '' : 'none';
-  });
+    summaries.forEach(function (summary) {
+      observer.observe(summary);
+    });
+    return;
+  }
+
+  window.addEventListener('resize', refreshSummaries);
 })();
 </script>
 {% endblock %}

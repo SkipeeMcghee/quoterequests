@@ -125,8 +125,12 @@ class QuoteRequest(db.Model):
     customer = db.relationship("Customer", back_populates="quote_requests")
 
     @property
+    def service_names(self) -> list[str]:
+        return [service.name for service in self.services]
+
+    @property
     def service_list_display(self) -> str:
-        return ", ".join([service.name for service in self.services])
+        return ", ".join(self.service_names)
 
     @property
     def normalized_request_type(self) -> str:

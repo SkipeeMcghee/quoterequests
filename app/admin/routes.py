@@ -989,11 +989,8 @@ def new_scheduled_work():
             else:
                 form.new_customer_name.data = quote_request.full_name
                 form.new_customer_city.data = quote_request.city
-<<<<<<< HEAD
-=======
             form.title.data = quote_request.service_list_display or quote_request.request_type
             form.service_ids.data = [service.id for service in quote_request.services]
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
         if customer is not None:
             form.customer_id.data = customer.id
             form.customer_lookup.data = _find_customer_option_label(customer_options, customer.id)
@@ -1283,8 +1280,6 @@ def request_detail(request_id: int):
                     (0, "Choose an existing customer"),
                     *customer_options,
                 ]
-<<<<<<< HEAD
-=======
             appointment_form.title.data = quote_request.service_list_display or quote_request.request_type
             _set_default_minute_values(appointment_form, ("start_time_minute", "end_time_minute"))
             if current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
@@ -1298,7 +1293,6 @@ def request_detail(request_id: int):
                 schedule_required_service_names = staffing_context["required_service_names"]
                 schedule_matching_staff_info = staffing_context["matching_staff_info"]
                 schedule_other_staff_info = staffing_context["other_staff_info"]
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
 
     edit_note_forms = {
         note.id: NoteForm(prefix=f"edit-note-{note.id}", obj=note)

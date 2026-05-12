@@ -540,11 +540,8 @@ def test_request_detail_can_schedule_inline_and_link_existing_customer(client, a
         assert quote_request.customer_id == customer_id
         assert quote_request.status == "Scheduled"
         assert quote_request.current_appointment is not None
-<<<<<<< HEAD
         assert quote_request.current_appointment.title is None
-=======
-        assert quote_request.current_appointment.title == "Paint consultation"
-    
+
 def test_request_detail_inline_scheduler_defaults_minutes_to_00_and_uses_event_notes(client, app, admin_user):
     app.config["ENABLE_SCHEDULING"] = True
 
@@ -574,7 +571,6 @@ def test_request_detail_inline_scheduler_defaults_minutes_to_00_and_uses_event_n
     assert "Event notes" in scheduling_section
     assert "Customer notes" not in scheduling_section
     assert "Internal notes" not in scheduling_section
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
 
 
 def test_request_detail_shows_inline_edit_form_for_current_appointment(client, app, admin_user):
@@ -617,12 +613,9 @@ def test_request_detail_shows_inline_edit_form_for_current_appointment(client, a
     body = response.get_data(as_text=True)
     assert "Keep the scheduled event current here and open the full event page only when you need deeper tools." in body
     assert f'action="/admin/appointments/{appointment_id}/edit?return_to=request"' in body
-<<<<<<< HEAD
     assert 'name="edit-title"' not in body
-=======
     assert f'action="/admin/appointments/{appointment_id}/delete?return_to=request"' in body
     assert 'data-confirm-text="Delete Paint consultation?"' in body
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
     assert 'name="edit-status"' not in body
     assert f"View scheduled event #{appointment_id}" in body
     assert "Open day agenda" in body
@@ -857,12 +850,16 @@ def test_admin_calendar_view_and_list_view_render_as_alternates(client, app, adm
     body = response.get_data(as_text=True)
     assert "Calendar View" in body
     assert "May 2026" in body
-    assert "8:00 AM – 9:00 AM" in body
+    assert 'class="calendar-time calendar-time--start">8:00 AM<' in body
+    assert 'class="calendar-time calendar-time--end">9:00 AM<' in body
+    assert 'calendar-time-flow' in body
     assert "Upcoming scheduled events" not in body
     assert "Schedule overview" not in body
     assert "Open any day to review the full agenda" not in body
     assert 'data-scroll-anchor="schedule-view"' in body
     assert "#schedule-view" not in body
+    assert 'schedule-view-panel__toolbar--calendar' in body
+    assert 'data-fit-text' in body
     assert f"/admin/calendar?year={date.today().year}&amp;month={date.today().month}&amp;view=calendar" in body
 
     response = client.get("/admin/calendar?year=2026&month=5&view=list")
@@ -1264,6 +1261,47 @@ def test_dashboard_lists_quote_requests(client, admin_user):
     assert "Request queue" in body
     assert "Jamie Cole" in body
     assert "Flooring" in body
+
+
+def test_dashboard_renders_compact_service_summary_markup(client, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Avery Stone",
+            "phone": "555-111-0001",
+            "email": "avery@example.com",
+            "services": ["Flooring", "Fence Repair", "Painting"],
+            "city": "88 Cedar Ave",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'class="request-queue-table"' in body
+    assert '>Status</th>' in body
+    assert '>Type</th>' not in body
+    assert 'data-service-summary' in body
+    assert 'request-queue-service-summary__text' in body
+    assert 'request-queue-contact__row' in body
+    assert 'request-queue-contact__link' in body
+    assert 'request-queue-datetime' in body
+    assert '>Lead<' in body
+    assert 'href="mailto:avery@example.com"' in body
+    assert 'href="tel:5551110001"' in body
+    assert '>Email</span>' not in body
+    assert '>Phone</span>' not in body
+    assert 'Flooring' in body
+    assert 'Fence Repair' in body
+    assert 'Painting' in body
 
 
 def test_dashboard_shows_newest_requests_first(client, admin_user):
