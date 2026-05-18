@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
+
+{% block title %}Services | Admin{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  {% call render_admin_page_header(
+    title='Services',
+    description='Manage the service catalog used by public request forms and internal workflows.',
+    nav_mode='sub',
+    return_url=url_for('admin.dashboard'),
+    return_label='Back to Dashboard',
+    actions_class='dashboard-metrics'
+  ) %}
+      <article class="metric-card">
+        <strong>{{ active_service_count }}</strong>
+        <span>Active services</span>
+      </article>
+      <article class="metric-card">
+        <strong>{{ archived_service_count }}</strong>
+        <span>Archived services</span>
+      </article>
+  {% endcall %}
+
+  <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Add service</h2>
+        <p class="subtle-text">New services appear on customer-facing request forms as soon as they are added.</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.service_settings') }}" class="form-grid service-management-form">
+      {{ create_form.hidden_tag() }}
+
+      <label class="form-field field-span-2">
+        <span>Name</span>
+        {{ create_form.name(class_="input", placeholder="Window Cleaning") }}
+        {% for error in create_form.name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="form-field field-span-2">
+        <span>Description</span>
+        {{ create_form.description(class_="textarea textarea--small", placeholder="Optional public-facing description.") }}
+        {% for error in create_form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="form-field">
+        <span>Display order</span>
+        {{ create_form.display_order(class_="input", min="0") }}
+        {% for error in create_form.display_order.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <div class="form-field service-management-form__actions">
+        {{ create_form.submit(class_="btn btn-primary", value="Add Service") }}
+      </div>
+    </form>
+  </section>
+
+  <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Service catalog</h2>
+        <p class="subtle-text">Inactive services are removed from public forms but remain visible in historical records.</p>
+      </div>
+    </div>
+
+    <div class="service-management-list">
+      {% for service in services %}
+        {% set form = service_forms[service.id] %}
+        {% set status_form = status_forms[service.id] %}
+        <article class="service-management-card{% if not service.is_active %} service-management-card--inactive{% endif %}">
+          <div class="section-bar compact-bar">
+            <div>
+              <h2>{{ service.name }}</h2>
+              <p class="subtle-text">{{ 'Visible on quote and work request forms.' if service.is_active else 'Hidden from customer-facing request forms.' }}</p>
+            </div>
+            <span class="status-badge service-management-status{% if service.is_active %} service-management-status--active{% else %} service-management-status--inactive{% endif %}">
+              {{ 'Active' if service.is_active else 'Inactive' }}
+            </span>
+          </div>
+
+          <form method="post" action="{{ url_for('admin.update_service_route', service_id=service.id) }}" class="form-grid service-management-form">
+            {{ form.hidden_tag() }}
+
+            <label class="form-field field-span-2">
+              <span>Name</span>
+              {{ form.name(class_="input") }}
+              {% for error in form.name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+
+            <label class="form-field field-span-2">
+              <span>Description</span>
+              {{ form.description(class_="textarea textarea--small", placeholder="Optional public-facing description.") }}
+              {% for error in form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+
+            <label class="form-field">
+              <span>Display order</span>
+              {{ form.display_order(class_="input", min="0") }}
+              {% for error in form.display_order.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+
+            <div class="form-field service-management-form__actions">
+              {{ form.submit(class_="btn btn-primary", value="Save Changes") }}
+            </div>
+          </form>
+
+          <form method="post" action="{{ url_for('admin.toggle_service_status_route', service_id=service.id) }}" class="form-actions service-management-toggle-form">
+            {{ status_form.hidden_tag() }}
+            {% if service.is_active %}
+              <button type="submit" class="btn btn-danger btn-small">Archive</button>
+              <span class="subtle-text">Archived services stay attached to older requests, schedules, and customer history.</span>
+            {% else %}
+              <button type="submit" class="btn btn-secondary btn-small">Reactivate</button>
+              <span class="subtle-text">Reactivated services will show up on public request forms again.</span>
+            {% endif %}
+          </form>
+        </article>
+      {% else %}
+        <p class="empty-state">No services have been added yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+</main>
+{% endblock %}

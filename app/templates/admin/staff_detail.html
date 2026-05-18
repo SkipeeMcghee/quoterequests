@@ -117,7 +117,36 @@
             {% for day in availability_week_rows %}
               <div class="availability-board__row">
                 <div class="availability-board__day">
-                  <strong>{{ day.day_short }}</strong>
+                  <div class="availability-board__day-heading">
+                    <strong>{{ day.day_short }}</strong>
+                    <div class="availability-board__day-actions">
+                      <button
+                        type="button"
+                        class="availability-board__day-action"
+                        data-availability-copy-to-next="{{ day.day_index }}"
+                        aria-label="Copy {{ day.day_name }} availability to {{ availability_week_rows[(day.day_index + 1) % (availability_week_rows|length)].day_name }}"
+                        title="Copy {{ day.day_name }} availability to {{ availability_week_rows[(day.day_index + 1) % (availability_week_rows|length)].day_name }}"
+                      >
+                        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <rect x="2.5" y="4.5" width="7" height="8" rx="1.25"></rect>
+                          <rect x="6.5" y="2.5" width="7" height="8" rx="1.25"></rect>
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="availability-board__day-action"
+                        data-availability-copy-from-previous="{{ day.day_index }}"
+                        aria-label="Copy {{ availability_week_rows[(day.day_index - 1) % (availability_week_rows|length)].day_name }} availability to {{ day.day_name }}"
+                        title="Copy {{ availability_week_rows[(day.day_index - 1) % (availability_week_rows|length)].day_name }} availability to {{ day.day_name }}"
+                      >
+                        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                          <path d="M8 2.5v7"></path>
+                          <path d="M5.5 7.5L8 10l2.5-2.5"></path>
+                          <path d="M3 12.5h10"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                   <span class="subtle-text">{{ day.day_name }}</span>
                 </div>
                 <div class="availability-board__lane" data-day-index="{{ day.day_index }}" aria-label="{{ day.day_name }} availability lane">
@@ -649,6 +678,28 @@
         notes: windowItem.notes || '',
       };
     });
+  }
+
+  function duplicateDayWindows(sourceDayIndex, targetDayIndex) {
+    const nextWindows = cloneWindows(committedWindows).filter(function (windowItem) {
+      return windowItem.dayIndex !== targetDayIndex;
+    });
+
+    committedWindows.filter(function (windowItem) {
+      return windowItem.dayIndex === sourceDayIndex;
+    }).forEach(function (windowItem) {
+      nextWindows.push({
+        id: null,
+        key: 'temp-' + (++tempId),
+        dayIndex: targetDayIndex,
+        startMinutes: windowItem.startMinutes,
+        endMinutes: windowItem.endMinutes,
+        notes: windowItem.notes || '',
+      });
+    });
+
+    nextWindows.sort(compareWindows);
+    workingWindows = nextWindows;
   }
 
   function setStatus(message, isError, persist) {
@@ -1185,6 +1236,28 @@
   }
 
   board.addEventListener('click', function (event) {
+    const copyToNextButton = event.target.closest('[data-availability-copy-to-next]');
+    if (copyToNextButton && !isSaving) {
+      const sourceDayIndex = Number(copyToNextButton.dataset.availabilityCopyToNext);
+      const targetDayIndex = (sourceDayIndex + 1 + weekdayNames.length) % weekdayNames.length;
+      if (!Number.isNaN(sourceDayIndex)) {
+        duplicateDayWindows(sourceDayIndex, targetDayIndex);
+        saveWindows();
+      }
+      return;
+    }
+
+    const copyFromPreviousButton = event.target.closest('[data-availability-copy-from-previous]');
+    if (copyFromPreviousButton && !isSaving) {
+      const targetDayIndex = Number(copyFromPreviousButton.dataset.availabilityCopyFromPrevious);
+      const sourceDayIndex = (targetDayIndex - 1 + weekdayNames.length) % weekdayNames.length;
+      if (!Number.isNaN(targetDayIndex)) {
+        duplicateDayWindows(sourceDayIndex, targetDayIndex);
+        saveWindows();
+      }
+      return;
+    }
+
     const deleteButton = event.target.closest('[data-availability-delete]');
     if (!deleteButton || isSaving) {
       return;

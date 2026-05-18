@@ -1,0 +1,123 @@
+{% macro render_import_button(modal_id, label='Import') %}
+  <button type="button" class="btn btn-secondary btn-small import-utility__open" data-import-open="{{ modal_id }}">{{ label }}</button>
+{% endmacro %}
+
+{% macro render_import_modal(entity_type, modal_id) %}
+  {% set is_customer_import = entity_type == 'customers' %}
+  {% set entity_label = 'Customers' if is_customer_import else 'Employees / Staff' %}
+  {% set field_names = ['name', 'phone', 'email', 'city', 'notes', 'billing_frequency', 'billing_amount'] if is_customer_import else ['name', 'phone', 'email', 'services', 'availability_notes'] %}
+  <dialog
+    class="import-dialog"
+    id="{{ modal_id }}"
+    data-import-modal
+    data-entity-type="{{ entity_type }}"
+    data-entity-label="{{ entity_label }}"
+    data-template-csv-url="{{ url_for('admin.download_import_template', entity_type=entity_type, file_format='csv') }}"
+    data-template-xlsx-url="{{ url_for('admin.download_import_template', entity_type=entity_type, file_format='xlsx') }}"
+    data-preview-url="{{ url_for('admin.preview_import_route', entity_type=entity_type) }}"
+    data-review-url="{{ url_for('admin.review_import_route', entity_type=entity_type) }}"
+    data-commit-url="{{ url_for('admin.commit_import_route', entity_type=entity_type) }}"
+  >
+    <div class="import-dialog__card" role="dialog" aria-modal="true" aria-labelledby="{{ modal_id }}-title">
+      <header class="import-dialog__header">
+        <div class="import-dialog__copy">
+          <p class="eyebrow">Quick Import</p>
+          <h2 id="{{ modal_id }}-title">Import {{ entity_label }}</h2>
+          <p class="subtle-text">Use the provided template, preview the parsed rows, resolve issues inline, and confirm the import without leaving this page.</p>
+        </div>
+        <button type="button" class="inline-remove-button inline-remove-button--bare" data-import-close aria-label="Close import dialog">&times;</button>
+      </header>
+
+      <input type="hidden" value="{{ csrf_token() }}" data-import-csrf>
+
+      <section class="import-progress" aria-live="polite">
+        <div class="import-progress__copy">
+          <p class="eyebrow import-progress__eyebrow" data-import-step-counter>Step 1 of 6</p>
+          <div class="import-progress__heading-row">
+            <h3 class="import-progress__title" data-import-step-title>Download Template</h3>
+          </div>
+        </div>
+        <div class="import-progress__track" aria-hidden="true">
+          <span class="import-progress__bar" data-import-progress-bar></span>
+        </div>
+      </section>
+
+      <div class="import-dialog__body">
+        <p class="import-dialog__status subtle-text" data-import-status hidden></p>
+
+        <div class="import-dialog__viewport">
+          <section class="import-panel" data-import-panel="download">
+            <div class="import-panel__lead">
+              <h3>Start with the template</h3>
+              <p class="subtle-text">The import expects the template columns in order. There is no column mapping step, so downloading the template first keeps the workflow predictable.</p>
+            </div>
+            <div class="button-row import-template-actions">
+              <a class="btn btn-secondary btn-small" href="{{ url_for('admin.download_import_template', entity_type=entity_type, file_format='csv') }}">Download CSV Template</a>
+              <a class="btn btn-secondary btn-small" href="{{ url_for('admin.download_import_template', entity_type=entity_type, file_format='xlsx') }}">Download XLSX Template</a>
+            </div>
+            <div class="tag-list import-template-fields">
+              {% for field_name in field_names %}
+                <span class="tag-pill">{{ field_name }}</span>
+              {% endfor %}
+            </div>
+            {% if not is_customer_import %}
+              <p class="subtle-text">For the <strong>services</strong> column, separate multiple service names with commas.</p>
+            {% endif %}
+          </section>
+
+          <section class="import-panel" data-import-panel="upload" hidden>
+            <div class="import-panel__lead">
+              <h3>Upload the spreadsheet</h3>
+              <p class="subtle-text">Drop a CSV or XLSX file here, or click to choose one from your computer.</p>
+            </div>
+            <input type="file" hidden accept=".csv,.xlsx" data-import-file-input>
+            <div class="import-dropzone" data-import-dropzone role="button" tabindex="0" aria-label="Upload import file">
+              <strong>Drop CSV or XLSX here</strong>
+              <span class="subtle-text">or click to browse files</span>
+              <span class="subtle-text" data-import-file-name>No file selected yet.</span>
+            </div>
+          </section>
+
+          <section class="import-panel" data-import-panel="preview" hidden>
+            <div class="import-panel__lead">
+              <h3>Preview parsed data</h3>
+              <p class="subtle-text">Review the parsed rows before you move on to issue handling. Problematic cells are highlighted directly in the preview.</p>
+            </div>
+            <div class="import-summary-grid" data-import-preview-summary></div>
+            <div class="table-scroll import-preview-table" data-import-preview-table></div>
+          </section>
+
+          <section class="import-panel" data-import-panel="issues" hidden>
+            <div class="import-panel__lead">
+              <h3>Resolve issues inline</h3>
+              <p class="subtle-text">Adjust row values directly in the modal, then decide whether duplicate matches should merge, create new, or be skipped.</p>
+            </div>
+            <div class="import-issue-list" data-import-issue-list></div>
+          </section>
+
+          <section class="import-panel" data-import-panel="confirm" hidden>
+            <div class="import-panel__lead">
+              <h3>Confirm import</h3>
+              <p class="subtle-text">Only rows that are valid and explicitly resolved will be imported. Unresolved rows can remain skipped without blocking the whole batch.</p>
+            </div>
+            <div class="import-summary-grid" data-import-confirm-summary></div>
+          </section>
+
+          <section class="import-panel" data-import-panel="summary" hidden>
+            <div class="import-panel__lead">
+              <h3>Import summary</h3>
+              <p class="subtle-text">The import is complete. New records are available immediately; refresh this list when you are ready to see them inline.</p>
+            </div>
+            <div class="import-summary-grid" data-import-result-summary></div>
+            <div class="import-result-list" data-import-result-list></div>
+          </section>
+        </div>
+      </div>
+
+      <footer class="import-dialog__footer">
+        <button type="button" class="btn btn-secondary btn-small" data-import-back>Back</button>
+        <button type="button" class="btn btn-primary btn-small" data-import-next>Continue</button>
+      </footer>
+    </div>
+  </dialog>
+{% endmacro %}

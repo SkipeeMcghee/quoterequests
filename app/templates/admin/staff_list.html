@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
+{% from "admin/import_utility.html" import render_import_button, render_import_modal %}
 
 {% block title %}Staff{% endblock %}
 
@@ -10,6 +11,7 @@
     description='Review staff contact details, service coverage, weekly availability, scheduled hours, and assigned work.',
     nav_mode='main'
   ) %}
+      {{ render_import_button('staff-import-modal') }}
       <a class="btn btn-primary" href="{{ url_for('admin.new_staff_member') }}">Add Staff</a>
   {% endcall %}
 
@@ -100,5 +102,10 @@
       </table>
     </div>
   </section>
+
+  {{ render_import_modal('staff', 'staff-import-modal') }}
 </main>
+{% endblock %}
+{% block scripts %}
+{% include "admin/import_utility_script.html" %}
 {% endblock %}

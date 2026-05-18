@@ -34,12 +34,16 @@
       </div>
 
       <div class="brochure-list">
-        {% for service in services[:6] %}
-          <div class="brochure-list__item">
-            <strong>{{ service }}</strong>
-            <span class="subtle-text">{{ describe_service(service) }}</span>
-          </div>
-        {% endfor %}
+        {% if services %}
+          {% for service in services[:6] %}
+            <div class="brochure-list__item">
+              <strong>{{ service.name }}</strong>
+              <span class="subtle-text">{{ describe_service(service) }}</span>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="subtle-text">Services are being updated. Contact us if you do not see your project type listed yet.</p>
+        {% endif %}
       </div>
     </div>
   </section>

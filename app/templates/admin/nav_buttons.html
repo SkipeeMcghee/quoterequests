@@ -3,6 +3,7 @@
     <a class="btn btn-secondary" href="{{ admin_return_url }}">{{ admin_return_label }}</a>
   {% else %}
     <a class="btn btn-secondary" href="{{ url_for('admin.dashboard') }}">Requests</a>
+    <a class="btn btn-secondary" href="{{ url_for('admin.service_settings') }}">Services</a>
     {% if enable_calendar %}
       <a class="btn btn-secondary" href="{{ url_for('admin.calendar_view') }}">Schedule</a>
     {% endif %}

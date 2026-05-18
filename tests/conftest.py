@@ -6,7 +6,21 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import User
+from app.models import ServiceOption, User
+
+
+DEFAULT_TEST_SERVICES = (
+    "Landscape Design",
+    "Roof Repair",
+    "Window Cleaning",
+    "Inspection",
+    "Painting",
+    "Deck Staining",
+    "Flooring",
+    "Siding",
+    "Fence Repair",
+    "General Maintenance",
+)
 
 
 @pytest.fixture()
@@ -24,6 +38,13 @@ def app(tmp_path: Path):
     with app.app_context():
         db.drop_all()
         db.create_all()
+        db.session.add_all(
+            [
+                ServiceOption(name=name, display_order=index, is_active=True)
+                for index, name in enumerate(DEFAULT_TEST_SERVICES)
+            ]
+        )
+        db.session.commit()
         yield app
         db.session.remove()
         db.drop_all()

@@ -1,31 +1,15 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, MultipleFileField
-from sqlalchemy.exc import SQLAlchemyError
 from wtforms import DateField, EmailField, HiddenField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField, ValidationError
 from wtforms.validators import DataRequired, Email, Length, Optional
 from wtforms.widgets import CheckboxInput, ListWidget
 
-from app.extensions import db
 from app.forms.time_selects import TimeSelectMixin
-from app.models import ServiceOption
+from app.services.service_catalog import list_service_name_choices
 
 
 class CheckboxInputWithoutRequired(CheckboxInput):
     validation_attrs = ["disabled"]
-
-
-SERVICE_CHOICES = [
-    ("Landscape Design", "Landscape Design"),
-    ("Roof Repair", "Roof Repair"),
-    ("Window Cleaning", "Window Cleaning"),
-    ("Inspection", "Inspection"),
-    ("Painting", "Painting"),
-    ("Deck Staining", "Deck Staining"),
-    ("Flooring", "Flooring"),
-    ("Siding", "Siding"),
-    ("Fence Repair", "Fence Repair"),
-    ("General Maintenance", "General Maintenance"),
-]
 
 
 class QuoteRequestForm(TimeSelectMixin, FlaskForm):
@@ -49,7 +33,6 @@ class QuoteRequestForm(TimeSelectMixin, FlaskForm):
         "Services",
         choices=[],
         validators=[DataRequired()],
-        validate_choice=False,
         widget=ListWidget(prefix_label=False),
         option_widget=CheckboxInputWithoutRequired(),
     )
@@ -66,14 +49,7 @@ class QuoteRequestForm(TimeSelectMixin, FlaskForm):
         self.services.choices = self._load_service_choices()
 
     def _load_service_choices(self) -> list[tuple[str, str]]:
-        try:
-            options = ServiceOption.query.order_by(ServiceOption.name).all()
-            if options:
-                return [(option.name, option.name) for option in options]
-        except SQLAlchemyError:
-            db.session.rollback()
-
-        return SERVICE_CHOICES
+        return list_service_name_choices(include_inactive=False)
 
     def validate(self, extra_validators=None) -> bool:
         valid = super().validate(extra_validators=extra_validators)

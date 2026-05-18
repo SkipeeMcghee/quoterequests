@@ -2,7 +2,6 @@ from pathlib import Path
 
 from flask import Flask, flash, jsonify, redirect, render_template_string, request, url_for
 from flask_wtf.csrf import CSRFError
-from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.auth import bp as auth_bp
@@ -11,6 +10,7 @@ from app.extensions import csrf, db, login_manager, migrate
 from app.main import bp as main_bp
 from app.admin import bp as admin_bp
 from app.cli import register_cli
+from app.services.service_catalog import list_active_services
 
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -74,21 +74,8 @@ def register_login_manager() -> None:
         return db.session.get(User, int(user_id))
 
 
-def _get_site_services(app: Flask) -> list[str]:
-    configured_services = [service for service in app.config.get("BUSINESS_SERVICES", ()) if service]
-    if app.config.get("BUSINESS_SERVICES_OVERRIDDEN"):
-        return configured_services
-
-    try:
-        from app.models import ServiceOption
-
-        options = ServiceOption.query.order_by(ServiceOption.name).all()
-        if options:
-            return [option.name for option in options]
-    except SQLAlchemyError:
-        db.session.rollback()
-
-    return configured_services
+def _get_site_services(app: Flask):
+    return list_active_services()
 
 
 def _get_enabled_social_links(app: Flask) -> list[dict[str, str | bool]]:
@@ -130,7 +117,13 @@ def _get_enabled_social_links(app: Flask) -> list[dict[str, str | bool]]:
     return enabled_links
 
 
-def _describe_service(service_name: str) -> str:
+def _describe_service(service_name) -> str:
+    if hasattr(service_name, "normalized_description") and service_name.normalized_description:
+        return service_name.normalized_description
+
+    if hasattr(service_name, "name"):
+        service_name = service_name.name
+
     descriptions = {
         "landscape design": "Planning plantings, layout changes, and outdoor improvements that fit the property and how you use it.",
         "roof repair": "Targeted repairs and condition reviews that help address small roofing issues before they become larger ones.",

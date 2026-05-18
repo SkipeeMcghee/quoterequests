@@ -46,7 +46,7 @@ class StaffMember(db.Model):
         "ServiceOption",
         secondary="staff_service_options",
         back_populates="staff_members",
-        order_by="ServiceOption.name",
+        order_by="(ServiceOption.display_order, ServiceOption.name)",
     )
     availability_windows = db.relationship(
         "StaffAvailability",

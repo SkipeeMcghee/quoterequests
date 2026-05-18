@@ -21,6 +21,10 @@ from app.models import (
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
 
+def _get_service(name: str) -> ServiceOption:
+    return ServiceOption.query.filter_by(name=name).one()
+
+
 class WorkflowHtmlParser(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -68,8 +72,8 @@ def _seed_workflow_context(
     scheduled_date = date.today() + timedelta(days=scheduled_offset_days)
 
     with app.app_context():
-        service = ServiceOption(name="Window Cleaning")
-        other_service = ServiceOption(name="Inspection")
+        service = _get_service("Window Cleaning")
+        other_service = _get_service("Inspection")
         quote_request = QuoteRequest(
             full_name="Casey Request",
             phone="555-111-2222",
@@ -86,7 +90,7 @@ def _seed_workflow_context(
         if link_request_to_customer:
             quote_request.customer = customer
 
-        db.session.add_all([service, other_service, quote_request, customer])
+        db.session.add_all([quote_request, customer])
         db.session.flush()
 
         appointment = None
@@ -233,7 +237,7 @@ def test_incoming_request_workflow_end_to_end(client, app, admin_user):
     scheduled_date = date.today() + timedelta(days=4)
 
     with app.app_context():
-        service = ServiceOption(name="Window Cleaning")
+        service = _get_service("Window Cleaning")
         quote_request = QuoteRequest(
             full_name="Casey Request",
             phone="555-111-2222",
@@ -241,7 +245,7 @@ def test_incoming_request_workflow_end_to_end(client, app, admin_user):
             city="Test City",
             services=[service],
         )
-        db.session.add_all([service, quote_request])
+        db.session.add(quote_request)
         db.session.commit()
         request_id = quote_request.id
 
@@ -347,7 +351,7 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
     recurring_start = date.today() + timedelta(days=7)
 
     with app.app_context():
-        service = ServiceOption(name="Window Cleaning")
+        service = _get_service("Window Cleaning")
         customer = Customer(
             primary_name="Jordan Customer",
             primary_phone="555-333-4444",
@@ -362,7 +366,7 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
             customer=customer,
             services=[service],
         )
-        db.session.add_all([service, customer, quote_request])
+        db.session.add_all([customer, quote_request])
         db.session.commit()
         customer_id = customer.id
 

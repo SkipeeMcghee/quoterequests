@@ -27,6 +27,7 @@ from app.models import (
     StaffMember,
     User,
 )
+from app.services.service_catalog import resolve_service_options_by_ids
 from app.services.uploads import save_customer_photos
 
 
@@ -279,9 +280,7 @@ def create_staff_member(
         notes=(notes or "").strip() or None,
     )
     if service_ids:
-        staff_member.services = list(
-            ServiceOption.query.filter(ServiceOption.id.in_(service_ids)).order_by(ServiceOption.name).all()
-        )
+        staff_member.services = resolve_service_options_by_ids(service_ids)
     db.session.add(staff_member)
     db.session.commit()
     return staff_member
@@ -323,9 +322,7 @@ def update_staff_member(
     staff_member.compensation_frequency = normalized_compensation_frequency
     staff_member.notes = (notes or "").strip() or None
     if service_ids is not None:
-        staff_member.services = list(
-            ServiceOption.query.filter(ServiceOption.id.in_(service_ids)).order_by(ServiceOption.name).all()
-        )
+        staff_member.services = resolve_service_options_by_ids(service_ids)
     db.session.commit()
     return staff_member
 
@@ -387,16 +384,7 @@ def set_appointment_staff_assignments(appointment_id: int, staff_ids: list[int] 
 
 
 def _resolve_service_options(service_ids: list[int] | None) -> list[ServiceOption]:
-    if not service_ids:
-        return []
-
-    normalized_service_ids = sorted(set(service_ids))
-    service_options = list(
-        ServiceOption.query.filter(ServiceOption.id.in_(normalized_service_ids)).order_by(ServiceOption.name).all()
-    )
-    if len(service_options) != len(normalized_service_ids):
-        raise NotFound("One or more services were not found.")
-    return service_options
+    return resolve_service_options_by_ids(service_ids)
 
 
 def _resolve_staff_members(staff_ids: list[int] | None) -> list[StaffMember]:

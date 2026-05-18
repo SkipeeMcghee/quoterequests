@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from flask import current_app
-from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.datastructures import FileStorage
 
 from app.extensions import db
 from app.forms.quote_request import QuoteRequestForm
-from app.models import Appointment, QuoteRequest, ServiceOption
+from app.models import Appointment, QuoteRequest
 from app.services.email_hooks import send_admin_notification, send_customer_confirmation
+from app.services.service_catalog import resolve_active_service_options_by_names
 from app.services.uploads import cleanup_request_photo_dir, save_request_photos
 
 
@@ -75,31 +75,7 @@ def _quote_request_payload(form: QuoteRequestForm, request_type: str) -> tuple[d
 
 
 def _resolve_service_options(service_names: list[str]) -> list[ServiceOption]:
-    if not service_names:
-        return []
-
-    try:
-        existing = {
-            option.name: option
-            for option in ServiceOption.query.filter(ServiceOption.name.in_(service_names)).all()
-        }
-    except SQLAlchemyError:
-        db.session.rollback()
-        db.create_all()
-        existing = {
-            option.name: option
-            for option in ServiceOption.query.filter(ServiceOption.name.in_(service_names)).all()
-        }
-
-    resolved = []
-    for name in service_names:
-        option = existing.get(name)
-        if option is None:
-            option = ServiceOption(name=name)
-            db.session.add(option)
-            existing[name] = option
-        resolved.append(option)
-    return resolved
+    return resolve_active_service_options_by_names(service_names)
 
 
 def _trigger_email_hooks(quote_request: QuoteRequest) -> None:

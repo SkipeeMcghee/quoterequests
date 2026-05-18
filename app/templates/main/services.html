@@ -13,8 +13,13 @@
   <section class="brochure-grid brochure-grid--two">
     {% for service in services %}
       <article class="brochure-card">
-        <h2>{{ service }}</h2>
+        <h2>{{ service.name }}</h2>
         <p class="subtle-text">{{ describe_service(service) }}</p>
+      </article>
+    {% else %}
+      <article class="brochure-card brochure-card--accent">
+        <h2>Services are being updated</h2>
+        <p class="subtle-text">Contact us directly if you need help with a project that is not listed here yet.</p>
       </article>
     {% endfor %}
   </section>

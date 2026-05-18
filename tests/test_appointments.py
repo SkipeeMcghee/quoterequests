@@ -7,6 +7,10 @@ from app.models import Appointment, Customer, QuoteRequest, RecurringWork, Servi
 from app.services.admin_requests import create_appointment, create_scheduled_work, delete_appointment, generate_recurring_appointments_for_customer, reschedule_appointment, update_appointment, update_appointment_status
 
 
+def _get_service(name: str) -> ServiceOption:
+    return ServiceOption.query.filter_by(name=name).one()
+
+
 def test_quote_request_can_have_zero_appointments(app):
     with app.app_context():
         quote_request = QuoteRequest(full_name="Test User", phone="555-1234", email="test@example.com", city="Testville")
@@ -185,10 +189,10 @@ def test_update_appointment_marks_requested_work_scheduled_when_date_is_set(app)
 
 def test_create_scheduled_work_persists_selected_services_and_staff(app):
     with app.app_context():
-        service = ServiceOption(name="Window Cleaning")
+        service = _get_service("Window Cleaning")
         customer = Customer(primary_name="Test User", primary_city="Testville")
         staff_member = StaffMember(display_name="Alex Assign", worker_type="employee", status="active", services=[service])
-        db.session.add_all([service, customer, staff_member])
+        db.session.add_all([customer, staff_member])
         db.session.commit()
 
         appointment = create_scheduled_work(

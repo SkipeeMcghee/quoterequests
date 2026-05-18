@@ -1,0 +1,672 @@
+<script>
+(function () {
+  const modals = Array.from(document.querySelectorAll('[data-import-modal]'));
+  if (!modals.length) {
+    return;
+  }
+
+  const steps = ['download', 'upload', 'preview', 'issues', 'confirm', 'summary'];
+  const stepMeta = {
+    download: { title: 'Download Template' },
+    upload: { title: 'Upload Spreadsheet' },
+    preview: { title: 'Preview Parsed Data' },
+    issues: { title: 'Resolve Issues' },
+    confirm: { title: 'Confirm Import' },
+    summary: { title: 'Import Summary' },
+  };
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function parseJson(response) {
+    return response.json().catch(function () {
+      return { ok: false, error: 'Unexpected response from the import utility.' };
+    }).then(function (payload) {
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || 'The import utility could not complete this step.');
+      }
+      return payload;
+    });
+  }
+
+  function initializeModal(modal) {
+    const openButtons = Array.from(document.querySelectorAll('[data-import-open="' + modal.id + '"]'));
+    const closeButtons = Array.from(modal.querySelectorAll('[data-import-close]'));
+    const panels = Array.from(modal.querySelectorAll('[data-import-panel]'));
+    const stepCounterElement = modal.querySelector('[data-import-step-counter]');
+    const stepTitleElement = modal.querySelector('[data-import-step-title]');
+    const progressBarElement = modal.querySelector('[data-import-progress-bar]');
+    const backButton = modal.querySelector('[data-import-back]');
+    const nextButton = modal.querySelector('[data-import-next]');
+    const statusElement = modal.querySelector('[data-import-status]');
+    const csrfInput = modal.querySelector('[data-import-csrf]');
+    const fileInput = modal.querySelector('[data-import-file-input]');
+    const dropzone = modal.querySelector('[data-import-dropzone]');
+    const fileNameElement = modal.querySelector('[data-import-file-name]');
+    const previewSummaryElement = modal.querySelector('[data-import-preview-summary]');
+    const previewTableElement = modal.querySelector('[data-import-preview-table]');
+    const issueListElement = modal.querySelector('[data-import-issue-list]');
+    const confirmSummaryElement = modal.querySelector('[data-import-confirm-summary]');
+    const resultSummaryElement = modal.querySelector('[data-import-result-summary]');
+    const resultListElement = modal.querySelector('[data-import-result-list]');
+
+    const state = {
+      step: 'download',
+      entityLabel: modal.dataset.entityLabel || 'Import',
+      fields: [],
+      rows: [],
+      previewSummary: null,
+      importSummary: null,
+      resultRows: [],
+      loading: false,
+    };
+
+    function setStatus(message, options) {
+      const settings = options || {};
+      statusElement.textContent = message || '';
+      statusElement.dataset.state = settings.isError ? 'error' : (message ? 'info' : '');
+      statusElement.hidden = !message;
+    }
+
+    function resetState() {
+      state.step = 'download';
+      state.fields = [];
+      state.rows = [];
+      state.previewSummary = null;
+      state.importSummary = null;
+      state.resultRows = [];
+      state.loading = false;
+      if (fileInput) {
+        fileInput.value = '';
+      }
+      if (fileNameElement) {
+        fileNameElement.textContent = 'No file selected yet.';
+      }
+      setStatus('');
+      render();
+    }
+
+    function setLoading(isLoading) {
+      state.loading = isLoading;
+      renderFooter();
+    }
+
+    function currentActionForRow(row) {
+      if (row.action) {
+        return row.action;
+      }
+      if (row.duplicateCandidates && row.duplicateCandidates.length) {
+        return '';
+      }
+      return row.suggestedAction || 'create';
+    }
+
+    function currentMergeTargetForRow(row) {
+      if (row.mergeTargetId) {
+        return String(row.mergeTargetId);
+      }
+      if (row.duplicateCandidates && row.duplicateCandidates.length) {
+        return String(row.duplicateCandidates[0].id);
+      }
+      return '';
+    }
+
+    function applyPreviewPayload(payload, preserveChoices) {
+      const existingChoices = new Map(state.rows.map(function (row) {
+        return [row.rowNumber, { action: row.action || '', mergeTargetId: row.mergeTargetId || '' }];
+      }));
+
+      state.entityLabel = payload.entityLabel || state.entityLabel;
+      state.fields = Array.isArray(payload.fields) ? payload.fields : [];
+      state.previewSummary = payload.summary || null;
+      state.rows = (payload.rows || []).map(function (row) {
+        const savedChoice = preserveChoices ? existingChoices.get(row.rowNumber) : null;
+        return {
+          rowNumber: row.rowNumber,
+          values: Object.assign({}, row.values || {}),
+          cellErrors: Object.assign({}, row.cellErrors || {}),
+          issues: Array.isArray(row.issues) ? row.issues : [],
+          duplicateCandidates: Array.isArray(row.duplicateCandidates) ? row.duplicateCandidates : [],
+          issueCount: row.issueCount || 0,
+          status: row.status || 'ready',
+          suggestedAction: row.suggestedAction || '',
+          action: savedChoice ? savedChoice.action : (row.suggestedAction || (row.duplicateCandidates && row.duplicateCandidates.length ? '' : 'create')),
+          mergeTargetId: savedChoice ? savedChoice.mergeTargetId : (row.duplicateCandidates && row.duplicateCandidates.length ? String(row.duplicateCandidates[0].id) : ''),
+        };
+      });
+    }
+
+    function serializeRows() {
+      return state.rows.map(function (row) {
+        return {
+          rowNumber: row.rowNumber,
+          values: Object.assign({}, row.values || {}),
+          action: currentActionForRow(row),
+          mergeTargetId: currentMergeTargetForRow(row),
+        };
+      });
+    }
+
+    function computeQueuedSummary() {
+      return state.rows.reduce(function (summary, row) {
+        const action = currentActionForRow(row);
+        const hasDuplicate = Boolean(row.duplicateCandidates && row.duplicateCandidates.length);
+        const mergeTargetId = currentMergeTargetForRow(row);
+        const isResolvedCreate = action === 'create' && row.issueCount === 0;
+        const isResolvedMerge = action === 'merge' && row.issueCount === 0 && mergeTargetId;
+
+        summary.totalRows += 1;
+        if (action === 'skip') {
+          summary.skippedCount += 1;
+          return summary;
+        }
+        if (isResolvedMerge) {
+          summary.mergedCount += 1;
+          return summary;
+        }
+        if (isResolvedCreate) {
+          summary.importedCount += 1;
+          return summary;
+        }
+        if (hasDuplicate || row.issueCount > 0) {
+          summary.unresolvedIssueCount += 1;
+        }
+        return summary;
+      }, {
+        totalRows: 0,
+        importedCount: 0,
+        mergedCount: 0,
+        skippedCount: 0,
+        unresolvedIssueCount: 0,
+      });
+    }
+
+    function renderSummaryGrid(element, items) {
+      element.innerHTML = items.map(function (item) {
+        return [
+          '<article class="import-summary-card">',
+          '<strong>' + escapeHtml(item.value) + '</strong>',
+          '<span>' + escapeHtml(item.label) + '</span>',
+          '</article>',
+        ].join('');
+      }).join('');
+    }
+
+    function renderPreview() {
+      if (!previewSummaryElement || !previewTableElement) {
+        return;
+      }
+
+      if (!state.rows.length) {
+        previewSummaryElement.innerHTML = '';
+        previewTableElement.innerHTML = '<p class="empty-state">Upload a template file to see the parsed preview.</p>';
+        return;
+      }
+
+      renderSummaryGrid(previewSummaryElement, [
+        { value: state.previewSummary ? state.previewSummary.totalRows : state.rows.length, label: 'Rows parsed' },
+        { value: state.previewSummary ? state.previewSummary.readyRows : 0, label: 'Ready rows' },
+        { value: state.previewSummary ? state.previewSummary.rowsWithIssues : 0, label: 'Rows with issues' },
+        { value: state.previewSummary ? state.previewSummary.duplicateRows : 0, label: 'Possible duplicates' },
+      ]);
+
+      const headerHtml = state.fields.map(function (field) {
+        return '<th>' + escapeHtml(field.label || field.key) + '</th>';
+      }).join('');
+      const bodyHtml = state.rows.map(function (row) {
+        const cellHtml = state.fields.map(function (field) {
+          const error = row.cellErrors[field.key];
+          const value = row.values[field.key] || '';
+          return [
+            '<td class="import-preview-cell' + (error ? ' import-preview-cell--error' : '') + '">',
+            '<div class="import-preview-cell__value">' + escapeHtml(value || '—') + '</div>',
+            error ? '<div class="import-preview-cell__error">' + escapeHtml(error) + '</div>' : '',
+            '</td>',
+          ].join('');
+        }).join('');
+        return [
+          '<tr>',
+          '<th scope="row">' + escapeHtml(row.rowNumber) + '</th>',
+          cellHtml,
+          '</tr>',
+        ].join('');
+      }).join('');
+
+      previewTableElement.innerHTML = [
+        '<table class="import-preview-grid">',
+        '<thead><tr><th>Row</th>' + headerHtml + '</tr></thead>',
+        '<tbody>' + bodyHtml + '</tbody>',
+        '</table>',
+      ].join('');
+    }
+
+    function renderIssueList() {
+      if (!issueListElement) {
+        return;
+      }
+
+      const issueRows = state.rows.filter(function (row) {
+        return row.issueCount > 0 || (row.duplicateCandidates && row.duplicateCandidates.length);
+      });
+
+      if (!issueRows.length) {
+        issueListElement.innerHTML = '<p class="empty-state">No issues were found. Continue to confirm the import.</p>';
+        return;
+      }
+
+      issueListElement.innerHTML = issueRows.map(function (row) {
+        const action = currentActionForRow(row);
+        const mergeTargetId = currentMergeTargetForRow(row);
+        const fieldInputs = state.fields.map(function (field) {
+          const inputId = modal.id + '-row-' + row.rowNumber + '-' + field.key;
+          const error = row.cellErrors[field.key];
+          const value = row.values[field.key] || '';
+          const isTextarea = field.key === 'notes' || field.key === 'availability_notes';
+          return [
+            '<label class="form-field' + (isTextarea ? ' field-span-2' : '') + '">',
+            '<span>' + escapeHtml(field.label || field.key) + '</span>',
+            isTextarea
+              ? '<textarea class="textarea textarea--small" id="' + escapeHtml(inputId) + '" data-import-row-field data-row-number="' + escapeHtml(row.rowNumber) + '" data-field-key="' + escapeHtml(field.key) + '">' + escapeHtml(value) + '</textarea>'
+              : '<input class="input" id="' + escapeHtml(inputId) + '" type="text" value="' + escapeHtml(value) + '" data-import-row-field data-row-number="' + escapeHtml(row.rowNumber) + '" data-field-key="' + escapeHtml(field.key) + '">',
+            error ? '<small class="field-error">' + escapeHtml(error) + '</small>' : '',
+            '</label>',
+          ].join('');
+        }).join('');
+
+        const issueBadges = row.issues.map(function (issue) {
+          return '<li class="import-issue-pill import-issue-pill--' + escapeHtml(issue.severity || 'warning') + '">' + escapeHtml(issue.message) + '</li>';
+        }).join('');
+
+        const resolutionControls = [
+          '<label class="form-field">',
+          '<span>Action</span>',
+          '<select class="input" data-import-row-action data-row-number="' + escapeHtml(row.rowNumber) + '">',
+          row.duplicateCandidates.length ? '<option value=""' + (action ? '' : ' selected') + '>Review duplicate</option>' : '',
+          '<option value="create"' + (action === 'create' ? ' selected' : '') + '>Create New</option>',
+          row.duplicateCandidates.length ? '<option value="merge"' + (action === 'merge' ? ' selected' : '') + '>Merge Existing</option>' : '',
+          '<option value="skip"' + (action === 'skip' ? ' selected' : '') + '>Skip Row</option>',
+          '</select>',
+          '</label>',
+        ].join('');
+
+        const mergeSelector = row.duplicateCandidates.length ? [
+          '<label class="form-field' + (action === 'merge' ? '' : ' is-hidden') + '" data-import-merge-wrap="' + escapeHtml(row.rowNumber) + '">',
+          '<span>Merge into</span>',
+          '<select class="input" data-import-merge-target data-row-number="' + escapeHtml(row.rowNumber) + '">',
+          row.duplicateCandidates.map(function (candidate) {
+            return '<option value="' + escapeHtml(candidate.id) + '"' + (String(candidate.id) === String(mergeTargetId) ? ' selected' : '') + '>' + escapeHtml(candidate.label) + ' (' + escapeHtml(candidate.matchedOn.join(', ')) + ')</option>';
+          }).join(''),
+          '</select>',
+          '</label>',
+          '<div class="import-candidate-list">',
+          row.duplicateCandidates.map(function (candidate) {
+            return '<p class="subtle-text"><strong>' + escapeHtml(candidate.label) + '</strong> matched on ' + escapeHtml(candidate.matchedOn.join(', ')) + '.</p>';
+          }).join(''),
+          '</div>',
+        ].join('') : '';
+
+        return [
+          '<article class="import-issue-card">',
+          '<div class="section-bar">',
+          '<div><h4>Row ' + escapeHtml(row.rowNumber) + '</h4><p class="subtle-text">Adjust the row, then choose how this record should be handled.</p></div>',
+          '</div>',
+          issueBadges ? '<ul class="import-issue-pill-list">' + issueBadges + '</ul>' : '',
+          '<div class="form-grid import-issue-form">',
+          fieldInputs,
+          resolutionControls,
+          mergeSelector,
+          '</div>',
+          '</article>',
+        ].join('');
+      }).join('');
+    }
+
+    function renderConfirmSummary() {
+      if (!confirmSummaryElement) {
+        return;
+      }
+      const queuedSummary = computeQueuedSummary();
+      renderSummaryGrid(confirmSummaryElement, [
+        { value: queuedSummary.importedCount, label: 'Queued as new' },
+        { value: queuedSummary.mergedCount, label: 'Queued to merge' },
+        { value: queuedSummary.skippedCount, label: 'Explicitly skipped' },
+        { value: queuedSummary.unresolvedIssueCount, label: 'Still unresolved' },
+      ]);
+      if (queuedSummary.unresolvedIssueCount > 0) {
+        confirmSummaryElement.insertAdjacentHTML('beforeend', '<p class="subtle-text import-summary-note">Rows with unresolved issues will be skipped and counted in the summary instead of blocking the whole import.</p>');
+      }
+    }
+
+    function renderImportResults() {
+      if (!resultSummaryElement || !resultListElement) {
+        return;
+      }
+
+      if (!state.importSummary) {
+        resultSummaryElement.innerHTML = '';
+        resultListElement.innerHTML = '';
+        return;
+      }
+
+      renderSummaryGrid(resultSummaryElement, [
+        { value: state.importSummary.importedCount, label: 'Imported' },
+        { value: state.importSummary.mergedCount, label: 'Merged' },
+        { value: state.importSummary.skippedCount, label: 'Skipped' },
+        { value: state.importSummary.unresolvedIssueCount, label: 'Unresolved' },
+      ]);
+
+      resultListElement.innerHTML = (state.resultRows || []).map(function (row) {
+        return [
+          '<article class="import-result-row import-result-row--' + escapeHtml(row.outcome || 'imported') + '">',
+          '<strong>Row ' + escapeHtml(row.rowNumber) + '</strong>',
+          '<span>' + escapeHtml(row.message || '') + '</span>',
+          '</article>',
+        ].join('');
+      }).join('');
+    }
+
+    function renderFooter() {
+      const stepIndex = steps.indexOf(state.step);
+      const hasRows = state.rows.length > 0;
+      backButton.hidden = stepIndex <= 0;
+      backButton.disabled = state.loading;
+      nextButton.disabled = state.loading;
+
+      if (state.step === 'download') {
+        nextButton.textContent = 'Continue';
+        return;
+      }
+      if (state.step === 'upload') {
+        nextButton.textContent = hasRows ? 'Continue' : 'Choose File';
+        return;
+      }
+      if (state.step === 'preview') {
+        nextButton.textContent = 'Resolve Issues';
+        return;
+      }
+      if (state.step === 'issues') {
+        nextButton.textContent = 'Review Import';
+        return;
+      }
+      if (state.step === 'confirm') {
+        nextButton.textContent = 'Import Now';
+        return;
+      }
+      nextButton.textContent = 'Close';
+    }
+
+    function render() {
+      panels.forEach(function (panel) {
+        panel.hidden = panel.dataset.importPanel !== state.step;
+      });
+
+      const activeIndex = steps.indexOf(state.step);
+      const meta = stepMeta[state.step] || { title: state.step };
+
+      if (stepCounterElement) {
+        stepCounterElement.textContent = 'Step ' + String(activeIndex + 1) + ' of ' + String(steps.length);
+      }
+      if (stepTitleElement) {
+        stepTitleElement.textContent = meta.title;
+      }
+      if (progressBarElement) {
+        progressBarElement.style.width = String(((activeIndex + 1) / steps.length) * 100) + '%';
+      }
+
+      renderPreview();
+      renderIssueList();
+      renderConfirmSummary();
+      renderImportResults();
+      renderFooter();
+    }
+
+    function openModal() {
+      resetState();
+      if (typeof modal.showModal === 'function') {
+        modal.showModal();
+        return;
+      }
+      modal.setAttribute('open', 'open');
+    }
+
+    function closeModal() {
+      if (modal.open && typeof modal.close === 'function') {
+        modal.close();
+      } else {
+        modal.removeAttribute('open');
+      }
+      resetState();
+    }
+
+    function updateFileName(file) {
+      fileNameElement.textContent = file ? file.name : 'No file selected yet.';
+    }
+
+    function reviewRows() {
+      setLoading(true);
+      setStatus('Reviewing the current row values...');
+      return fetch(modal.dataset.reviewUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfInput.value,
+        },
+        body: JSON.stringify({ rows: serializeRows() }),
+      })
+        .then(parseJson)
+        .then(function (payload) {
+          applyPreviewPayload(payload, true);
+          state.step = 'confirm';
+          setStatus('The preview has been refreshed with your latest issue resolutions.');
+          render();
+        })
+        .catch(function (error) {
+          setStatus(error.message || 'Unable to review the import rows right now.', { isError: true });
+        })
+        .finally(function () {
+          setLoading(false);
+        });
+    }
+
+    function commitRows() {
+      setLoading(true);
+      setStatus('Importing rows now...');
+      return fetch(modal.dataset.commitUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfInput.value,
+        },
+        body: JSON.stringify({ rows: serializeRows() }),
+      })
+        .then(parseJson)
+        .then(function (payload) {
+          state.importSummary = payload.summary || null;
+          state.resultRows = payload.resultRows || [];
+          state.step = 'summary';
+          setStatus('Import complete.');
+          render();
+        })
+        .catch(function (error) {
+          setStatus(error.message || 'Unable to complete the import.', { isError: true });
+        })
+        .finally(function () {
+          setLoading(false);
+        });
+    }
+
+    function uploadFile(file) {
+      if (!file) {
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', file);
+      updateFileName(file);
+      setLoading(true);
+      setStatus('Parsing the uploaded spreadsheet...');
+      fetch(modal.dataset.previewUrl, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrfInput.value,
+        },
+        body: formData,
+      })
+        .then(parseJson)
+        .then(function (payload) {
+          applyPreviewPayload(payload, false);
+          state.step = 'preview';
+          setStatus('Spreadsheet parsed. Review the preview before importing.');
+          render();
+        })
+        .catch(function (error) {
+          state.step = 'upload';
+          setStatus(error.message || 'Unable to parse the uploaded file.', { isError: true });
+          render();
+        })
+        .finally(function () {
+          setLoading(false);
+        });
+    }
+
+    openButtons.forEach(function (button) {
+      button.addEventListener('click', openModal);
+    });
+
+    closeButtons.forEach(function (button) {
+      button.addEventListener('click', closeModal);
+    });
+
+    if (dropzone) {
+      dropzone.addEventListener('click', function () {
+        fileInput.click();
+      });
+      dropzone.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          fileInput.click();
+        }
+      });
+      ['dragenter', 'dragover'].forEach(function (eventName) {
+        dropzone.addEventListener(eventName, function (event) {
+          event.preventDefault();
+          dropzone.dataset.dragging = 'true';
+        });
+      });
+      ['dragleave', 'drop'].forEach(function (eventName) {
+        dropzone.addEventListener(eventName, function (event) {
+          event.preventDefault();
+          dropzone.dataset.dragging = 'false';
+        });
+      });
+      dropzone.addEventListener('drop', function (event) {
+        const file = event.dataTransfer && event.dataTransfer.files ? event.dataTransfer.files[0] : null;
+        uploadFile(file);
+      });
+    }
+
+    if (fileInput) {
+      fileInput.addEventListener('change', function () {
+        uploadFile(fileInput.files && fileInput.files[0] ? fileInput.files[0] : null);
+      });
+    }
+
+    backButton.addEventListener('click', function () {
+      const currentIndex = steps.indexOf(state.step);
+      if (currentIndex <= 0) {
+        return;
+      }
+      state.step = steps[currentIndex - 1];
+      setStatus('');
+      render();
+    });
+
+    nextButton.addEventListener('click', function () {
+      if (state.loading) {
+        return;
+      }
+
+      if (state.step === 'download') {
+        state.step = 'upload';
+        render();
+        return;
+      }
+      if (state.step === 'upload') {
+        if (!state.rows.length) {
+          fileInput.click();
+          return;
+        }
+        state.step = 'preview';
+        render();
+        return;
+      }
+      if (state.step === 'preview') {
+        state.step = 'issues';
+        render();
+        return;
+      }
+      if (state.step === 'issues') {
+        reviewRows();
+        return;
+      }
+      if (state.step === 'confirm') {
+        commitRows();
+        return;
+      }
+      closeModal();
+    });
+
+    modal.addEventListener('input', function (event) {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (target.matches('[data-import-row-field]')) {
+        const rowNumber = Number(target.dataset.rowNumber);
+        const fieldKey = target.dataset.fieldKey;
+        const row = state.rows.find(function (item) { return item.rowNumber === rowNumber; });
+        if (!row || !fieldKey) {
+          return;
+        }
+        row.values[fieldKey] = 'value' in target ? target.value : '';
+        return;
+      }
+
+      if (target.matches('[data-import-row-action]')) {
+        const rowNumber = Number(target.dataset.rowNumber);
+        const row = state.rows.find(function (item) { return item.rowNumber === rowNumber; });
+        if (!row) {
+          return;
+        }
+        row.action = target.value;
+        render();
+        return;
+      }
+
+      if (target.matches('[data-import-merge-target]')) {
+        const rowNumber = Number(target.dataset.rowNumber);
+        const row = state.rows.find(function (item) { return item.rowNumber === rowNumber; });
+        if (!row) {
+          return;
+        }
+        row.mergeTargetId = target.value;
+      }
+    });
+
+    modal.addEventListener('cancel', function (event) {
+      event.preventDefault();
+      closeModal();
+    });
+
+    render();
+  }
+
+  modals.forEach(initializeModal);
+})();
+</script>

@@ -1,8 +1,10 @@
 import json
+import io
 from calendar import month_name, monthcalendar, monthrange
 from datetime import date, time, timedelta
-from flask import current_app, flash, jsonify, redirect, render_template, request, url_for
+from flask import current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
+from werkzeug.exceptions import NotFound
 
 from app.admin import bp
 from app.auth.routes import handle_admin_login
@@ -35,8 +37,24 @@ from app.forms.admin import (
     StaffAvailabilitySyncForm,
     StaffMemberForm,
     StaffNotesForm,
+    ServiceManagementForm,
 )
 from app.models import APPOINTMENT_STATUSES, Appointment, ServiceOption
+from app.services.service_catalog import (
+    create_service_option,
+    get_service_option,
+    list_services,
+    resolve_service_options_by_ids,
+    set_service_option_active,
+    update_service_option,
+)
+from app.services.import_workflows import (
+    build_import_template,
+    execute_import_rows,
+    get_import_definition,
+    parse_import_upload,
+    preview_import_rows,
+)
 from app.services.admin_requests import (
     add_customer_field,
     add_customer_note,
@@ -127,6 +145,18 @@ def _find_customer_option_label(customer_options: list[tuple[int, str]], custome
     return None
 
 
+def _ensure_import_enabled(entity_type: str):
+    definition = get_import_definition(entity_type)
+    if definition.key == "customers" and not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+        raise NotFound()
+    if definition.key == "staff" and (
+        not current_app.config.get("ENABLE_SCHEDULING")
+        or not current_app.config.get("ENABLE_STAFF_MANAGEMENT")
+    ):
+        raise NotFound()
+    return definition
+
+
 def _set_default_minute_values(form, field_names: tuple[str, ...]) -> None:
     for field_name in field_names:
         if not hasattr(form, field_name):
@@ -171,13 +201,7 @@ def _resolve_required_service_options(
     service_ids: list[int] | None = None,
 ) -> list[ServiceOption]:
     if service_ids is not None:
-        normalized_service_ids = sorted(set(service_ids))
-        if not normalized_service_ids:
-            return []
-
-        return list(
-            ServiceOption.query.filter(ServiceOption.id.in_(normalized_service_ids)).order_by(ServiceOption.name).all()
-        )
+        return resolve_service_options_by_ids(service_ids)
 
     if appointment is not None and appointment.services:
         return list(appointment.services)
@@ -680,6 +704,156 @@ def dashboard():
     return render_template("admin/dashboard.html", quote_requests=quote_requests)
 
 
+@bp.get("/imports/<entity_type>/template.<file_format>")
+@login_required
+def download_import_template(entity_type: str, file_format: str):
+    _ensure_import_enabled(entity_type)
+    template_bytes, mimetype, download_name = build_import_template(entity_type, file_format)
+    return send_file(
+        io.BytesIO(template_bytes),
+        as_attachment=True,
+        download_name=download_name,
+        mimetype=mimetype,
+    )
+
+
+@bp.post("/imports/<entity_type>/preview")
+@login_required
+def preview_import_route(entity_type: str):
+    _ensure_import_enabled(entity_type)
+    try:
+        payload = parse_import_upload(entity_type, request.files.get("file"))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **payload})
+
+
+@bp.post("/imports/<entity_type>/review")
+@login_required
+def review_import_route(entity_type: str):
+    _ensure_import_enabled(entity_type)
+    request_payload = request.get_json(silent=True) or {}
+    rows = request_payload.get("rows") or []
+    try:
+        payload = preview_import_rows(entity_type, rows)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **payload})
+
+
+@bp.post("/imports/<entity_type>/commit")
+@login_required
+def commit_import_route(entity_type: str):
+    _ensure_import_enabled(entity_type)
+    request_payload = request.get_json(silent=True) or {}
+    rows = request_payload.get("rows") or []
+    try:
+        payload = execute_import_rows(entity_type, rows, current_user)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, **payload})
+
+
+def _build_service_management_forms(
+    *,
+    create_form: ServiceManagementForm | None = None,
+    service_form_overrides: dict[int, ServiceManagementForm] | None = None,
+):
+    services = list_services(include_inactive=True)
+    service_forms: dict[int, ServiceManagementForm] = {}
+    status_forms: dict[int, ActionForm] = {}
+    overrides = service_form_overrides or {}
+
+    for service in services:
+        service_forms[service.id] = overrides.get(service.id) or ServiceManagementForm(
+            prefix=f"service-{service.id}",
+            name=service.name,
+            description=service.description,
+            display_order=service.display_order,
+        )
+        status_forms[service.id] = ActionForm(prefix=f"service-status-{service.id}")
+
+    return {
+        "services": services,
+        "service_forms": service_forms,
+        "status_forms": status_forms,
+        "create_form": create_form or ServiceManagementForm(prefix="service-create"),
+        "active_service_count": sum(1 for service in services if service.is_active),
+        "archived_service_count": sum(1 for service in services if not service.is_active),
+    }
+
+
+def _render_service_settings_page(
+    *,
+    create_form: ServiceManagementForm | None = None,
+    service_form_overrides: dict[int, ServiceManagementForm] | None = None,
+):
+    return render_template(
+        "admin/services.html",
+        **_build_service_management_forms(
+            create_form=create_form,
+            service_form_overrides=service_form_overrides,
+        ),
+    )
+
+
+@bp.route("/settings/services", methods=["GET", "POST"])
+@login_required
+def service_settings():
+    create_form = ServiceManagementForm(prefix="service-create")
+    if request.method == "POST" and create_form.validate_on_submit():
+        try:
+            create_service_option(
+                name=create_form.name.data,
+                description=create_form.description.data,
+                display_order=create_form.display_order.data,
+            )
+        except Exception as exc:
+            flash(str(exc), "error")
+        else:
+            flash("Service added.", "success")
+            return redirect(url_for("admin.service_settings"))
+
+    return _render_service_settings_page(create_form=create_form)
+
+
+@bp.post("/settings/services/<int:service_id>")
+@login_required
+def update_service_route(service_id: int):
+    get_service_option(service_id)
+    form = ServiceManagementForm(prefix=f"service-{service_id}")
+    if form.validate_on_submit():
+        try:
+            update_service_option(
+                service_id,
+                name=form.name.data,
+                description=form.description.data,
+                display_order=form.display_order.data,
+            )
+        except Exception as exc:
+            flash(str(exc), "error")
+        else:
+            flash("Service updated.", "success")
+            return redirect(url_for("admin.service_settings"))
+
+    return _render_service_settings_page(service_form_overrides={service_id: form})
+
+
+@bp.post("/settings/services/<int:service_id>/status")
+@login_required
+def toggle_service_status_route(service_id: int):
+    service = get_service_option(service_id)
+    form = ActionForm(prefix=f"service-status-{service_id}")
+    if not form.validate_on_submit():
+        flash("The service status change could not be verified. Reload and try again.", "error")
+        return redirect(url_for("admin.service_settings"))
+
+    target_is_active = not service.is_active
+    set_service_option_active(service_id, is_active=target_is_active)
+    flash("Service reactivated." if target_is_active else "Service archived.", "success")
+    return redirect(url_for("admin.service_settings"))
+
+
 @bp.get("/calendar")
 @login_required
 def calendar_view():
@@ -996,6 +1170,7 @@ def new_scheduled_work():
             form.customer_lookup.data = _find_customer_option_label(customer_options, customer.id)
         if scheduled_date is not None:
             form.scheduled_date.data = scheduled_date
+        form.set_service_choices(selected_ids=form.service_ids.data)
 
     if form.validate_on_submit():
         selected_customer_id = form.customer_id.data if form.customer_id.data else None

@@ -439,7 +439,7 @@ def test_admin_new_scheduled_work_supports_services_and_staff_selection(client, 
     with app.app_context():
         from app.models import ServiceOption, StaffMember
 
-        service = ServiceOption(name="Window Cleaning")
+        service = ServiceOption.query.filter_by(name="Window Cleaning").one()
         staff_member = StaffMember(display_name="Alex Crew", worker_type="employee", status="active", services=[service])
         quote_request = QuoteRequest(
             full_name="Ari Blake",
@@ -447,7 +447,7 @@ def test_admin_new_scheduled_work_supports_services_and_staff_selection(client, 
             city="32 Broad St",
             services=[service],
         )
-        db.session.add_all([service, staff_member, quote_request])
+        db.session.add_all([staff_member, quote_request])
         db.session.commit()
         request_id = quote_request.id
 

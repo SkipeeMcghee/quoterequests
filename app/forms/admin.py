@@ -1,7 +1,8 @@
 from app.models import APPOINTMENT_STATUSES, RecurringWork, RequestQuote, ServiceOption, StaffMember
+from app.services.service_catalog import list_service_id_choices
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, MultipleFileField
-from wtforms import BooleanField, DateField, DecimalField, HiddenField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField
+from wtforms import BooleanField, DateField, DecimalField, HiddenField, IntegerField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired, Email, InputRequired, Length, NumberRange, Optional
 from wtforms.widgets import CheckboxInput, ListWidget
 
@@ -13,8 +14,11 @@ class CheckboxInputWithoutRequired(CheckboxInput):
 
 
 def _load_service_choices() -> list[tuple[int, str]]:
-    options = ServiceOption.query.order_by(ServiceOption.name).all()
-    return [(option.id, option.name) for option in options]
+    return list_service_id_choices(include_inactive=False)
+
+
+def _load_service_choices_with_selected(selected_ids: list[int] | None = None) -> list[tuple[int, str]]:
+    return list_service_id_choices(include_inactive=False, selected_ids=selected_ids)
 
 
 def _load_staff_choices() -> list[tuple[int, str]]:
@@ -183,7 +187,10 @@ class StaffMemberForm(FlaskForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.services.choices = _load_service_choices()
+        self.set_service_choices(selected_ids=self.services.data)
+
+    def set_service_choices(self, selected_ids: list[int] | None = None) -> None:
+        self.services.choices = _load_service_choices_with_selected(selected_ids)
 
     def validate(self, extra_validators=None):
         valid = super().validate(extra_validators=extra_validators)
@@ -292,12 +299,27 @@ class CreateScheduledWorkForm(TimeSelectMixin, FlaskForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._initialize_time_selects()
-        self.service_ids.choices = _load_service_choices()
+        self.set_service_choices(selected_ids=self.service_ids.data)
         self.staff_ids.choices = _load_staff_choices()
+
+    def set_service_choices(self, selected_ids: list[int] | None = None) -> None:
+        self.service_ids.choices = _load_service_choices_with_selected(selected_ids)
 
     def validate(self, extra_validators=None):
         valid = super().validate(extra_validators=extra_validators)
         return self.validate_time_selects() and valid
+
+
+class ServiceManagementForm(FlaskForm):
+    name = StringField("Service name", validators=[DataRequired(), Length(max=120)])
+    description = TextAreaField("Description", validators=[Optional(), Length(max=2000)])
+    display_order = IntegerField(
+        "Display order",
+        validators=[InputRequired(), NumberRange(min=0)],
+        default=0,
+        render_kw={"min": "0"},
+    )
+    submit = SubmitField("Save Service")
 
 
 class RecurringWorkForm(TimeSelectMixin, FlaskForm):

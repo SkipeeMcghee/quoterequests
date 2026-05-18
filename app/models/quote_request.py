@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import sqlalchemy as sa
 from sqlalchemy import ForeignKey, Time, event, func, select
 
 from app.extensions import db
@@ -32,6 +33,9 @@ class ServiceOption(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=sa.true(), index=True)
+    display_order = db.Column(db.Integer, nullable=False, default=0, server_default="0", index=True)
 
     quote_requests = db.relationship(
         "QuoteRequest",
@@ -56,19 +60,15 @@ class ServiceOption(db.Model):
         return self.name
 
     @classmethod
-    def default_service_names(cls) -> list[str]:
-        return [
-            "Landscape Design",
-            "Roof Repair",
-            "Window Cleaning",
-            "Inspection",
-            "Painting",
-            "Deck Staining",
-            "Flooring",
-            "Siding",
-            "Fence Repair",
-            "General Maintenance",
-        ]
+    def ordered_query(cls, include_inactive: bool = True):
+        query = cls.query.order_by(cls.display_order.asc(), cls.name.asc())
+        if not include_inactive:
+            query = query.filter(cls.is_active.is_(True))
+        return query
+
+    @property
+    def normalized_description(self) -> str | None:
+        return (self.description or "").strip() or None
 
 
 class QuoteRequest(db.Model):
@@ -96,7 +96,7 @@ class QuoteRequest(db.Model):
         "ServiceOption",
         secondary=quote_request_service_options,
         back_populates="quote_requests",
-        order_by="ServiceOption.name",
+        order_by="(ServiceOption.display_order, ServiceOption.name)",
     )
     appointments = db.relationship(
         "Appointment",
@@ -229,7 +229,7 @@ class Appointment(db.Model):
         "ServiceOption",
         secondary=appointment_service_options,
         back_populates="appointments",
-        order_by="ServiceOption.name",
+        order_by="(ServiceOption.display_order, ServiceOption.name)",
     )
     staff_assignments = db.relationship(
         "AppointmentStaffAssignment",

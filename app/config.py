@@ -9,19 +9,6 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env", override=True)
 
-DEFAULT_BUSINESS_SERVICES = (
-    "Landscape Design",
-    "Roof Repair",
-    "Window Cleaning",
-    "Inspection",
-    "Painting",
-    "Deck Staining",
-    "Flooring",
-    "Siding",
-    "Fence Repair",
-    "General Maintenance",
-)
-
 DEFAULT_SITE_LOGO_PATH = "assets/images/Logowhite.png"
 
 SOCIAL_PLATFORM_ASSETS: dict[str, dict[str, str]] = {
@@ -129,8 +116,6 @@ class Config:
     }
     SOCIAL_LINKS_PREVIEW = parse_bool_env("SOCIAL_LINKS_PREVIEW", False)
     SOCIAL_LINKS = build_social_links()
-    BUSINESS_SERVICES = parse_csv_env("BUSINESS_SERVICES", DEFAULT_BUSINESS_SERVICES)
-    BUSINESS_SERVICES_OVERRIDDEN = bool(os.getenv("BUSINESS_SERVICES"))
     ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "admin@example.com")
     DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", BUSINESS_EMAIL)
     SESSION_COOKIE_HTTPONLY = True

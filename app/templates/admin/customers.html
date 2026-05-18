@@ -1,15 +1,18 @@
 {% extends "base.html" %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
+{% from "admin/import_utility.html" import render_import_button, render_import_modal %}
 
 {% block title %}Customer records{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
-  {{ render_admin_page_header(
+  {% call render_admin_page_header(
     title='Customers',
     description='Scan customer records quickly, then move into notes, history, billing, or scheduling.',
     nav_mode='main'
-  ) }}
+  ) %}
+      {{ render_import_button('customer-import-modal') }}
+  {% endcall %}
 
   <section class="table-card">
     <div class="section-bar customer-list-toolbar">
@@ -72,6 +75,8 @@
       </table>
     </div>
   </section>
+
+  {{ render_import_modal('customers', 'customer-import-modal') }}
 </main>
 {% endblock %}
 {% block scripts %}
@@ -108,4 +113,5 @@
   input.addEventListener('input', update);
 })();
 </script>
+{% include "admin/import_utility_script.html" %}
 {% endblock %}
