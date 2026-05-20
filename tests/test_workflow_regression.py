@@ -228,6 +228,7 @@ def _assert_page_contract(
 
 def test_incoming_request_workflow_end_to_end(client, app, admin_user):
     app.config.update(
+        ENABLE_SERVICES=True,
         ENABLE_SCHEDULING=True,
         ENABLE_CUSTOMER_RECORDS=True,
         ENABLE_CALENDAR=True,
@@ -291,6 +292,7 @@ def test_incoming_request_workflow_end_to_end(client, app, admin_user):
         data={
             "scheduled-work-request_id": str(request_id),
             "scheduled-work-customer_id": str(customer_id),
+            "scheduled-work-title": "Window Cleaning",
             "scheduled-work-scheduled_date": scheduled_date.isoformat(),
             **_time_form_data("scheduled-work", "start_time", 9),
             **_time_form_data("scheduled-work", "end_time", 11),
@@ -305,7 +307,6 @@ def test_incoming_request_workflow_end_to_end(client, app, admin_user):
 
     with app.app_context():
         appointment = Appointment.query.one()
-        assert appointment.title is None
         assert appointment.customer_id == customer_id
         appointment_id = appointment.id
         quote_request = db.session.get(QuoteRequest, request_id)
@@ -478,6 +479,7 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
 
 def test_scheduling_workflow_end_to_end(client, app, admin_user):
     app.config.update(
+        ENABLE_SERVICES=True,
         ENABLE_SCHEDULING=True,
         ENABLE_CUSTOMER_RECORDS=True,
         ENABLE_CALENDAR=True,
@@ -524,6 +526,7 @@ def test_scheduling_workflow_end_to_end(client, app, admin_user):
         data={
             "scheduled-work-request_id": str(request_id),
             "scheduled-work-customer_id": str(customer_id),
+            "scheduled-work-title": "Customer visit",
             "scheduled-work-scheduled_date": scheduled_date.isoformat(),
             **_time_form_data("scheduled-work", "start_time", 10, 30),
             **_time_form_data("scheduled-work", "end_time", 12),
@@ -551,7 +554,7 @@ def test_scheduling_workflow_end_to_end(client, app, admin_user):
         main_nav=True,
         expected_nav_labels=("Requests", "Schedule", "Customers"),
     )
-    assert "10:30 AM – 12:00 PM" in calendar_body
+    assert 'aria-label="10:30 AM to 12:00 PM"' in calendar_body
 
     list_body = _assert_page_contract(
         client,
@@ -588,7 +591,7 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
         main_nav=True,
         expected_nav_labels=("Requests", "Schedule", "Customers"),
     )
-    assert "9:00 AM – 11:00 AM" in calendar_body
+    assert 'aria-label="9:00 AM to 11:00 AM"' in calendar_body
 
     list_body = _assert_page_contract(
         client,
@@ -615,11 +618,7 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
         client,
         appointment_detail_url,
         back_label="Back to Day Agenda",
-<<<<<<< HEAD
-        expected_text=(f"Event #{appointment_id}", "Event notes", "History", "Day View"),
-=======
-        expected_text=("Event notes", "Open Day Agenda", "Scheduled Event"),
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
+        expected_text=(f"Event #{appointment_id}", "Event notes", "Day View"),
     )
     assert "History" not in appointment_detail_body
     assert 'aria-label="Delete scheduled event"' in appointment_detail_body
@@ -654,7 +653,7 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
     with app.app_context():
         appointment = db.session.get(Appointment, appointment_id)
         assert appointment is not None
-        assert appointment.title is None
+        assert appointment.title == "Window visit"
         assert appointment.customer_notes == "Call before arrival."
         assert appointment.internal_notes == "Crew lead approved the updated timing."
         assert appointment.status == "Scheduled"
@@ -789,6 +788,7 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
 
 def test_staff_assignment_workflow_end_to_end(client, app, admin_user):
     app.config.update(
+        ENABLE_SERVICES=True,
         ENABLE_SCHEDULING=True,
         ENABLE_CUSTOMER_RECORDS=True,
         ENABLE_CALENDAR=True,
@@ -812,7 +812,7 @@ def test_staff_assignment_workflow_end_to_end(client, app, admin_user):
         client,
         f"/admin/staff/{staff_id}",
         back_label="Back to Staff",
-        expected_text=("Services they can perform", "Weekly availability", "Scheduled hours"),
+        expected_text=("Services they can perform", "Weekly availability", "Scheduled Hours by Date Range"),
     )
     assert "No upcoming assigned scheduled work." in staff_detail_body
 
@@ -850,7 +850,7 @@ def test_staff_assignment_workflow_end_to_end(client, app, admin_user):
         client,
         f"/admin/staff/{staff_id}",
         back_label="Back to Staff",
-        expected_text=("Assigned scheduled work", "Window visit", "Scheduled hours this week"),
+        expected_text=("Assigned scheduled work", f"Event #{appointment_id}", "Scheduled Hours by Date Range"),
     )
     assert "2.0" in updated_staff_body
 

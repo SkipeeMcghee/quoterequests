@@ -183,11 +183,13 @@ def test_update_appointment_marks_requested_work_scheduled_when_date_is_set(app)
             end_time=time(15, 0),
         )
 
+        assert updated.title == "On-site visit"
         assert updated.status == "Scheduled"
         assert db.session.get(Appointment, appointment.id).status == "Scheduled"
 
 
 def test_create_scheduled_work_persists_selected_services_and_staff(app):
+    app.config["ENABLE_SERVICES"] = True
     with app.app_context():
         service = _get_service("Window Cleaning")
         customer = Customer(primary_name="Test User", primary_city="Testville")
@@ -206,6 +208,7 @@ def test_create_scheduled_work_persists_selected_services_and_staff(app):
             staff_ids=[staff_member.id],
         )
 
+        assert appointment.title == "Window visit"
         assert [item.name for item in appointment.services] == ["Window Cleaning"]
         assert [assignment.staff_member_id for assignment in appointment.staff_assignments] == [staff_member.id]
 
@@ -225,6 +228,7 @@ def test_delete_appointment_updates_request_status(app):
             end_time=time(15, 0),
         )
 
+        assert appointment.title == "On-site visit"
         assert quote_request.status == "Scheduled"
 
         delete_appointment(appointment.id)

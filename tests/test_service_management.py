@@ -12,15 +12,16 @@ def _login_as_admin(client, admin_user):
     )
 
 
-def test_dashboard_links_to_service_settings(client, admin_user):
+def test_dashboard_omits_settings_section(client, app, admin_user):
+    app.config["ENABLE_SERVICES"] = True
     _login_as_admin(client, admin_user)
 
     response = client.get("/admin/")
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Settings" in body
-    assert "Manage Services" in body
+    assert "Manage operational lists that drive public intake and internal scheduling." not in body
+    assert "Manage Services" not in body
 
     response = client.get("/admin/settings/services")
     assert response.status_code == 200
@@ -30,6 +31,7 @@ def test_dashboard_links_to_service_settings(client, admin_user):
 
 
 def test_admin_can_create_update_archive_and_reactivate_services(client, app, admin_user):
+    app.config["ENABLE_SERVICES"] = True
     _login_as_admin(client, admin_user)
 
     create_response = client.post(
@@ -108,6 +110,7 @@ def test_admin_can_create_update_archive_and_reactivate_services(client, app, ad
 
 
 def test_archived_services_are_hidden_from_public_forms_but_remain_on_request_history(client, app, admin_user):
+    app.config["ENABLE_SERVICES"] = True
     with app.app_context():
         service = ServiceOption.query.filter_by(name="Painting").one()
         quote_request = QuoteRequest(
@@ -139,6 +142,7 @@ def test_archived_services_are_hidden_from_public_forms_but_remain_on_request_hi
 
 
 def test_quote_request_submission_rejects_archived_service_choice(client, app):
+    app.config["ENABLE_SERVICES"] = True
     with app.app_context():
         service = ServiceOption.query.filter_by(name="Inspection").one()
         service.is_active = False
@@ -159,3 +163,25 @@ def test_quote_request_submission_rejects_archived_service_choice(client, app):
 
     with app.app_context():
         assert QuoteRequest.query.count() == 0
+
+
+def test_services_feature_flag_hides_public_and_admin_service_surfaces(client, app, admin_user):
+    app.config["ENABLE_SERVICES"] = False
+
+    public_response = client.get("/quote-request")
+    assert public_response.status_code == 200
+    public_body = public_response.get_data(as_text=True)
+    assert '<span>Services</span>' not in public_body
+    assert 'href="/services"' not in public_body
+
+    services_response = client.get("/services")
+    assert services_response.status_code == 404
+
+    _login_as_admin(client, admin_user)
+    dashboard_response = client.get("/admin/")
+    assert dashboard_response.status_code == 200
+    dashboard_body = dashboard_response.get_data(as_text=True)
+    assert 'href="/admin/settings/services"' not in dashboard_body
+
+    service_settings_response = client.get("/admin/settings/services")
+    assert service_settings_response.status_code == 404

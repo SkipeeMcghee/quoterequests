@@ -43,7 +43,9 @@ from app.models import APPOINTMENT_STATUSES, Appointment, ServiceOption
 from app.services.service_catalog import (
     create_service_option,
     get_service_option,
+    is_services_enabled,
     list_services,
+    require_services_enabled,
     resolve_service_options_by_ids,
     set_service_option_active,
     update_service_option,
@@ -200,6 +202,9 @@ def _resolve_required_service_options(
     quote_request=None,
     service_ids: list[int] | None = None,
 ) -> list[ServiceOption]:
+    if not is_services_enabled():
+        return []
+
     if service_ids is not None:
         return resolve_service_options_by_ids(service_ids)
 
@@ -232,6 +237,7 @@ def _build_staff_assignment_context(
             "other_staff_info": [],
         }
 
+    services_enabled = is_services_enabled()
     required_services = _resolve_required_service_options(
         appointment=appointment,
         quote_request=quote_request,
@@ -262,13 +268,13 @@ def _build_staff_assignment_context(
     staff_assignment_info = []
     for staff in list_staff_members():
         warnings = get_staff_assignment_warnings(reference_appointment, staff)
-        staff_service_ids = {service.id for service in staff.services}
+        staff_service_ids = {service.id for service in staff.services} if services_enabled else set()
         matched_service_count = len(staff_service_ids & required_service_ids)
         can_cover_services = not required_service_ids or matched_service_count > 0
-        if required_service_names:
+        if services_enabled and required_service_names:
             capability_label = "Can perform requested service" if can_cover_services else "No matching service listed"
         else:
-            capability_label = "Available for general assignment"
+            capability_label = "Available for assignment"
 
         if not has_schedule_window:
             availability_state = "unknown"
@@ -284,7 +290,7 @@ def _build_staff_assignment_context(
             {
                 "staff": staff,
                 "can_cover_services": can_cover_services,
-                "service_names": [service.name for service in staff.services],
+                "service_names": [service.name for service in staff.services] if services_enabled else [],
                 "matched_service_count": matched_service_count,
                 "required_service_count": required_service_count,
                 "warnings": warnings,
@@ -800,6 +806,7 @@ def _render_service_settings_page(
 @bp.route("/settings/services", methods=["GET", "POST"])
 @login_required
 def service_settings():
+    require_services_enabled()
     create_form = ServiceManagementForm(prefix="service-create")
     if request.method == "POST" and create_form.validate_on_submit():
         try:
@@ -820,6 +827,7 @@ def service_settings():
 @bp.post("/settings/services/<int:service_id>")
 @login_required
 def update_service_route(service_id: int):
+    require_services_enabled()
     get_service_option(service_id)
     form = ServiceManagementForm(prefix=f"service-{service_id}")
     if form.validate_on_submit():
@@ -842,6 +850,7 @@ def update_service_route(service_id: int):
 @bp.post("/settings/services/<int:service_id>/status")
 @login_required
 def toggle_service_status_route(service_id: int):
+    require_services_enabled()
     service = get_service_option(service_id)
     form = ActionForm(prefix=f"service-status-{service_id}")
     if not form.validate_on_submit():
@@ -1163,8 +1172,9 @@ def new_scheduled_work():
             else:
                 form.new_customer_name.data = quote_request.full_name
                 form.new_customer_city.data = quote_request.city
-            form.title.data = quote_request.service_list_display or quote_request.request_type
-            form.service_ids.data = [service.id for service in quote_request.services]
+            form.title.data = quote_request.service_list_display if is_services_enabled() else quote_request.request_type
+            if is_services_enabled():
+                form.service_ids.data = [service.id for service in quote_request.services]
         if customer is not None:
             form.customer_id.data = customer.id
             form.customer_lookup.data = _find_customer_option_label(customer_options, customer.id)
@@ -1197,12 +1207,13 @@ def new_scheduled_work():
                 new_customer_phone=form.new_customer_phone.data,
                 new_customer_email=form.new_customer_email.data,
                 new_customer_city=form.new_customer_city.data,
+                title=form.title.data,
                 scheduled_date=form.scheduled_date.data,
                 start_time=start_time,
                 end_time=end_time,
                 customer_notes=None,
                 internal_notes=form.internal_notes.data,
-                service_ids=form.service_ids.data,
+                service_ids=form.service_ids.data if is_services_enabled() else None,
                 staff_ids=form.staff_ids.data,
             )
         except Exception as exc:
@@ -1455,7 +1466,7 @@ def request_detail(request_id: int):
                     (0, "Choose an existing customer"),
                     *customer_options,
                 ]
-            appointment_form.title.data = quote_request.service_list_display or quote_request.request_type
+            appointment_form.title.data = quote_request.service_list_display if is_services_enabled() else quote_request.request_type
             _set_default_minute_values(appointment_form, ("start_time_minute", "end_time_minute"))
             if current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
                 staffing_context = _build_staff_assignment_context(
@@ -1841,7 +1852,7 @@ def new_staff_member():
                 compensation_amount=form.compensation_amount.data,
                 compensation_frequency=form.compensation_frequency.data,
                 notes=form.notes.data,
-                service_ids=form.services.data,
+                service_ids=form.services.data if is_services_enabled() else None,
             )
             flash("Staff member created.", "success")
             return redirect(url_for("admin.staff_detail", staff_member_id=staff_member.id))
@@ -1982,7 +1993,7 @@ def edit_staff_member(staff_member_id: int):
                 compensation_amount=form.compensation_amount.data,
                 compensation_frequency=form.compensation_frequency.data,
                 notes=form.notes.data,
-                service_ids=form.services.data,
+                service_ids=form.services.data if is_services_enabled() else None,
             )
             flash("Staff member updated.", "success")
             return redirect(url_for("admin.staff_detail", staff_member_id=staff_member.id))

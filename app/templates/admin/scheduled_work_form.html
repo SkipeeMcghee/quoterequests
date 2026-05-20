@@ -85,31 +85,33 @@
           </label>
 
           <label class="form-field">
-            <span class="field-label-row">Work title or service <span class="required-pill">Required</span></span>
+            <span class="field-label-row">{{ 'Work title or service' if enable_services else 'Work title' }} <span class="required-pill">Required</span></span>
             {{ form.title(class_="input", required=true) }}
             {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
 
-          <section class="schedule-builder-section">
-            <div class="section-bar compact-bar">
-              <div>
-                <h3>Services</h3>
-                <p class="subtle-text">Choose the services this event covers so staffing context is easier to scan.</p>
+          {% if enable_services %}
+            <section class="schedule-builder-section">
+              <div class="section-bar compact-bar">
+                <div>
+                  <h3>Services</h3>
+                  <p class="subtle-text">Choose the services this event covers so staffing context is easier to scan.</p>
+                </div>
               </div>
-            </div>
-            <div class="checkbox-grid schedule-service-grid">
-              {% for service_value, service_label in form.service_ids.choices %}
-                <label class="checkbox-card schedule-service-card">
-                  <input class="checkbox-input" type="checkbox" name="{{ form.service_ids.name }}" value="{{ service_value }}" {% if service_value in (form.service_ids.data or []) %}checked{% endif %}>
-                  <div>
-                    <strong>{{ service_label }}</strong>
-                    <div class="subtle-text">Use this to guide staffing and keep the event scope readable.</div>
-                  </div>
-                </label>
-              {% endfor %}
-            </div>
-            {% for error in form.service_ids.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </section>
+              <div class="checkbox-grid schedule-service-grid">
+                {% for service_value, service_label in form.service_ids.choices %}
+                  <label class="checkbox-card schedule-service-card">
+                    <input class="checkbox-input" type="checkbox" name="{{ form.service_ids.name }}" value="{{ service_value }}" {% if service_value in (form.service_ids.data or []) %}checked{% endif %}>
+                    <div>
+                      <strong>{{ service_label }}</strong>
+                      <div class="subtle-text">Use this to guide staffing and keep the event scope readable.</div>
+                    </div>
+                  </label>
+                {% endfor %}
+              </div>
+              {% for error in form.service_ids.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </section>
+          {% endif %}
 
           <div class="form-grid">
             <label class="form-field">
@@ -171,7 +173,7 @@
                   <p class="subtle-text">Assign the crew during creation instead of saving and opening a second page.</p>
                 </div>
               </div>
-              {{ render_staff_assignment_picker(form.staff_ids.name, matching_staff_info, other_staff_info, required_service_names) }}
+              {{ render_staff_assignment_picker(form.staff_ids.name, matching_staff_info, other_staff_info, required_service_names, enable_services) }}
               {% for error in form.staff_ids.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </section>
           {% endif %}
@@ -194,7 +196,7 @@
             <article class="schedule-context-item">
               <strong>Source request</strong>
               <p>{{ quote_request.request_reference }} · {{ quote_request.full_name }}</p>
-              <p class="subtle-text">{{ quote_request.service_list_display or quote_request.request_type }}{% if quote_request.city %} · {{ quote_request.city }}{% endif %}</p>
+              <p class="subtle-text">{{ quote_request.service_list_display if enable_services else quote_request.request_type }}{% if quote_request.city %} · {{ quote_request.city }}{% endif %}</p>
             </article>
           {% endif %}
 

@@ -16,7 +16,9 @@
   <div class="site-header__nav-group">
     <nav class="site-nav site-nav--brochure" aria-label="Primary navigation">
       <a href="{{ url_for('main.index') }}" {% if request.endpoint == 'main.index' %}aria-current="page"{% endif %}>Home</a>
-      <a href="{{ url_for('main.services_page') }}" {% if request.endpoint == 'main.services_page' %}aria-current="page"{% endif %}>Services</a>
+      {% if enable_services %}
+        <a href="{{ url_for('main.services_page') }}" {% if request.endpoint == 'main.services_page' %}aria-current="page"{% endif %}>Services</a>
+      {% endif %}
       <a href="{{ url_for('main.about_page') }}" {% if request.endpoint == 'main.about_page' %}aria-current="page"{% endif %}>About</a>
       <a href="{{ url_for('main.contact_page') }}" {% if request.endpoint == 'main.contact_page' %}aria-current="page"{% endif %}>Contact</a>
     </nav>

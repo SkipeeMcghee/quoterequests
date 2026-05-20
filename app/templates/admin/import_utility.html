@@ -2,10 +2,14 @@
   <button type="button" class="btn btn-secondary btn-small import-utility__open" data-import-open="{{ modal_id }}">{{ label }}</button>
 {% endmacro %}
 
-{% macro render_import_modal(entity_type, modal_id) %}
+{% macro render_import_modal(entity_type, modal_id, enable_services=true) %}
   {% set is_customer_import = entity_type == 'customers' %}
+  {% set include_staff_services = entity_type == 'staff' and enable_services %}
   {% set entity_label = 'Customers' if is_customer_import else 'Employees / Staff' %}
-  {% set field_names = ['name', 'phone', 'email', 'city', 'notes', 'billing_frequency', 'billing_amount'] if is_customer_import else ['name', 'phone', 'email', 'services', 'availability_notes'] %}
+  {% set field_names = ['name', 'phone', 'email', 'city', 'notes', 'billing_frequency', 'billing_amount'] if is_customer_import else ['name', 'phone', 'email', 'availability_notes'] %}
+  {% if include_staff_services %}
+    {% set field_names = ['name', 'phone', 'email', 'services', 'availability_notes'] %}
+  {% endif %}
   <dialog
     class="import-dialog"
     id="{{ modal_id }}"
@@ -60,7 +64,7 @@
                 <span class="tag-pill">{{ field_name }}</span>
               {% endfor %}
             </div>
-            {% if not is_customer_import %}
+            {% if include_staff_services %}
               <p class="subtle-text">For the <strong>services</strong> column, separate multiple service names with commas.</p>
             {% endif %}
           </section>

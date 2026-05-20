@@ -24,28 +24,26 @@
       </div>
     </div>
 
-    <div class="hero-panel">
-      <div class="section-bar">
-        <div>
-          <h2>Featured services</h2>
-          <p class="subtle-text">A quick look at the kinds of projects customers most often ask us to review.</p>
+    {% if enable_services %}
+      <div class="hero-panel">
+        <div class="section-bar">
+          <div>
+            <h2>Featured services</h2>
+            <p class="subtle-text">A quick look at the kinds of projects customers most often ask us to review.</p>
+          </div>
+          <a class="text-link" href="{{ url_for('main.services_page') }}">See all services</a>
         </div>
-        <a class="text-link" href="{{ url_for('main.services_page') }}">See all services</a>
-      </div>
 
-      <div class="brochure-list">
-        {% if services %}
+        <div class="brochure-list">
           {% for service in services[:6] %}
             <div class="brochure-list__item">
               <strong>{{ service.name }}</strong>
               <span class="subtle-text">{{ describe_service(service) }}</span>
             </div>
           {% endfor %}
-        {% else %}
-          <p class="subtle-text">Services are being updated. Contact us if you do not see your project type listed yet.</p>
-        {% endif %}
+        </div>
       </div>
-    </div>
+    {% endif %}
   </section>
 
   <section class="brochure-section">

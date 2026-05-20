@@ -5,6 +5,7 @@
 
 {% block content %}
 <main class="shell dashboard-shell">
+  {% set request_colspan = 5 if enable_services else 4 %}
   {% call render_admin_page_header(
     title='Requests',
     description='Review incoming quote and work requests.',
@@ -32,7 +33,9 @@
       <table class="request-queue-table">
         <colgroup>
           <col class="request-queue-table__customer-col">
-          <col class="request-queue-table__services-col">
+          {% if enable_services %}
+            <col class="request-queue-table__services-col">
+          {% endif %}
           <col class="request-queue-table__contact-col">
           <col class="request-queue-table__meta-col">
           <col class="request-queue-table__submitted-col">
@@ -40,7 +43,9 @@
         <thead>
           <tr>
             <th>Customer</th>
-            <th>Services</th>
+            {% if enable_services %}
+              <th>Services</th>
+            {% endif %}
             <th>Contact</th>
             <th>Status</th>
             <th>Submitted</th>
@@ -64,24 +69,26 @@
                 <strong class="row-title">{{ item.full_name }}</strong>
                 <div class="subtle-text">{{ item.city }}</div>
               </td>
-              <td class="request-queue__services-cell">
-                {% if item.service_names %}
-                  <div
-                    class="request-queue-service-summary"
-                    data-service-summary
-                    data-services='{{ item.service_names|tojson|forceescape }}'
-                    title="{{ item.service_list_display }}"
-                    aria-label="Services: {{ item.service_list_display }}"
-                  >
-                    <span class="request-queue-service-summary__text" data-service-summary-text>{{ item.service_list_display }}</span>
-                    <span class="request-queue-service-summary__overflow" data-service-summary-overflow hidden></span>
-                  </div>
-                {% else %}
-                  <div class="request-queue-service-summary request-queue-service-summary--empty">
-                    <span class="request-queue-service-summary__text subtle-text">No services selected</span>
-                  </div>
-                {% endif %}
-              </td>
+              {% if enable_services %}
+                <td class="request-queue__services-cell">
+                  {% if item.service_names %}
+                    <div
+                      class="request-queue-service-summary"
+                      data-service-summary
+                      data-services='{{ item.service_names|tojson|forceescape }}'
+                      title="{{ item.service_list_display }}"
+                      aria-label="Services: {{ item.service_list_display }}"
+                    >
+                      <span class="request-queue-service-summary__text" data-service-summary-text>{{ item.service_list_display }}</span>
+                      <span class="request-queue-service-summary__overflow" data-service-summary-overflow hidden></span>
+                    </div>
+                  {% else %}
+                    <div class="request-queue-service-summary request-queue-service-summary--empty">
+                      <span class="request-queue-service-summary__text subtle-text">No services selected</span>
+                    </div>
+                  {% endif %}
+                </td>
+              {% endif %}
               <td class="request-queue__contact-cell">
                 <div class="request-queue-contact" aria-label="Contact details">
                   <div class="request-queue-contact__row">
@@ -115,23 +122,11 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="5" class="empty-state">No quote requests yet.</td>
+              <td colspan="{{ request_colspan }}" class="empty-state">No quote requests yet.</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
-    </div>
-  </section>
-
-  <section class="table-card">
-    <div class="section-bar">
-      <div>
-        <h2>Settings</h2>
-        <p class="subtle-text">Manage operational lists that drive public intake and internal scheduling.</p>
-      </div>
-      <div class="button-row">
-        <a class="btn btn-secondary" href="{{ url_for('admin.service_settings') }}">Manage Services</a>
-      </div>
     </div>
   </section>
 </main>

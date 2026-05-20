@@ -1,5 +1,5 @@
-{% macro render_staff_assignment_picker(staff_field_name, matching_staff_info, other_staff_info, required_service_names) %}
-  {% if required_service_names %}
+{% macro render_staff_assignment_picker(staff_field_name, matching_staff_info, other_staff_info, required_service_names, enable_services=true) %}
+  {% if enable_services and required_service_names %}
     <div class="assignment-service-summary">
       <strong>Requested services</strong>
       <div class="tag-list">
@@ -14,8 +14,8 @@
     <section class="assignment-group">
       <div class="section-bar compact-bar">
         <div>
-          <h4>Can perform requested services</h4>
-          <p class="subtle-text">Best-fit staff appear first, with planning warnings shown inline.</p>
+          <h4>{{ 'Can perform requested services' if enable_services and required_service_names else 'Available staff' }}</h4>
+          <p class="subtle-text">{{ 'Best-fit staff appear first, with planning warnings shown inline.' if enable_services and required_service_names else 'Available staff appear first, with planning warnings shown inline.' }}</p>
         </div>
       </div>
       <div class="checkbox-grid assignment-checkbox-grid">
@@ -36,13 +36,13 @@
                 <span class="assignment-fit-badge assignment-fit-badge--match">{{ info.capability_label }}</span>
                 <span class="subtle-text">Weekly availability: {{ info.availability_summary }}</span>
               </div>
-              {% if info.service_names %}
+              {% if enable_services and info.service_names %}
                 <div class="tag-list">
                   {% for service_name in info.service_names %}
                     <span class="tag">{{ service_name }}</span>
                   {% endfor %}
                 </div>
-              {% else %}
+              {% elif enable_services %}
                 <div class="subtle-text">No services are assigned on this staff record yet.</div>
               {% endif %}
               <div class="button-row assignment-card__actions">
@@ -89,13 +89,13 @@
                 <span class="assignment-fit-badge">{{ info.capability_label }}</span>
                 <span class="subtle-text">Weekly availability: {{ info.availability_summary }}</span>
               </div>
-              {% if info.service_names %}
+              {% if enable_services and info.service_names %}
                 <div class="tag-list">
                   {% for service_name in info.service_names %}
                     <span class="tag">{{ service_name }}</span>
                   {% endfor %}
                 </div>
-              {% else %}
+              {% elif enable_services %}
                 <div class="subtle-text">No services are assigned on this staff record yet.</div>
               {% endif %}
               <div class="button-row assignment-card__actions">

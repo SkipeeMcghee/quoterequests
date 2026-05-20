@@ -35,7 +35,9 @@
         <li><strong>Email:</strong> {{ email }}</li>
         <li><strong>Address:</strong> {{ address }}</li>
         <li><strong>Service area:</strong> {{ service_area }}</li>
-        <li><strong>Services:</strong> {{ services|join(', ') }}</li>
+        {% if enable_services and services %}
+          <li><strong>Services:</strong> {{ services|join(', ') }}</li>
+        {% endif %}
       </ul>
     </article>
 

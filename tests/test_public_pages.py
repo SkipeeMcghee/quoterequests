@@ -10,7 +10,6 @@ import pytest
     ("route", "expected_text"),
     [
         ("/", "Clear, dependable service from Service Company across your local service area."),
-        ("/services", "Landscape Design"),
         ("/about", "A straightforward approach"),
         ("/contact", "hello@example.com"),
         ("/gallery", "Front entry refresh"),
@@ -27,7 +26,7 @@ def test_brochure_pages_render_with_shared_layout(client, route: str, expected_t
 
     body = response.get_data(as_text=True)
     assert "Home" in body
-    assert "Services" in body
+    assert 'href="/services"' not in body
     assert "About" in body
     assert "Contact" in body
     assert '/static/assets/images/Logowhite.png' in body
@@ -49,6 +48,7 @@ def test_quote_request_page_uses_public_site_layout(client):
     assert "Service Company" in body
     assert "Serving your local service area" in body
     assert "Get a Quote" in body
+    assert '<span>Services</span>' not in body
     assert "Privacy Policy" in body
     assert "Admin Login" not in body
     assert 'href="/admin"' in body
@@ -128,7 +128,6 @@ def test_footer_social_links_preview_renders_disabled_or_missing_platforms(app):
     "route",
     [
         "/",
-        "/services",
         "/about",
         "/contact",
         "/gallery",
@@ -157,3 +156,15 @@ def test_public_links_resolve(client, route: str):
 
         linked_response = client.get(target)
         assert linked_response.status_code < 400, f"Broken link {target} from {route}"
+
+
+def test_services_page_renders_when_enabled(app):
+    app.config["ENABLE_SERVICES"] = True
+    client = app.test_client()
+
+    response = client.get("/services")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Landscape Design" in body
+    assert 'href="/services"' in body

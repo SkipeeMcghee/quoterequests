@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from flask import current_app
 from sqlalchemy import func
 from werkzeug.exceptions import BadRequest, NotFound
 
@@ -7,7 +8,19 @@ from app.extensions import db
 from app.models import ServiceOption
 
 
+def is_services_enabled(config=None) -> bool:
+    settings = config or current_app.config
+    return bool(settings.get("ENABLE_SERVICES", False))
+
+
+def require_services_enabled() -> None:
+    if not is_services_enabled():
+        raise NotFound()
+
+
 def list_services(*, include_inactive: bool = True) -> list[ServiceOption]:
+    if not is_services_enabled():
+        return []
     return list(ServiceOption.ordered_query(include_inactive=include_inactive).all())
 
 
@@ -41,7 +54,7 @@ def list_service_id_choices(
 
 
 def resolve_service_options_by_ids(service_ids: list[int] | None) -> list[ServiceOption]:
-    if not service_ids:
+    if not service_ids or not is_services_enabled():
         return []
 
     normalized_service_ids = list(dict.fromkeys(service_ids))
@@ -57,7 +70,7 @@ def resolve_service_options_by_ids(service_ids: list[int] | None) -> list[Servic
 
 
 def resolve_active_service_options_by_names(service_names: list[str] | None) -> list[ServiceOption]:
-    if not service_names:
+    if not service_names or not is_services_enabled():
         return []
 
     normalized_service_names = []
@@ -81,6 +94,7 @@ def resolve_active_service_options_by_names(service_names: list[str] | None) -> 
 
 
 def get_service_option(service_id: int) -> ServiceOption:
+    require_services_enabled()
     service = db.session.get(ServiceOption, service_id)
     if service is None:
         raise NotFound("Service not found.")
@@ -88,6 +102,7 @@ def get_service_option(service_id: int) -> ServiceOption:
 
 
 def create_service_option(*, name: str, description: str | None = None, display_order: int = 0) -> ServiceOption:
+    require_services_enabled()
     cleaned_name = _clean_service_name(name)
     _ensure_unique_service_name(cleaned_name)
 
@@ -109,6 +124,7 @@ def update_service_option(
     description: str | None = None,
     display_order: int = 0,
 ) -> ServiceOption:
+    require_services_enabled()
     service = get_service_option(service_id)
     cleaned_name = _clean_service_name(name)
     _ensure_unique_service_name(cleaned_name, existing_service_id=service.id)
@@ -121,6 +137,7 @@ def update_service_option(
 
 
 def set_service_option_active(service_id: int, *, is_active: bool) -> ServiceOption:
+    require_services_enabled()
     service = get_service_option(service_id)
     service.is_active = is_active
     db.session.commit()

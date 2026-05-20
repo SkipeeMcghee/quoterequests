@@ -16,7 +16,7 @@ from werkzeug.exceptions import BadRequest, NotFound
 
 from app.extensions import db
 from app.models import Customer, CustomerField, CustomerNote, ServiceOption, StaffMember, User
-from app.services.service_catalog import list_active_services
+from app.services.service_catalog import is_services_enabled, list_active_services
 
 
 @dataclass(frozen=True)
@@ -82,6 +82,25 @@ STAFF_IMPORT = ImportEntityDefinition(
     ),
 )
 
+STAFF_IMPORT_WITHOUT_SERVICES = ImportEntityDefinition(
+    key="staff",
+    label="Employees / Staff",
+    singular_label="staff member",
+    template_base_name="employee_import_template",
+    fields=(
+        ImportFieldDefinition("name", "Name", required=True),
+        ImportFieldDefinition("phone", "Phone"),
+        ImportFieldDefinition("email", "Email"),
+        ImportFieldDefinition("availability_notes", "Availability Notes"),
+    ),
+    example_row=(
+        "Alex Crew",
+        "555-111-2222",
+        "alex@example.com",
+        "Prefers morning exterior work.",
+    ),
+)
+
 IMPORT_ENTITIES = {
     CUSTOMER_IMPORT.key: CUSTOMER_IMPORT,
     STAFF_IMPORT.key: STAFF_IMPORT,
@@ -91,7 +110,11 @@ SERVICE_CELL_SPLIT_RE = re.compile(r"[,;\n]+")
 
 
 def get_import_definition(entity_type: str) -> ImportEntityDefinition:
-    definition = IMPORT_ENTITIES.get((entity_type or "").strip().lower())
+    normalized_entity_type = (entity_type or "").strip().lower()
+    if normalized_entity_type == STAFF_IMPORT.key and not is_services_enabled():
+        return STAFF_IMPORT_WITHOUT_SERVICES
+
+    definition = IMPORT_ENTITIES.get(normalized_entity_type)
     if definition is None:
         raise NotFound("Import type not found.")
     return definition
@@ -110,7 +133,7 @@ def build_import_template(entity_type: str, file_format: str) -> tuple[bytes, st
     if normalized_format == "xlsx":
         workbook = Workbook()
         worksheet = workbook.active
-        worksheet.title = definition.label
+        worksheet.title = _normalize_worksheet_title(definition.label)
         worksheet.append([field.key for field in definition.fields])
         worksheet.append(list(definition.example_row))
         for column_index, field in enumerate(definition.fields, start=1):
@@ -389,7 +412,7 @@ def _build_preview_context(entity_type: str) -> dict[str, Any]:
 
     if entity_type == STAFF_IMPORT.key:
         staff_members = list(db.session.scalars(select(StaffMember).order_by(StaffMember.display_name, StaffMember.id)))
-        active_services = list_active_services()
+        active_services = list_active_services() if is_services_enabled() else []
         return {
             "staffMembers": staff_members,
             "activeServicesByLowerName": {service.name.lower(): service for service in active_services},
@@ -473,11 +496,12 @@ def _preview_customer_row(row_number: int, values: dict[str, str], context: dict
 
 
 def _preview_staff_row(row_number: int, values: dict[str, str], context: dict[str, Any]) -> dict[str, Any]:
+    services_enabled = is_services_enabled()
     normalized_values = {
         "name": values.get("name", "").strip(),
         "phone": values.get("phone", "").strip(),
         "email": values.get("email", "").strip().lower(),
-        "services": values.get("services", "").strip(),
+        "services": values.get("services", "").strip() if services_enabled else "",
         "availability_notes": values.get("availability_notes", "").strip(),
     }
     cell_errors: dict[str, str] = {}
@@ -497,14 +521,15 @@ def _preview_staff_row(row_number: int, values: dict[str, str], context: dict[st
     if normalized_values["phone"] and not _is_valid_phone(normalized_values["phone"]):
         cell_errors["phone"] = "Enter a valid phone number."
 
-    service_names = _parse_service_names(normalized_values["services"])
-    unknown_services = [
-        service_name
-        for service_name in service_names
-        if service_name.lower() not in context["activeServicesByLowerName"]
-    ]
-    if unknown_services:
-        cell_errors["services"] = f"Unknown services: {', '.join(unknown_services)}."
+    if services_enabled:
+        service_names = _parse_service_names(normalized_values["services"])
+        unknown_services = [
+            service_name
+            for service_name in service_names
+            if service_name.lower() not in context["activeServicesByLowerName"]
+        ]
+        if unknown_services:
+            cell_errors["services"] = f"Unknown services: {', '.join(unknown_services)}."
 
     duplicate_candidates = _find_staff_duplicate_candidates(normalized_values, context["staffMembers"])
     issues = [
@@ -698,6 +723,9 @@ def _merge_staff_from_import(values: dict[str, str], staff_member_id: int | None
 
 
 def _resolve_staff_import_services(raw_services: str) -> list[ServiceOption]:
+    if not is_services_enabled():
+        return []
+
     service_names = _parse_service_names(raw_services)
     if not service_names:
         return []
@@ -721,6 +749,11 @@ def _merge_staff_notes(existing_notes: str | None, imported_note: str) -> str:
     if imported_note in existing_notes:
         return existing_notes
     return f"{existing_notes.strip()}\n\n{imported_note}"
+
+
+def _normalize_worksheet_title(value: str) -> str:
+    normalized = re.sub(r"[\\/*?:\[\]]", "-", value or "Sheet").strip()
+    return (normalized or "Sheet")[:31]
 
 
 def _ensure_customer_field(customer: Customer, kind: str, value: str | None) -> None:

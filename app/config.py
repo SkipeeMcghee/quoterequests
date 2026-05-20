@@ -97,6 +97,7 @@ class Config:
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024
     UPLOAD_FOLDER = str(BASE_DIR / "app" / "static" / "uploads")
     ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+    ENABLE_SERVICES = parse_bool_env("ENABLE_SERVICES", False)
     ENABLE_SCHEDULING = os.getenv("ENABLE_SCHEDULING", "false").lower() in ("1", "true", "yes")
     ENABLE_STAFF_MANAGEMENT = os.getenv("ENABLE_STAFF_MANAGEMENT", "false").lower() in ("1", "true", "yes")
     ENABLE_CUSTOMER_RECORDS = os.getenv("ENABLE_CUSTOMER_RECORDS", "false").lower() in ("1", "true", "yes")
@@ -130,6 +131,7 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
+    ENABLE_SERVICES = parse_bool_env("ENABLE_SERVICES", True)
     ENABLE_SCHEDULING = parse_bool_env("ENABLE_SCHEDULING", True)
     ENABLE_STAFF_MANAGEMENT = parse_bool_env("ENABLE_STAFF_MANAGEMENT", True)
     ENABLE_CUSTOMER_RECORDS = parse_bool_env("ENABLE_CUSTOMER_RECORDS", True)
@@ -145,6 +147,7 @@ class TestingConfig(Config):
     TESTING = True
     WTF_CSRF_ENABLED = False
     SOCIAL_LINKS_PREVIEW = False
+    ENABLE_SERVICES = False
     ENABLE_SCHEDULING = False
     ENABLE_STAFF_MANAGEMENT = False
     ENABLE_CUSTOMER_RECORDS = False

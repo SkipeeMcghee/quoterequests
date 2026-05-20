@@ -8,7 +8,7 @@
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Staff Details',
-    description='Review contact details, service coverage, weekly availability, assigned scheduled work, and scheduled hours for planning.',
+    description='Review contact details, weekly availability, assigned scheduled work, and scheduled hours for planning.' if not enable_services else 'Review contact details, service coverage, weekly availability, assigned scheduled work, and scheduled hours for planning.',
     nav_mode='sub',
     return_url=url_for('admin.staff_list'),
     return_label='Back to Staff',
@@ -60,19 +60,21 @@
       </div>
 
       <div class="staff-profile-grid">
-        <section class="staff-profile-services">
-          <strong>Services they can perform</strong>
-          <p class="subtle-text">Used when matching scheduled work.</p>
-          {% if staff_member.services %}
-            <div class="tag-list staff-service-list">
-              {% for service in staff_member.services %}
-                <span class="tag-pill">{{ service.name }}</span>
-              {% endfor %}
-            </div>
-          {% else %}
-            <p class="subtle-text">No services assigned yet.</p>
-          {% endif %}
-        </section>
+        {% if enable_services %}
+          <section class="staff-profile-services">
+            <strong>Services they can perform</strong>
+            <p class="subtle-text">Used when matching scheduled work.</p>
+            {% if staff_member.services %}
+              <div class="tag-list staff-service-list">
+                {% for service in staff_member.services %}
+                  <span class="tag-pill">{{ service.name }}</span>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="subtle-text">No services assigned yet.</p>
+            {% endif %}
+          </section>
+        {% endif %}
 
         <section class="staff-profile-note-editor">
           <form method="post" action="{{ url_for('admin.update_staff_member_notes_route', staff_member_id=staff_member.id) }}" class="stacked-form" data-staff-notes-form>

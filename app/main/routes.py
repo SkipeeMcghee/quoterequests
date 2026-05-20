@@ -5,6 +5,7 @@ from app.forms.quote_request import QuoteRequestForm
 from app.main import bp
 from app.services.quotes import create_quote_request
 from app.services.recaptcha import should_render_recaptcha, verify_recaptcha_submission
+from app.services.service_catalog import require_services_enabled
 
 
 HOME_TRUST_POINTS = (
@@ -136,6 +137,7 @@ def index():
 
 @bp.get("/services")
 def services_page():
+    require_services_enabled()
     return render_template("main/services.html")
 
 

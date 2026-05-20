@@ -148,6 +148,7 @@ def register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_feature_flags() -> dict[str, object]:
         return {
+            "enable_services": app.config.get("ENABLE_SERVICES", False),
             "enable_scheduling": app.config.get("ENABLE_SCHEDULING", False),
             "enable_staff_management": app.config.get("ENABLE_STAFF_MANAGEMENT", False),
             "enable_customer_records": app.config.get("ENABLE_CUSTOMER_RECORDS", False),

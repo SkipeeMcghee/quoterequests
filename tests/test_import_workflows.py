@@ -107,7 +107,7 @@ def test_customer_import_template_preview_and_commit_creates_customer(client, ad
 
 
 def test_staff_import_review_and_commit_can_merge_existing_staff(client, admin_user, app):
-    app.config.update(ENABLE_SCHEDULING=True, ENABLE_STAFF_MANAGEMENT=True)
+    app.config.update(ENABLE_SERVICES=True, ENABLE_SCHEDULING=True, ENABLE_STAFF_MANAGEMENT=True)
     _login_as_admin(client, admin_user)
 
     with app.app_context():

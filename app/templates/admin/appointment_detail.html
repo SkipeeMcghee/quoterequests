@@ -133,7 +133,7 @@
         <div class="section-bar compact-bar">
           <div>
             <h2>Staff assignment</h2>
-            <p class="subtle-text">Assign staff directly from this event and review service fit, weekly availability, and planning conflicts before saving.</p>
+            <p class="subtle-text">{{ 'Assign staff directly from this event and review weekly availability and planning conflicts before saving.' if not enable_services else 'Assign staff directly from this event and review service fit, weekly availability, and planning conflicts before saving.' }}</p>
           </div>
         </div>
         <div class="assignment-current-summary">
@@ -149,7 +149,7 @@
           {% endif %}
         </div>
 
-        {% if required_service_names %}
+        {% if enable_services and required_service_names %}
           <div class="assignment-service-summary">
             <strong>Requested services</strong>
             <div class="tag-list">
@@ -165,7 +165,7 @@
         </div>
         <form method="post" action="{{ assign_staff_url }}" class="stacked-form">
           {{ assign_staff_form.hidden_tag() }}
-          {{ render_staff_assignment_picker(assign_staff_form.staff_ids.name, matching_staff_info, other_staff_info, required_service_names) }}
+          {{ render_staff_assignment_picker(assign_staff_form.staff_ids.name, matching_staff_info, other_staff_info, required_service_names, enable_services) }}
 
           {% for error in assign_staff_form.staff_ids.errors %}
             <small class="field-error">{{ error }}</small>

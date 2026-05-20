@@ -9,7 +9,9 @@
     <nav class="site-footer__column" aria-label="Footer navigation">
       <strong>Explore</strong>
       <a href="{{ url_for('main.index') }}">Home</a>
-      <a href="{{ url_for('main.services_page') }}">Services</a>
+      {% if enable_services %}
+        <a href="{{ url_for('main.services_page') }}">Services</a>
+      {% endif %}
       <a href="{{ url_for('main.about_page') }}">About</a>
       <a href="{{ url_for('main.contact_page') }}">Contact</a>
       <a href="{{ url_for('main.gallery_page') }}">Gallery</a>

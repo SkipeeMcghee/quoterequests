@@ -40,6 +40,7 @@ def test_quote_request_page_renders_recaptcha_v3_when_enabled(client, app):
 
 
 def test_quote_request_services_does_not_require_every_checkbox(client):
+    client.application.config["ENABLE_SERVICES"] = True
     response = client.get("/quote-request")
 
     assert response.status_code == 200
@@ -398,6 +399,7 @@ def test_admin_customer_detail_schedule_work_button_visible_when_enabled(client,
 
 
 def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_user):
+    app.config["ENABLE_SERVICES"] = True
     app.config["ENABLE_SCHEDULING"] = True
 
     with app.app_context():
@@ -433,6 +435,7 @@ def test_admin_new_scheduled_work_prefills_request_and_date(client, app, admin_u
 
 
 def test_admin_new_scheduled_work_supports_services_and_staff_selection(client, app, admin_user):
+    app.config["ENABLE_SERVICES"] = True
     app.config["ENABLE_SCHEDULING"] = True
     app.config["ENABLE_STAFF_MANAGEMENT"] = True
 
@@ -615,7 +618,7 @@ def test_request_detail_shows_inline_edit_form_for_current_appointment(client, a
     assert f'action="/admin/appointments/{appointment_id}/edit?return_to=request"' in body
     assert 'name="edit-title"' not in body
     assert f'action="/admin/appointments/{appointment_id}/delete?return_to=request"' in body
-    assert 'data-confirm-text="Delete Paint consultation?"' in body
+    assert f'data-confirm-text="Delete Event #{appointment_id}?"' in body
     assert 'name="edit-status"' not in body
     assert f"View scheduled event #{appointment_id}" in body
     assert "Open day agenda" in body
@@ -806,7 +809,7 @@ def test_request_detail_inline_edit_returns_to_request_page(client, app, admin_u
     with app.app_context():
         quote_request = QuoteRequest.query.one()
         assert quote_request.current_appointment is not None
-        assert quote_request.current_appointment.title is None
+        assert quote_request.current_appointment.title == "Paint consultation"
 
 
 def test_admin_calendar_view_and_list_view_render_as_alternates(client, app, admin_user):
@@ -1237,6 +1240,7 @@ def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_u
 
 
 def test_dashboard_lists_quote_requests(client, admin_user):
+    client.application.config["ENABLE_SERVICES"] = True
     client.post(
         "/quote-request",
         data={
@@ -1264,6 +1268,7 @@ def test_dashboard_lists_quote_requests(client, admin_user):
 
 
 def test_dashboard_renders_compact_service_summary_markup(client, admin_user):
+    client.application.config["ENABLE_SERVICES"] = True
     client.post(
         "/quote-request",
         data={
@@ -2018,12 +2023,12 @@ def test_scheduling_a_request_sets_request_status_to_scheduled(client, app, admi
         data={
             "scheduled-work-request_id": str(request_id),
             "scheduled-work-customer_id": str(customer_id),
+            "scheduled-work-title": "Scheduled visit",
             "scheduled-work-scheduled_date": "2026-05-10",
             "scheduled-work-start_time_hour": "10",
             "scheduled-work-start_time_minute": "0",
             "scheduled-work-end_time_hour": "11",
             "scheduled-work-end_time_minute": "30",
-            "scheduled-work-status": "Scheduled",
             "scheduled-work-submit": "Add Work",
         },
         follow_redirects=False,

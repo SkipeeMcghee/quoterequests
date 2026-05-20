@@ -27,8 +27,11 @@ from app.models import (
     StaffMember,
     User,
 )
-from app.services.service_catalog import resolve_service_options_by_ids
+from app.services.service_catalog import is_services_enabled, resolve_service_options_by_ids
 from app.services.uploads import save_customer_photos
+
+
+_APPOINTMENT_TITLE_UNSET = object()
 
 
 def list_quote_requests() -> list[QuoteRequest]:
@@ -279,7 +282,7 @@ def create_staff_member(
         compensation_frequency=normalized_compensation_frequency,
         notes=(notes or "").strip() or None,
     )
-    if service_ids:
+    if service_ids and is_services_enabled():
         staff_member.services = resolve_service_options_by_ids(service_ids)
     db.session.add(staff_member)
     db.session.commit()
@@ -321,7 +324,7 @@ def update_staff_member(
     staff_member.compensation_amount = normalized_compensation_amount
     staff_member.compensation_frequency = normalized_compensation_frequency
     staff_member.notes = (notes or "").strip() or None
-    if service_ids is not None:
+    if service_ids is not None and is_services_enabled():
         staff_member.services = resolve_service_options_by_ids(service_ids)
     db.session.commit()
     return staff_member
@@ -385,6 +388,20 @@ def set_appointment_staff_assignments(appointment_id: int, staff_ids: list[int] 
 
 def _resolve_service_options(service_ids: list[int] | None) -> list[ServiceOption]:
     return resolve_service_options_by_ids(service_ids)
+
+
+def _default_quote_request_services(quote_request: QuoteRequest | None) -> list[ServiceOption]:
+    if quote_request is None or not is_services_enabled():
+        return []
+    return list(quote_request.services)
+
+
+def _clean_appointment_title(raw_title: object) -> str | None:
+    if raw_title is None:
+        return None
+    if not isinstance(raw_title, str):
+        raise BadRequest("Enter a valid appointment title.")
+    return raw_title.strip() or None
 
 
 def _resolve_staff_members(staff_ids: list[int] | None) -> list[StaffMember]:
@@ -613,6 +630,7 @@ def create_scheduled_work(
     internal_notes: str | None = None,
     service_ids: list[int] | None = None,
     staff_ids: list[int] | None = None,
+    title: str | None = None,
 ) -> Appointment:
     if status not in APPOINTMENT_STATUSES:
         raise BadRequest("Choose a valid appointment status.")
@@ -651,6 +669,7 @@ def create_scheduled_work(
     appointment = Appointment(
         customer_id=customer.id,
         quote_request_id=quote_request.id if quote_request is not None else None,
+        title=_clean_appointment_title(title),
         scheduled_date=scheduled_date,
         start_time=start_time,
         end_time=end_time,
@@ -659,7 +678,7 @@ def create_scheduled_work(
         internal_notes=(internal_notes or "").strip() or None,
     )
     db.session.add(appointment)
-    appointment.services = selected_services or (list(quote_request.services) if quote_request is not None else [])
+    appointment.services = selected_services or _default_quote_request_services(quote_request)
     for staff_member in selected_staff:
         appointment.staff_assignments.append(AppointmentStaffAssignment(staff_member_id=staff_member.id))
     if quote_request is not None:
@@ -951,6 +970,7 @@ def create_appointment(
     previous_appointment_id: int | None = None,
     staff_ids: list[int] | None = None,
     service_ids: list[int] | None = None,
+    title: str | None = None,
 ) -> Appointment:
     if start_time is not None and end_time is not None and end_time <= start_time:
         raise BadRequest("End time must be after the start time.")
@@ -961,6 +981,7 @@ def create_appointment(
     appointment = Appointment(
         customer_id=quote_request.customer_id,
         quote_request_id=quote_request.id,
+        title=_clean_appointment_title(title),
         scheduled_date=scheduled_date,
         start_time=start_time,
         end_time=end_time,
@@ -976,7 +997,7 @@ def create_appointment(
         ),
         previous_appointment_id=previous_appointment_id,
     )
-    appointment.services = selected_services or list(quote_request.services)
+    appointment.services = selected_services or _default_quote_request_services(quote_request)
     for staff_member in selected_staff:
         appointment.staff_assignments.append(AppointmentStaffAssignment(staff_member_id=staff_member.id))
     quote_request.appointments.append(appointment)
@@ -1036,12 +1057,14 @@ def update_appointment(
     start_time=None,
     end_time=None,
     status: str | None = None,
+    title: object = _APPOINTMENT_TITLE_UNSET,
 ) -> Appointment:
     appointment = get_appointment(appointment_id)
     if start_time is not None and end_time is not None and end_time <= start_time:
         raise BadRequest("End time must be after the start time.")
 
-    appointment.title = None
+    if title is not _APPOINTMENT_TITLE_UNSET:
+        appointment.title = _clean_appointment_title(title)
     appointment.requested_date = requested_date
     appointment.requested_time = requested_time
     appointment.confirmed_date = confirmed_date

@@ -17,6 +17,10 @@ from app.models import (
 )
 
 
+def _get_service(name: str) -> ServiceOption:
+    return ServiceOption.query.filter_by(name=name).one()
+
+
 def _login_as_admin(client, admin_user):
     client.post(
         "/auth/login",
@@ -34,7 +38,7 @@ def test_staff_list_surfaces_schedule_and_availability_context(client, app, admi
     scheduled_date = date.today() + timedelta(days=3)
 
     with app.app_context():
-        service = ServiceOption(name="Window Cleaning")
+        service = _get_service("Window Cleaning")
         customer = Customer(primary_name="Jordan Client", primary_city="Test City")
         staff_member = StaffMember(
             display_name="Alex Crew",
@@ -45,7 +49,7 @@ def test_staff_list_surfaces_schedule_and_availability_context(client, app, admi
             status="active",
             services=[service],
         )
-        db.session.add_all([service, customer, staff_member])
+        db.session.add_all([customer, staff_member])
         db.session.flush()
 
         db.session.add(
@@ -83,18 +87,15 @@ def test_staff_list_surfaces_schedule_and_availability_context(client, app, admi
     body = response.get_data(as_text=True)
     assert "Scheduled hours are planning hours" in body
     assert "Alex Crew" in body
-<<<<<<< HEAD
-    assert f"Event #{appointment_id}" in body
-=======
     assert "Lead Tech" not in body
-    assert "Exterior windows" in body
->>>>>>> 7c44e41e837bd82372ab5a71aabd4bec807d88df
+    assert f"Event #{appointment_id}" in body
     assert "Open Day Agenda" in body
     assert "saved window" in body
 
 
 def test_staff_detail_prioritizes_workflow_sections(client, app, admin_user):
     app.config.update(
+        ENABLE_SERVICES=True,
         ENABLE_SCHEDULING=True,
         ENABLE_STAFF_MANAGEMENT=True,
         ENABLE_CALENDAR=True,
@@ -103,8 +104,8 @@ def test_staff_detail_prioritizes_workflow_sections(client, app, admin_user):
     completed_date = date.today() - timedelta(days=1)
 
     with app.app_context():
-        service_one = ServiceOption(name="Window Cleaning")
-        service_two = ServiceOption(name="General Maintenance")
+        service_one = _get_service("Window Cleaning")
+        service_two = _get_service("General Maintenance")
         customer = Customer(primary_name="Taylor Client", primary_city="Test City")
         staff_member = StaffMember(
             display_name="Morgan Field",
@@ -118,7 +119,7 @@ def test_staff_detail_prioritizes_workflow_sections(client, app, admin_user):
             services=[service_one, service_two],
             notes="Prefers morning exterior work.",
         )
-        db.session.add_all([service_one, service_two, customer, staff_member])
+        db.session.add_all([customer, staff_member])
         db.session.flush()
 
         db.session.add_all(
@@ -549,6 +550,7 @@ def test_staff_availability_sync_route_replaces_week_windows(client, app, admin_
 
 def test_appointment_detail_groups_assignment_choices_and_warnings(client, app, admin_user):
     app.config.update(
+        ENABLE_SERVICES=True,
         ENABLE_SCHEDULING=True,
         ENABLE_STAFF_MANAGEMENT=True,
         ENABLE_CALENDAR=True,
@@ -556,8 +558,8 @@ def test_appointment_detail_groups_assignment_choices_and_warnings(client, app, 
     scheduled_date = date.today() + timedelta(days=2)
 
     with app.app_context():
-        requested_service = ServiceOption(name="Window Cleaning")
-        other_service = ServiceOption(name="Painting")
+        requested_service = _get_service("Window Cleaning")
+        other_service = _get_service("Painting")
         customer = Customer(primary_name="Riley Client", primary_city="Test City")
         quote_request = QuoteRequest(
             full_name="Riley Client",
@@ -589,8 +591,6 @@ def test_appointment_detail_groups_assignment_choices_and_warnings(client, app, 
         )
         db.session.add_all(
             [
-                requested_service,
-                other_service,
                 customer,
                 quote_request,
                 assigned_staff,
@@ -673,7 +673,7 @@ def test_staff_assignment_post_accepts_checkbox_values(client, app, admin_user):
     scheduled_date = date.today() + timedelta(days=5)
 
     with app.app_context():
-        service = ServiceOption(name="Window Cleaning")
+        service = _get_service("Window Cleaning")
         customer = Customer(primary_name="Jamie Client", primary_city="Test City")
         quote_request = QuoteRequest(
             full_name="Jamie Client",
@@ -693,7 +693,7 @@ def test_staff_assignment_post_accepts_checkbox_values(client, app, admin_user):
             end_time=time(11, 0),
             status="Scheduled",
         )
-        db.session.add_all([service, customer, quote_request, staff_one, staff_two, appointment])
+        db.session.add_all([customer, quote_request, staff_one, staff_two, appointment])
         db.session.commit()
         appointment_id = appointment.id
         staff_one_id = staff_one.id

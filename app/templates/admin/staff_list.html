@@ -8,7 +8,7 @@
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Staff',
-    description='Review staff contact details, service coverage, weekly availability, scheduled hours, and assigned work.',
+    description='Review staff contact details, weekly availability, scheduled hours, and assigned work.' if not enable_services else 'Review staff contact details, service coverage, weekly availability, scheduled hours, and assigned work.',
     nav_mode='main'
   ) %}
       {{ render_import_button('staff-import-modal') }}
@@ -19,7 +19,7 @@
     <div class="section-bar">
       <div>
         <h2>Staff directory</h2>
-        <p class="subtle-text">Scan each person’s service coverage, next scheduled event, and scheduled hours without leaving the directory.</p>
+        <p class="subtle-text">{{ 'Scan each person’s next scheduled event and scheduled hours without leaving the directory.' if not enable_services else 'Scan each person’s service coverage, next scheduled event, and scheduled hours without leaving the directory.' }}</p>
       </div>
       <p class="subtle-text staff-directory-note">Scheduled hours are planning hours from assigned events, not payroll or time clock hours.</p>
     </div>
@@ -30,7 +30,9 @@
           <tr>
             <th>Staff</th>
             <th>Staff type &amp; status</th>
-            <th>Services</th>
+            {% if enable_services %}
+              <th>Services</th>
+            {% endif %}
             <th>Weekly availability</th>
             <th>Next scheduled event</th>
             <th>Scheduled hours</th>
@@ -54,17 +56,19 @@
                   </div>
                 </div>
               </td>
-              <td>
-                {% if staff_member.services %}
-                  <div class="tag-list">
-                    {% for service in staff_member.services %}
-                      <span class="tag-pill">{{ service.name }}</span>
-                    {% endfor %}
-                  </div>
-                {% else %}
-                  <span class="subtle-text">No services assigned</span>
-                {% endif %}
-              </td>
+              {% if enable_services %}
+                <td>
+                  {% if staff_member.services %}
+                    <div class="tag-list">
+                      {% for service in staff_member.services %}
+                        <span class="tag-pill">{{ service.name }}</span>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span class="subtle-text">No services assigned</span>
+                  {% endif %}
+                </td>
+              {% endif %}
               <td>
                 <div class="staff-directory-meta">
                   <strong>{{ row.availability_summary }}</strong>
@@ -95,7 +99,7 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="6" class="empty-state">No staff members found.</td>
+              <td colspan="{{ 6 if enable_services else 5 }}" class="empty-state">No staff members found.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -103,7 +107,7 @@
     </div>
   </section>
 
-  {{ render_import_modal('staff', 'staff-import-modal') }}
+  {{ render_import_modal('staff', 'staff-import-modal', enable_services) }}
 </main>
 {% endblock %}
 {% block scripts %}

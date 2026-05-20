@@ -183,20 +183,22 @@
               </form>
             </dd>
           </div>
-          <div>
-            <dt>Services</dt>
-            <dd>
-              {% if quote_request.service_list_display %}
-                <div class="tag-list">
-                  {% for service in quote_request.service_list_display.split(', ') %}
-                    <span class="tag-pill">{{ service }}</span>
-                  {% endfor %}
-                </div>
-              {% else %}
-                <span class="subtle-text">No services selected</span>
-              {% endif %}
-            </dd>
-          </div>
+          {% if enable_services %}
+            <div>
+              <dt>Services</dt>
+              <dd>
+                {% if quote_request.service_list_display %}
+                  <div class="tag-list">
+                    {% for service in quote_request.service_list_display.split(', ') %}
+                      <span class="tag-pill">{{ service }}</span>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <span class="subtle-text">No services selected</span>
+                {% endif %}
+              </dd>
+            </div>
+          {% endif %}
         </dl>
 
         <section class="detail-card__section" id="notes">
@@ -434,18 +436,20 @@
                                   <strong>{{ info.staff.display_name }}</strong>
                                   <span class="assignment-inline-badges">
                                     <span class="tag-pill{% if info.availability_state == 'available' %} assignment-inline-pill--available{% elif info.availability_state == 'unavailable' %} assignment-inline-pill--unavailable{% else %} assignment-inline-pill--unknown{% endif %}">{{ info.availability_label }}</span>
-                                    {% if info.required_service_count %}
+                                    {% if enable_services and info.required_service_count %}
                                       <span class="tag-pill">{{ info.matched_service_count }}/{{ info.required_service_count }}</span>
                                     {% endif %}
                                   </span>
                                 </span>
-                                <span class="subtle-text">
-                                  {% if info.service_names %}
-                                    {{ info.service_names|join(', ') }}
-                                  {% else %}
-                                    No services listed
-                                  {% endif %}
-                                </span>
+                                {% if enable_services %}
+                                  <span class="subtle-text">
+                                    {% if info.service_names %}
+                                      {{ info.service_names|join(', ') }}
+                                    {% else %}
+                                      No services listed
+                                    {% endif %}
+                                  </span>
+                                {% endif %}
                               </span>
                             </label>
                           {% endfor %}
@@ -598,7 +602,7 @@
                       <p class="subtle-text">Pick the crew now so the event is ready the moment it is created.</p>
                     </div>
                   </div>
-                  {{ render_staff_assignment_picker(appointment_form.staff_ids.name, schedule_matching_staff_info, schedule_other_staff_info, schedule_required_service_names) }}
+                  {{ render_staff_assignment_picker(appointment_form.staff_ids.name, schedule_matching_staff_info, schedule_other_staff_info, schedule_required_service_names, enable_services) }}
                   {% for error in appointment_form.staff_ids.errors %}
                     <small class="field-error">{{ error }}</small>
                   {% endfor %}
