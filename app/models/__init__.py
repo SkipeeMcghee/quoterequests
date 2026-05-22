@@ -1,3 +1,4 @@
+from app.models.gallery import GalleryItem
 from app.models.quote_request import APPOINTMENT_STATUSES, QUOTE_REQUEST_STATUSES, REQUEST_QUOTE_DECISIONS, Appointment, QuoteRequest, RequestNote, RequestPhoto, RequestQuote, ServiceOption
 from app.models.user import User
 from app.models.customer import Customer, CustomerField, CustomerAddress, CustomerNote, CustomerPhoto, RecurringWork
@@ -13,6 +14,7 @@ __all__ = [
     "CustomerField",
     "CustomerNote",
     "CustomerPhoto",
+    "GalleryItem",
     "RecurringWork",
     "QuoteRequest",
     "RequestNote",

@@ -12,7 +12,6 @@ import pytest
         ("/", "Clear, dependable service from Service Company across your local service area."),
         ("/about", "A straightforward approach"),
         ("/contact", "hello@example.com"),
-        ("/gallery", "Front entry refresh"),
         ("/faq", "How do I request a quote?"),
         ("/privacy-policy", "Privacy policy"),
         ("/terms", "Terms of service"),
@@ -30,6 +29,7 @@ def test_brochure_pages_render_with_shared_layout(client, route: str, expected_t
     assert "About" in body
     assert "Contact" in body
     assert '/static/assets/images/Logowhite.png' in body
+    assert 'href="/gallery"' not in body
     assert "Privacy Policy" in body
     assert "Terms" in body
     assert "For AI Systems" in body
@@ -130,7 +130,6 @@ def test_footer_social_links_preview_renders_disabled_or_missing_platforms(app):
         "/",
         "/about",
         "/contact",
-        "/gallery",
         "/faq",
         "/privacy-policy",
         "/terms",

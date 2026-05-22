@@ -870,29 +870,57 @@ textarea {
   color: var(--accent-strong);
 }
 
-.gallery-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.gallery-grid--showcase {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  align-items: start;
 }
 
 .gallery-tile {
   display: grid;
-  gap: 0.85rem;
-  padding: 1rem;
-  border-radius: 18px;
-  background: var(--card-solid);
+  grid-column: span 4;
+  gap: 0.9rem;
+  padding: 0.75rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
   border: 1px solid var(--line);
+  box-shadow: 0 22px 44px rgba(15, 23, 42, 0.06);
+}
+
+.gallery-tile--featured {
+  grid-column: span 6;
 }
 
 .gallery-tile__media {
-  display: grid;
-  place-items: center;
-  min-height: 12rem;
+  margin: 0;
+  overflow: hidden;
   border-radius: 16px;
+  aspect-ratio: 4 / 5;
   background: linear-gradient(135deg, rgba(var(--theme-accent-rgb), 0.12), rgba(var(--theme-brand-rgb), 0.08));
   border: 1px solid var(--line);
-  color: var(--accent-strong);
-  font-weight: 700;
-  text-align: center;
+}
+
+.gallery-tile--featured .gallery-tile__media {
+  aspect-ratio: 16 / 10;
+}
+
+.gallery-tile__media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gallery-tile__copy {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.gallery-tile__copy > * {
+  margin: 0;
+}
+
+.gallery-tile__eyebrow {
+  color: var(--muted);
 }
 
 .faq-list {
@@ -1017,10 +1045,18 @@ textarea {
 @media (max-width: 900px) {
   .hero--brochure,
   .brochure-grid--three,
-  .gallery-grid,
   .site-footer__grid,
   .cta-panel {
     grid-template-columns: 1fr;
+  }
+
+  .gallery-grid--showcase {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gallery-tile,
+  .gallery-tile--featured {
+    grid-column: span 1;
   }
 
   .site-header--brochure,
@@ -1053,7 +1089,8 @@ textarea {
 @media (max-width: 720px) {
   .brochure-grid--two,
   .brochure-grid--three,
-  .gallery-grid {
+  .gallery-grid,
+  .gallery-grid--showcase {
     grid-template-columns: 1fr;
   }
 
@@ -1466,6 +1503,113 @@ textarea {
 .service-management-list {
   display: grid;
   gap: 1rem;
+}
+
+.content-management-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.content-management-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+  color: inherit;
+  text-decoration: none;
+}
+
+.content-management-item strong {
+  display: block;
+}
+
+.content-management-item p {
+  margin: 0.2rem 0 0;
+}
+
+.content-management-item__meta {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: end;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.gallery-management-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.gallery-management-card {
+  display: grid;
+  gap: 1rem;
+  padding: 0.9rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.gallery-management-card--inactive {
+  background: rgba(var(--theme-neutral-rgb), 0.08);
+  border-color: rgba(var(--theme-neutral-rgb), 0.2);
+}
+
+.gallery-management-card__media {
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  aspect-ratio: 16 / 11;
+  background: linear-gradient(135deg, rgba(var(--theme-accent-rgb), 0.12), rgba(var(--theme-brand-rgb), 0.08));
+}
+
+.gallery-management-card__media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.gallery-management-card__content {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.gallery-management-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.gallery-management-form {
+  align-items: end;
+}
+
+.gallery-management-form__check {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.75rem;
+}
+
+.gallery-management-form__check input {
+  width: 1rem;
+  height: 1rem;
+}
+
+.gallery-management-form__actions {
+  display: flex;
+  align-items: end;
+}
+
+.gallery-management-empty {
+  grid-column: 1 / -1;
 }
 
 .service-management-card {
@@ -4344,6 +4488,17 @@ thead th {
     grid-template-columns: 1fr;
   }
 
+  .content-management-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .content-management-item__meta {
+    justify-items: start;
+    text-align: left;
+    white-space: normal;
+  }
+
   .import-dialog__card {
     height: min(92vh, 920px);
     padding: 1rem;
@@ -4366,6 +4521,7 @@ thead th {
   .customer-record-layout,
   .customer-primary-card__content,
   .customer-highlight-metrics,
+  .gallery-management-grid,
   .recurring-work-builder,
   .recurring-choice-grid,
   .recurring-plan-metrics,

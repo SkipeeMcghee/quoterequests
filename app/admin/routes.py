@@ -22,6 +22,8 @@ from app.forms.admin import (
     CustomerNoteForm,
     CustomerPhotoUploadForm,
     DeleteNoteForm,
+    GalleryItemEditForm,
+    GalleryItemUploadForm,
     LastContactedForm,
     LinkCustomerForm,
     MergeCustomerForm,
@@ -40,6 +42,14 @@ from app.forms.admin import (
     ServiceManagementForm,
 )
 from app.models import APPOINTMENT_STATUSES, Appointment, ServiceOption
+from app.services.gallery_catalog import (
+    create_gallery_item,
+    get_gallery_item,
+    list_gallery_items,
+    require_gallery_enabled,
+    set_gallery_item_active,
+    update_gallery_item,
+)
 from app.services.service_catalog import (
     create_service_option,
     get_service_option,
@@ -121,6 +131,10 @@ VALID_RECURRING_SOURCES = {"customer"}
 WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 AVAILABILITY_MINUTES_PER_DAY = 24 * 60
 AVAILABILITY_BOARD_SLOT_MINUTES = 15
+
+
+def _is_content_enabled() -> bool:
+    return bool(current_app.config.get("ENABLE_SERVICES") or current_app.config.get("ENABLE_GALLERY"))
 
 
 def _is_ajax_request() -> bool:
@@ -789,6 +803,52 @@ def _build_service_management_forms(
     }
 
 
+def _build_gallery_management_forms(
+    *,
+    create_form: GalleryItemUploadForm | None = None,
+    gallery_form_overrides: dict[int, GalleryItemEditForm] | None = None,
+):
+    gallery_items = list_gallery_items(include_inactive=True)
+    gallery_forms: dict[int, GalleryItemEditForm] = {}
+    status_forms: dict[int, ActionForm] = {}
+    overrides = gallery_form_overrides or {}
+
+    for gallery_item in gallery_items:
+        gallery_forms[gallery_item.id] = overrides.get(gallery_item.id) or GalleryItemEditForm(
+            prefix=f"gallery-{gallery_item.id}",
+            title=gallery_item.title,
+            caption=gallery_item.caption,
+            service_id=gallery_item.service_id or 0,
+            featured=gallery_item.featured,
+            display_order=gallery_item.display_order,
+        )
+        status_forms[gallery_item.id] = ActionForm(prefix=f"gallery-status-{gallery_item.id}")
+
+    return {
+        "gallery_items": gallery_items,
+        "gallery_forms": gallery_forms,
+        "status_forms": status_forms,
+        "create_form": create_form or GalleryItemUploadForm(prefix="gallery-create"),
+        "active_gallery_count": sum(1 for gallery_item in gallery_items if gallery_item.is_active),
+        "archived_gallery_count": sum(1 for gallery_item in gallery_items if not gallery_item.is_active),
+        "featured_gallery_count": sum(1 for gallery_item in gallery_items if gallery_item.featured),
+    }
+
+
+def _render_gallery_management_page(
+    *,
+    create_form: GalleryItemUploadForm | None = None,
+    gallery_form_overrides: dict[int, GalleryItemEditForm] | None = None,
+):
+    return render_template(
+        "admin/gallery.html",
+        **_build_gallery_management_forms(
+            create_form=create_form,
+            gallery_form_overrides=gallery_form_overrides,
+        ),
+    )
+
+
 def _render_service_settings_page(
     *,
     create_form: ServiceManagementForm | None = None,
@@ -801,6 +861,110 @@ def _render_service_settings_page(
             service_form_overrides=service_form_overrides,
         ),
     )
+
+
+@bp.get("/content")
+@login_required
+def content_index():
+    if not _is_content_enabled():
+        raise NotFound()
+
+    content_modules: list[dict[str, str]] = []
+
+    if current_app.config.get("ENABLE_GALLERY"):
+        gallery_items = list_gallery_items(include_inactive=True)
+        active_count = sum(1 for gallery_item in gallery_items if gallery_item.is_active)
+        featured_count = sum(1 for gallery_item in gallery_items if gallery_item.featured)
+        content_modules.append(
+            {
+                "title": "Gallery",
+                "description": "Manage public gallery images and short supporting text while leaving layout and styling in the templates.",
+                "manage_url": url_for("admin.gallery_content"),
+                "primary_metric": f"{active_count} active",
+                "secondary_metric": f"{featured_count} featured",
+            }
+        )
+
+    if current_app.config.get("ENABLE_SERVICES"):
+        services = list_services(include_inactive=True)
+        active_count = sum(1 for service in services if service.is_active)
+        archived_count = sum(1 for service in services if not service.is_active)
+        content_modules.append(
+            {
+                "title": "Services",
+                "description": "Keep the service catalog tidy for public intake forms and internal scheduling workflows.",
+                "manage_url": url_for("admin.service_settings"),
+                "primary_metric": f"{active_count} active",
+                "secondary_metric": f"{archived_count} archived",
+            }
+        )
+
+    return render_template("admin/content.html", content_modules=content_modules)
+
+
+@bp.route("/content/gallery", methods=["GET", "POST"])
+@login_required
+def gallery_content():
+    require_gallery_enabled()
+    create_form = GalleryItemUploadForm(prefix="gallery-create")
+    if request.method == "POST" and create_form.validate_on_submit():
+        try:
+            create_gallery_item(
+                image_file=create_form.image.data,
+                title=create_form.title.data,
+                caption=create_form.caption.data,
+                service_id=create_form.service_id.data or None,
+                featured=create_form.featured.data,
+                display_order=create_form.display_order.data,
+            )
+        except Exception as exc:
+            flash(str(exc), "error")
+        else:
+            flash("Gallery image added.", "success")
+            return redirect(url_for("admin.gallery_content"))
+
+    return _render_gallery_management_page(create_form=create_form)
+
+
+@bp.post("/content/gallery/<int:item_id>")
+@login_required
+def update_gallery_item_route(item_id: int):
+    require_gallery_enabled()
+    get_gallery_item(item_id)
+    form = GalleryItemEditForm(prefix=f"gallery-{item_id}")
+    if form.validate_on_submit():
+        try:
+            update_gallery_item(
+                item_id,
+                title=form.title.data,
+                caption=form.caption.data,
+                service_id=form.service_id.data or None,
+                featured=form.featured.data,
+                display_order=form.display_order.data,
+            )
+        except Exception as exc:
+            flash(str(exc), "error")
+        else:
+            flash("Gallery image updated.", "success")
+            return redirect(url_for("admin.gallery_content"))
+
+    return _render_gallery_management_page(gallery_form_overrides={item_id: form})
+
+
+@bp.post("/content/gallery/<int:item_id>/status")
+@login_required
+def toggle_gallery_item_status_route(item_id: int):
+    require_gallery_enabled()
+    gallery_item = get_gallery_item(item_id)
+    form = ActionForm(prefix=f"gallery-status-{item_id}")
+    if not form.validate_on_submit():
+        flash("The gallery status change could not be verified. Reload and try again.", "error")
+        return redirect(url_for("admin.gallery_content"))
+
+    target_is_active = not gallery_item.is_active
+    set_gallery_item_active(item_id, is_active=target_is_active)
+    flash("Gallery image reactivated." if target_is_active else "Gallery image archived.", "success")
+    return redirect(url_for("admin.gallery_content"))
 
 
 @bp.route("/settings/services", methods=["GET", "POST"])

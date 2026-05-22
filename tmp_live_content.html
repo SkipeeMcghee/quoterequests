@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Content | Admin</title>
+    <link rel="stylesheet" href="/static/css/app.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      
+        
+        <header class="site-header site-header--admin">
+          
+            <a class="brand" href="/" aria-label="Go to public site">Public Site</a>
+            <nav class="site-nav site-nav--admin" aria-label="Admin navigation">
+              <section class="dashboard-actions admin-nav-buttons">
+  
+    <a class="btn btn-secondary" href="/admin/">Requests</a>
+    
+      <a class="btn btn-secondary" href="/admin/content">Content</a>
+    
+    
+      <a class="btn btn-secondary" href="/admin/calendar">Schedule</a>
+    
+    
+      <a class="btn btn-secondary" href="/admin/customers">Customers</a>
+    
+    
+      <a class="btn btn-secondary" href="/admin/staff">Staff</a>
+    
+    
+      <a class="btn btn-secondary" href="/admin/recurring-work">Recurring Work</a>
+    
+  
+</section>
+              <form action="/auth/logout" method="post">
+                <input type="hidden" name="csrf_token" value="ImMwNDE1MDA5MWU3YmNlODg5ZGFmMTE4ZTViMDJjYzhkYjIwNjRmNmEi.ahDCsw.HnAphjenicojTB8XTz6YjynE4BQ">
+                <button class="btn btn-secondary btn-small" type="submit">Logout</button>
+              </form>
+            </nav>
+          
+        </header>
+      
+
+      
+        
+      
+
+      
+<main class="shell dashboard-shell">
+  
+  
+  
+  <section class="section-intro admin-page-header">
+    
+      <div class="admin-page-header__nav admin-page-header__nav--top">
+        <a class="btn btn-secondary btn-small" href="/admin/">Back to Dashboard</a>
+      </div>
+    
+
+    <div class="admin-page-header__body">
+      <div class="admin-page-header__copy">
+        <h1>Content</h1>
+        
+          <p class="admin-page-header__description">Manage structured brochure content while keeping layout, styling, and spacing inside the templates.</p>
+        
+        
+      </div>
+
+      
+    </div>
+
+    
+  </section>
+
+
+  <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Content areas</h2>
+        <p class="subtle-text">Keep imagery sharp, text concise, and the public presentation consistent.</p>
+      </div>
+    </div>
+
+    <div class="content-management-list">
+      
+        <a class="content-management-item" href="/admin/settings/services">
+          <div>
+            <strong>Services</strong>
+            <p class="subtle-text">Keep the service catalog tidy for public intake forms and internal scheduling workflows.</p>
+          </div>
+          <div class="content-management-item__meta">
+            <strong>10 active</strong>
+            <span class="subtle-text">0 archived</span>
+          </div>
+        </a>
+      
+    </div>
+  </section>
+</main>
+
+      
+    </div>
+    <dialog class="confirm-dialog" id="confirm-dialog">
+      <div class="confirm-dialog__card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-dialog-message">
+        <p class="confirm-dialog__message" id="confirm-dialog-message"></p>
+        <div class="button-row confirm-dialog__actions">
+          <button type="button" class="btn btn-secondary btn-small" data-confirm-cancel>No</button>
+          <button type="button" class="btn btn-primary btn-small" data-confirm-accept>Yes</button>
+        </div>
+      </div>
+    </dialog>
+    
+    <script>
+    (function () {
+      const dialog = document.getElementById('confirm-dialog');
+      const message = dialog ? dialog.querySelector('.confirm-dialog__message') : null;
+      const acceptButton = dialog ? dialog.querySelector('[data-confirm-accept]') : null;
+      const cancelButton = dialog ? dialog.querySelector('[data-confirm-cancel]') : null;
+      let pendingForm = null;
+
+      function closeDialog() {
+        if (!dialog || !dialog.open) {
+          return;
+        }
+        dialog.close();
+      }
+
+      document.addEventListener('submit', function (event) {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) {
+          return;
+        }
+
+        const confirmText = form.dataset.confirmText;
+        if (!confirmText) {
+          return;
+        }
+
+        if (form.dataset.confirmed === 'true') {
+          form.dataset.confirmed = 'false';
+          return;
+        }
+
+        if (!dialog || typeof dialog.showModal !== 'function' || !message || !acceptButton || !cancelButton) {
+          if (!window.confirm(confirmText)) {
+            event.preventDefault();
+          }
+          return;
+        }
+
+        event.preventDefault();
+        pendingForm = form;
+        message.textContent = confirmText;
+        dialog.showModal();
+      });
+
+      if (cancelButton) {
+        cancelButton.addEventListener('click', function () {
+          pendingForm = null;
+          closeDialog();
+        });
+      }
+
+      if (acceptButton) {
+        acceptButton.addEventListener('click', function () {
+          if (!pendingForm) {
+            closeDialog();
+            return;
+          }
+
+          const formToSubmit = pendingForm;
+          pendingForm = null;
+          formToSubmit.dataset.confirmed = 'true';
+          closeDialog();
+          if (formToSubmit.requestSubmit) {
+            formToSubmit.requestSubmit();
+            return;
+          }
+          HTMLFormElement.prototype.submit.call(formToSubmit);
+        });
+      }
+
+      if (dialog) {
+        dialog.addEventListener('cancel', function () {
+          pendingForm = null;
+        });
+        dialog.addEventListener('close', function () {
+          if (dialog.returnValue !== 'default') {
+            dialog.returnValue = 'default';
+          }
+        });
+      }
+    })();
+    </script>
+  </body>
+</html>

@@ -10,6 +10,7 @@ from app.extensions import csrf, db, login_manager, migrate
 from app.main import bp as main_bp
 from app.admin import bp as admin_bp
 from app.cli import register_cli
+from app.services.gallery_catalog import has_public_gallery_items
 from app.services.service_catalog import list_active_services
 
 
@@ -148,12 +149,14 @@ def register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_feature_flags() -> dict[str, object]:
         return {
+            "enable_gallery": app.config.get("ENABLE_GALLERY", False),
             "enable_services": app.config.get("ENABLE_SERVICES", False),
             "enable_scheduling": app.config.get("ENABLE_SCHEDULING", False),
             "enable_staff_management": app.config.get("ENABLE_STAFF_MANAGEMENT", False),
             "enable_customer_records": app.config.get("ENABLE_CUSTOMER_RECORDS", False),
             "enable_calendar": app.config.get("ENABLE_CALENDAR", False),
             "enable_recurring_work": app.config.get("ENABLE_RECURRING_WORK", False),
+            "has_public_gallery": has_public_gallery_items(),
             "business_name": app.config.get("BUSINESS_NAME", app.config.get("COMPANY_NAME", "Service Company")),
             "tagline": app.config.get("TAGLINE", ""),
             "phone": app.config.get("BUSINESS_PHONE", ""),

@@ -55,6 +55,11 @@ class ServiceOption(db.Model):
         back_populates="services",
         order_by="StaffMember.display_name",
     )
+    gallery_items = db.relationship(
+        "GalleryItem",
+        back_populates="service",
+        order_by="(GalleryItem.display_order, GalleryItem.id)",
+    )
 
     def __str__(self) -> str:
         return self.name

@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% from "admin/page_header.html" import render_admin_page_header with context %}
+
+{% block title %}Gallery | Admin{% endblock %}
+
+{% block content %}
+<main class="shell dashboard-shell">
+  {% call render_admin_page_header(
+    title='Gallery',
+    description='Upload and arrange public gallery imagery without exposing layout controls or freeform page editing.',
+    nav_mode='sub',
+    return_url=url_for('admin.content_index'),
+    return_label='Back to Content',
+    actions_class='dashboard-metrics'
+  ) %}
+      <article class="metric-card">
+        <strong>{{ active_gallery_count }}</strong>
+        <span>Active images</span>
+      </article>
+      <article class="metric-card">
+        <strong>{{ featured_gallery_count }}</strong>
+        <span>Featured</span>
+      </article>
+      <article class="metric-card">
+        <strong>{{ archived_gallery_count }}</strong>
+        <span>Archived</span>
+      </article>
+  {% endcall %}
+
+  <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Upload image</h2>
+        <p class="subtle-text">Short titles and captions help the public layout stay clean on every screen size.</p>
+      </div>
+    </div>
+
+    <form method="post" action="{{ url_for('admin.gallery_content') }}" enctype="multipart/form-data" class="form-grid gallery-management-form">
+      {{ create_form.hidden_tag() }}
+
+      <label class="form-field field-span-2">
+        <span>Image</span>
+        {{ create_form.image(class_="input") }}
+        {% for error in create_form.image.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="form-field">
+        <span>Title</span>
+        {{ create_form.title(class_="input", placeholder="Front entry refresh") }}
+        {% for error in create_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="form-field field-span-2">
+        <span>Caption</span>
+        {{ create_form.caption(class_="textarea textarea--small", placeholder="Short optional context for the public gallery.") }}
+        {% for error in create_form.caption.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="form-field">
+        <span>Linked service</span>
+        {{ create_form.service_id(class_="input") }}
+        {% for error in create_form.service_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="form-field">
+        <span>Display order</span>
+        {{ create_form.display_order(class_="input", min="0") }}
+        {% for error in create_form.display_order.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="form-field gallery-management-form__check">
+        {{ create_form.featured() }}
+        <span>Feature this image</span>
+      </label>
+
+      <div class="form-field gallery-management-form__actions">
+        {{ create_form.submit(class_="btn btn-primary", value="Upload Image") }}
+      </div>
+    </form>
+  </section>
+
+  <section class="table-card">
+    <div class="section-bar">
+      <div>
+        <h2>Gallery library</h2>
+        <p class="subtle-text">Archive images to remove them from the public gallery while preserving the content record.</p>
+      </div>
+    </div>
+
+    <div class="gallery-management-grid">
+      {% for item in gallery_items %}
+        {% set form = gallery_forms[item.id] %}
+        {% set status_form = status_forms[item.id] %}
+        <article class="gallery-management-card{% if not item.is_active %} gallery-management-card--inactive{% endif %}">
+          <div class="gallery-management-card__media">
+            <img src="{{ url_for('static', filename=item.image_path) }}" alt="{{ item.alt_text }}">
+          </div>
+
+          <div class="gallery-management-card__content">
+            <div class="section-bar compact-bar">
+              <div>
+                <h2>{{ item.title }}</h2>
+                <p class="subtle-text">{{ 'Visible on the public gallery.' if item.is_active else 'Archived from the public gallery.' }}</p>
+              </div>
+              <div class="gallery-management-badges">
+                {% if item.featured %}
+                  <span class="status-badge service-management-status service-management-status--active">Featured</span>
+                {% endif %}
+                <span class="status-badge service-management-status{% if item.is_active %} service-management-status--active{% else %} service-management-status--inactive{% endif %}">
+                  {{ 'Active' if item.is_active else 'Archived' }}
+                </span>
+              </div>
+            </div>
+
+            <form method="post" action="{{ url_for('admin.update_gallery_item_route', item_id=item.id) }}" class="form-grid gallery-management-form">
+              {{ form.hidden_tag() }}
+
+              <label class="form-field">
+                <span>Title</span>
+                {{ form.title(class_="input") }}
+                {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+
+              <label class="form-field field-span-2">
+                <span>Caption</span>
+                {{ form.caption(class_="textarea textarea--small", placeholder="Short optional context for the public gallery.") }}
+                {% for error in form.caption.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+
+              <label class="form-field">
+                <span>Linked service</span>
+                {{ form.service_id(class_="input") }}
+                {% for error in form.service_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+
+              <label class="form-field">
+                <span>Display order</span>
+                {{ form.display_order(class_="input", min="0") }}
+                {% for error in form.display_order.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+
+              <label class="form-field gallery-management-form__check">
+                {{ form.featured() }}
+                <span>Feature this image</span>
+              </label>
+
+              <div class="form-field gallery-management-form__actions">
+                {{ form.submit(class_="btn btn-primary", value="Save Changes") }}
+              </div>
+            </form>
+
+            <form method="post" action="{{ url_for('admin.toggle_gallery_item_status_route', item_id=item.id) }}" class="form-actions service-management-toggle-form">
+              {{ status_form.hidden_tag() }}
+              {% if item.is_active %}
+                <button type="submit" class="btn btn-danger btn-small">Archive</button>
+                <span class="subtle-text">Archived images are removed from the public gallery immediately.</span>
+              {% else %}
+                <button type="submit" class="btn btn-secondary btn-small">Reactivate</button>
+                <span class="subtle-text">Reactivated images return to the public gallery at their saved order.</span>
+              {% endif %}
+            </form>
+          </div>
+        </article>
+      {% else %}
+        <p class="empty-state gallery-management-empty">No gallery images have been uploaded yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+</main>
+{% endblock %}

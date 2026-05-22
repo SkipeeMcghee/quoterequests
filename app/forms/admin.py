@@ -1,7 +1,7 @@
 from app.models import APPOINTMENT_STATUSES, RecurringWork, RequestQuote, ServiceOption, StaffMember
 from app.services.service_catalog import is_services_enabled, list_service_id_choices
 from flask_wtf import FlaskForm
-from flask_wtf.file import FileAllowed, MultipleFileField
+from flask_wtf.file import FileAllowed, FileField, FileRequired, MultipleFileField
 from wtforms import BooleanField, DateField, DecimalField, HiddenField, IntegerField, SelectField, SelectMultipleField, StringField, SubmitField, TextAreaField
 from wtforms.validators import DataRequired, Email, InputRequired, Length, NumberRange, Optional
 from wtforms.widgets import CheckboxInput, ListWidget
@@ -26,6 +26,15 @@ def _load_staff_choices() -> list[tuple[int, str]]:
 
     staff_members = StaffMember.query.order_by(StaffMember.display_name).all()
     return [(staff.id, staff.display_name) for staff in staff_members]
+
+
+def _load_gallery_service_choices() -> list[tuple[int, str]]:
+    services = ServiceOption.query.order_by(ServiceOption.display_order.asc(), ServiceOption.name.asc()).all()
+    choices = [(0, "No linked service")]
+    for service in services:
+        label = service.name if service.is_active else f"{service.name} (inactive)"
+        choices.append((service.id, label))
+    return choices
 
 
 class RequestQuoteForm(FlaskForm):
@@ -330,6 +339,51 @@ class ServiceManagementForm(FlaskForm):
         render_kw={"min": "0"},
     )
     submit = SubmitField("Save Service")
+
+
+class GalleryItemUploadForm(FlaskForm):
+    image = FileField(
+        "Image",
+        validators=[
+            FileRequired("Choose an image to upload."),
+            FileAllowed(["jpg", "jpeg", "png", "gif", "webp"], "Images only."),
+        ],
+    )
+    title = StringField("Title", validators=[DataRequired(), Length(max=80)])
+    caption = TextAreaField("Caption", validators=[Optional(), Length(max=180)])
+    service_id = SelectField("Linked service", coerce=int, validators=[Optional()], default=0)
+    featured = BooleanField("Featured", validators=[Optional()])
+    display_order = IntegerField(
+        "Display order",
+        validators=[InputRequired(), NumberRange(min=0)],
+        default=0,
+        render_kw={"min": "0"},
+    )
+    submit = SubmitField("Upload Image")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.service_id.validate_choice = False
+        self.service_id.choices = _load_gallery_service_choices()
+
+
+class GalleryItemEditForm(FlaskForm):
+    title = StringField("Title", validators=[DataRequired(), Length(max=80)])
+    caption = TextAreaField("Caption", validators=[Optional(), Length(max=180)])
+    service_id = SelectField("Linked service", coerce=int, validators=[Optional()], default=0)
+    featured = BooleanField("Featured", validators=[Optional()])
+    display_order = IntegerField(
+        "Display order",
+        validators=[InputRequired(), NumberRange(min=0)],
+        default=0,
+        render_kw={"min": "0"},
+    )
+    submit = SubmitField("Save Changes")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.service_id.validate_choice = False
+        self.service_id.choices = _load_gallery_service_choices()
 
 
 class RecurringWorkForm(TimeSelectMixin, FlaskForm):

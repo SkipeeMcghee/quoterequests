@@ -12,9 +12,11 @@
       {% if enable_services %}
         <a href="{{ url_for('main.services_page') }}">Services</a>
       {% endif %}
+      {% if has_public_gallery %}
+        <a href="{{ url_for('main.gallery_page') }}">Gallery</a>
+      {% endif %}
       <a href="{{ url_for('main.about_page') }}">About</a>
       <a href="{{ url_for('main.contact_page') }}">Contact</a>
-      <a href="{{ url_for('main.gallery_page') }}">Gallery</a>
       <a href="{{ url_for('main.faq_page') }}">FAQ</a>
       <a href="{{ url_for('main.quote_request') }}">Get a Quote</a>
     </nav>

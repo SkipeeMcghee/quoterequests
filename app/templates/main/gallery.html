@@ -7,16 +7,23 @@
   <section class="section-intro">
     <p class="eyebrow">Gallery</p>
     <h1>Project gallery</h1>
-    <p>A simple gallery for before-and-after examples, finished work, and the kinds of projects customers often ask about.</p>
+    <p>Selected project imagery with concise captions, clear spacing, and a presentation that stays aligned with the rest of the site.</p>
   </section>
 
-  <section class="gallery-grid">
+  <section class="gallery-grid gallery-grid--showcase">
     {% for item in gallery_items %}
-      <article class="gallery-tile">
-        <div class="gallery-tile__media" aria-hidden="true">{{ item.title }}</div>
-        <div>
+      <article class="gallery-tile{% if item.featured %} gallery-tile--featured{% endif %}">
+        <figure class="gallery-tile__media">
+          <img src="{{ url_for('static', filename=item.image_path) }}" alt="{{ item.alt_text }}" {% if loop.index <= 2 %}loading="eager"{% else %}loading="lazy"{% endif %}>
+        </figure>
+        <div class="gallery-tile__copy">
+          {% if item.service_name %}
+            <p class="eyebrow gallery-tile__eyebrow">{{ item.service_name }}</p>
+          {% endif %}
           <h2>{{ item.title }}</h2>
-          <p class="subtle-text">{{ item.caption }}</p>
+          {% if item.caption %}
+            <p class="subtle-text">{{ item.caption }}</p>
+          {% endif %}
         </div>
       </article>
     {% endfor %}
@@ -26,7 +33,7 @@
     <div>
       <p class="eyebrow">Project inquiry</p>
       <h2>Have a similar project in mind?</h2>
-      <p class="subtle-text">Share the details through the quote form and mention anything here that feels close to your project.</p>
+      <p class="subtle-text">Share the project details through the quote form and reference anything here that feels close to the scope you have in mind.</p>
     </div>
     <div class="form-actions">
       <a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>

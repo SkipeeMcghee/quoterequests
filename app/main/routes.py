@@ -1,8 +1,9 @@
 from flask import current_app, flash, redirect, render_template, request, url_for
-from werkzeug.exceptions import BadRequest
+from werkzeug.exceptions import BadRequest, NotFound
 
 from app.forms.quote_request import QuoteRequestForm
 from app.main import bp
+from app.services.gallery_catalog import list_public_gallery_items, require_gallery_enabled
 from app.services.quotes import create_quote_request
 from app.services.recaptcha import should_render_recaptcha, verify_recaptcha_submission
 from app.services.service_catalog import require_services_enabled
@@ -68,33 +69,6 @@ FAQ_ITEMS = (
     },
 )
 
-GALLERY_ITEMS = (
-    {
-        "title": "Front entry refresh",
-        "caption": "A representative slot for entry work, touch-ups, and curb-appeal improvements.",
-    },
-    {
-        "title": "Exterior detail work",
-        "caption": "A representative slot for trim, siding, or finish details that benefit from close review.",
-    },
-    {
-        "title": "Seasonal upkeep",
-        "caption": "A representative slot for recurring upkeep and routine property care.",
-    },
-    {
-        "title": "Repair planning",
-        "caption": "A representative slot for site visits, condition checks, and estimate preparation.",
-    },
-    {
-        "title": "Finished project",
-        "caption": "A representative slot for finished work photographed after cleanup and final review.",
-    },
-    {
-        "title": "Crew on site",
-        "caption": "A representative slot for setup, process, and the care taken while work is underway.",
-    },
-)
-
 QUOTE_REQUEST_RECAPTCHA_ACTION = "quote_request"
 SCHEDULE_WORK_RECAPTCHA_ACTION = "schedule_work"
 
@@ -153,7 +127,11 @@ def contact_page():
 
 @bp.get("/gallery")
 def gallery_page():
-    return render_template("main/gallery.html", gallery_items=GALLERY_ITEMS)
+    require_gallery_enabled()
+    gallery_items = list_public_gallery_items()
+    if not gallery_items:
+        raise NotFound()
+    return render_template("main/gallery.html", gallery_items=gallery_items)
 
 
 @bp.get("/faq")
