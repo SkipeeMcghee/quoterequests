@@ -7,38 +7,143 @@
   <section class="section-intro">
     <p class="eyebrow">Gallery</p>
     <h1>Project gallery</h1>
-    <p>Selected project imagery with concise captions, clear spacing, and a presentation that stays aligned with the rest of the site.</p>
+    <p>A quick visual pass through recent work. Open any image for the project details.</p>
   </section>
 
   <section class="gallery-grid gallery-grid--showcase">
     {% for item in gallery_items %}
-      <article class="gallery-tile{% if item.featured %} gallery-tile--featured{% endif %}">
-        <figure class="gallery-tile__media">
+      <button
+        type="button"
+        class="gallery-tile{% if item.featured %} gallery-tile--featured{% endif %}"
+        data-gallery-public-open
+        data-gallery-public-src="{{ url_for('static', filename=item.image_path) }}"
+        data-gallery-public-alt="{{ item.alt_text }}"
+        data-gallery-public-title="{{ item.title }}"
+        data-gallery-public-caption="{{ item.normalized_caption or '' }}"
+        data-gallery-public-service="{{ item.service_name or '' }}"
+        aria-label="View {{ item.title }}"
+      >
+        <span class="gallery-tile__media">
           <img src="{{ url_for('static', filename=item.image_path) }}" alt="{{ item.alt_text }}" {% if loop.index <= 2 %}loading="eager"{% else %}loading="lazy"{% endif %}>
-        </figure>
-        <div class="gallery-tile__copy">
-          {% if item.service_name %}
-            <p class="eyebrow gallery-tile__eyebrow">{{ item.service_name }}</p>
-          {% endif %}
-          <h2>{{ item.title }}</h2>
-          {% if item.caption %}
-            <p class="subtle-text">{{ item.caption }}</p>
-          {% endif %}
-        </div>
-      </article>
+        </span>
+      </button>
     {% endfor %}
   </section>
 
-  <section class="cta-panel">
+  <section class="cta-panel cta-panel--quiet">
     <div>
       <p class="eyebrow">Project inquiry</p>
-      <h2>Have a similar project in mind?</h2>
-      <p class="subtle-text">Share the project details through the quote form and reference anything here that feels close to the scope you have in mind.</p>
+      <h2>Have something similar in mind?</h2>
+      <p class="subtle-text">Share the project scope and reference anything here that feels close to what you need.</p>
     </div>
     <div class="form-actions">
       <a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>
       <a href="{{ url_for('main.contact_page') }}" class="btn btn-secondary">Contact</a>
     </div>
   </section>
+
+  <dialog class="gallery-lightbox" id="gallery-public-lightbox">
+    <div class="gallery-lightbox__card" role="dialog" aria-modal="true" aria-labelledby="gallery-public-lightbox-title">
+      <button type="button" class="gallery-lightbox__close" data-gallery-public-close aria-label="Close image preview">&times;</button>
+      <div class="gallery-lightbox__image-frame">
+        <img src="" alt="" data-gallery-public-image>
+      </div>
+      <div class="gallery-lightbox__copy">
+        <p class="eyebrow" data-gallery-public-service hidden></p>
+        <h2 id="gallery-public-lightbox-title" data-gallery-public-title></h2>
+        <p class="subtle-text" data-gallery-public-caption hidden></p>
+      </div>
+    </div>
+  </dialog>
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const lightbox = document.getElementById('gallery-public-lightbox');
+  const lightboxImage = lightbox ? lightbox.querySelector('[data-gallery-public-image]') : null;
+  const lightboxTitle = lightbox ? lightbox.querySelector('[data-gallery-public-title]') : null;
+  const lightboxCaption = lightbox ? lightbox.querySelector('[data-gallery-public-caption]') : null;
+  const lightboxService = lightbox ? lightbox.querySelector('[data-gallery-public-service]') : null;
+
+  function syncPageScrollLock() {
+    document.body.classList.toggle('gallery-popup-open', Boolean(lightbox && lightbox.hasAttribute('open')));
+  }
+
+  function openLightbox(trigger) {
+    if (!lightbox || !lightboxImage || !lightboxTitle || !trigger) {
+      return;
+    }
+
+    const service = trigger.dataset.galleryPublicService || '';
+    const caption = trigger.dataset.galleryPublicCaption || '';
+
+    lightboxImage.src = trigger.dataset.galleryPublicSrc || '';
+    lightboxImage.alt = trigger.dataset.galleryPublicAlt || '';
+    lightboxTitle.textContent = trigger.dataset.galleryPublicTitle || '';
+
+    if (lightboxCaption) {
+      lightboxCaption.textContent = caption;
+      lightboxCaption.hidden = !caption;
+    }
+
+    if (lightboxService) {
+      lightboxService.textContent = service;
+      lightboxService.hidden = !service;
+    }
+
+    if (typeof lightbox.showModal === 'function') {
+      lightbox.showModal();
+      syncPageScrollLock();
+      return;
+    }
+
+    lightbox.setAttribute('open', 'open');
+    syncPageScrollLock();
+  }
+
+  function closeLightbox() {
+    if (!lightbox) {
+      return;
+    }
+
+    if (lightbox.open && typeof lightbox.close === 'function') {
+      lightbox.close();
+    } else {
+      lightbox.removeAttribute('open');
+    }
+
+    syncPageScrollLock();
+  }
+
+  document.querySelectorAll('[data-gallery-public-open]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      openLightbox(button);
+    });
+  });
+
+  if (lightbox) {
+    const closeButton = lightbox.querySelector('[data-gallery-public-close]');
+    if (closeButton) {
+      closeButton.addEventListener('click', closeLightbox);
+    }
+
+    lightbox.addEventListener('click', function (event) {
+      if (event.target === lightbox) {
+        closeLightbox();
+      }
+    });
+
+    lightbox.addEventListener('cancel', function (event) {
+      event.preventDefault();
+      closeLightbox();
+    });
+
+    lightbox.addEventListener('close', syncPageScrollLock);
+  }
+
+  syncPageScrollLock();
+})();
+</script>
 {% endblock %}

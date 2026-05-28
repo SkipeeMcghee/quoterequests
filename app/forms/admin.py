@@ -332,12 +332,6 @@ class CreateScheduledWorkForm(TimeSelectMixin, FlaskForm):
 class ServiceManagementForm(FlaskForm):
     name = StringField("Service name", validators=[DataRequired(), Length(max=120)])
     description = TextAreaField("Description", validators=[Optional(), Length(max=2000)])
-    display_order = IntegerField(
-        "Display order",
-        validators=[InputRequired(), NumberRange(min=0)],
-        default=0,
-        render_kw={"min": "0"},
-    )
     submit = SubmitField("Save Service")
 
 
@@ -353,12 +347,6 @@ class GalleryItemUploadForm(FlaskForm):
     caption = TextAreaField("Caption", validators=[Optional(), Length(max=180)])
     service_id = SelectField("Linked service", coerce=int, validators=[Optional()], default=0)
     featured = BooleanField("Featured", validators=[Optional()])
-    display_order = IntegerField(
-        "Display order",
-        validators=[InputRequired(), NumberRange(min=0)],
-        default=0,
-        render_kw={"min": "0"},
-    )
     submit = SubmitField("Upload Image")
 
     def __init__(self, *args, **kwargs):
@@ -372,13 +360,6 @@ class GalleryItemEditForm(FlaskForm):
     caption = TextAreaField("Caption", validators=[Optional(), Length(max=180)])
     service_id = SelectField("Linked service", coerce=int, validators=[Optional()], default=0)
     featured = BooleanField("Featured", validators=[Optional()])
-    display_order = IntegerField(
-        "Display order",
-        validators=[InputRequired(), NumberRange(min=0)],
-        default=0,
-        render_kw={"min": "0"},
-    )
-    submit = SubmitField("Save Changes")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -34,12 +34,16 @@ def test_admin_can_create_update_archive_and_reactivate_services(client, app, ad
     app.config["ENABLE_SERVICES"] = True
     _login_as_admin(client, admin_user)
 
+    with app.app_context():
+        existing_max_display_order = db.session.query(db.func.max(ServiceOption.display_order)).scalar()
+        painting_service = ServiceOption.query.filter_by(name="Painting").one()
+        painting_service_id = painting_service.id
+
     create_response = client.post(
         "/admin/settings/services",
         data={
             "service-create-name": "Gutter Cleaning",
             "service-create-description": "Seasonal gutter clearing and debris removal.",
-            "service-create-display_order": "2",
             "service-create-submit": "Add Service",
         },
         follow_redirects=False,
@@ -49,9 +53,15 @@ def test_admin_can_create_update_archive_and_reactivate_services(client, app, ad
     with app.app_context():
         service = ServiceOption.query.filter_by(name="Gutter Cleaning").one()
         assert service.description == "Seasonal gutter clearing and debris removal."
-        assert service.display_order == 2
+        assert service.display_order == int(existing_max_display_order) + 1
         assert service.is_active is True
         service_id = service.id
+
+    admin_response = client.get("/admin/settings/services")
+    assert admin_response.status_code == 200
+    admin_body = admin_response.get_data(as_text=True)
+    assert 'data-service-order-open="service-order-dialog"' in admin_body
+    assert "Display order" not in admin_body
 
     response = client.get("/quote-request")
     assert response.status_code == 200
@@ -62,7 +72,6 @@ def test_admin_can_create_update_archive_and_reactivate_services(client, app, ad
         data={
             f"service-{service_id}-name": "Seasonal Gutter Cleaning",
             f"service-{service_id}-description": "Spring and fall gutter service.",
-            f"service-{service_id}-display_order": "1",
             f"service-{service_id}-submit": "Save Changes",
         },
         follow_redirects=False,
@@ -74,7 +83,25 @@ def test_admin_can_create_update_archive_and_reactivate_services(client, app, ad
         assert service is not None
         assert service.name == "Seasonal Gutter Cleaning"
         assert service.description == "Spring and fall gutter service."
-        assert service.display_order == 1
+
+    reorder_response = client.post(
+        "/admin/settings/services/order",
+        data={"service_id": [str(service_id), str(painting_service_id)]},
+        follow_redirects=False,
+    )
+    assert reorder_response.status_code == 302
+
+    with app.app_context():
+        service = db.session.get(ServiceOption, service_id)
+        painting_service = db.session.get(ServiceOption, painting_service_id)
+        assert service is not None
+        assert painting_service is not None
+        assert service.display_order == 0
+        assert painting_service.display_order == 1
+
+    reordered_response = client.get("/quote-request")
+    reordered_body = reordered_response.get_data(as_text=True)
+    assert reordered_body.index("Seasonal Gutter Cleaning") < reordered_body.index("Painting")
 
     archive_response = client.post(
         f"/admin/settings/services/{service_id}/status",

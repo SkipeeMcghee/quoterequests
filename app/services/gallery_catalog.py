@@ -52,7 +52,7 @@ def create_gallery_item(
     caption: str | None = None,
     service_id: int | None = None,
     featured: bool = False,
-    display_order: int = 0,
+    display_order: int | None = None,
 ) -> GalleryItem:
     require_gallery_enabled()
     image_path = save_gallery_image(image_file)
@@ -64,7 +64,7 @@ def create_gallery_item(
             service=_resolve_service(service_id),
             featured=bool(featured),
             is_active=True,
-            display_order=_clean_display_order(display_order),
+            display_order=_next_display_order() if display_order is None else _clean_display_order(display_order),
         )
         db.session.add(gallery_item)
         db.session.commit()
@@ -81,7 +81,7 @@ def update_gallery_item(
     caption: str | None = None,
     service_id: int | None = None,
     featured: bool = False,
-    display_order: int = 0,
+    display_order: int | None = None,
 ) -> GalleryItem:
     require_gallery_enabled()
     gallery_item = get_gallery_item(item_id)
@@ -89,9 +89,44 @@ def update_gallery_item(
     gallery_item.caption = _clean_caption(caption)
     gallery_item.service = _resolve_service(service_id)
     gallery_item.featured = bool(featured)
-    gallery_item.display_order = _clean_display_order(display_order)
+    if display_order is not None:
+        gallery_item.display_order = _clean_display_order(display_order)
     db.session.commit()
     return gallery_item
+
+
+def reorder_gallery_items(*, item_ids: list[int], visible_item_ids: set[int]) -> list[GalleryItem]:
+    require_gallery_enabled()
+    if not item_ids:
+        raise BadRequest("Choose at least one gallery image to arrange.")
+
+    normalized_item_ids: list[int] = []
+    seen_item_ids: set[int] = set()
+    for raw_item_id in item_ids:
+        item_id = int(raw_item_id)
+        if item_id in seen_item_ids:
+            raise BadRequest("Gallery arrangement contains duplicate images.")
+        seen_item_ids.add(item_id)
+        normalized_item_ids.append(item_id)
+
+    normalized_visible_ids = {int(item_id) for item_id in visible_item_ids}
+    if not normalized_visible_ids.issubset(seen_item_ids):
+        raise BadRequest("Gallery arrangement included an unknown visibility selection.")
+
+    gallery_items = {
+        gallery_item.id: gallery_item
+        for gallery_item in GalleryItem.query.filter(GalleryItem.id.in_(normalized_item_ids)).all()
+    }
+    if len(gallery_items) != len(normalized_item_ids):
+        raise BadRequest("One or more gallery images could not be found.")
+
+    for index, item_id in enumerate(normalized_item_ids):
+        gallery_item = gallery_items[item_id]
+        gallery_item.display_order = index
+        gallery_item.is_active = item_id in normalized_visible_ids
+
+    db.session.commit()
+    return [gallery_items[item_id] for item_id in normalized_item_ids]
 
 
 def set_gallery_item_active(item_id: int, *, is_active: bool) -> GalleryItem:
@@ -134,3 +169,10 @@ def _clean_display_order(raw_display_order: int | None) -> int:
     if int(raw_display_order) < 0:
         raise BadRequest("Display order must be zero or greater.")
     return int(raw_display_order)
+
+
+def _next_display_order() -> int:
+    max_display_order = db.session.query(db.func.max(GalleryItem.display_order)).scalar()
+    if max_display_order is None:
+        return 0
+    return int(max_display_order) + 1

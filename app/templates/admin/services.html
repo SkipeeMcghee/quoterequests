@@ -46,12 +46,6 @@
         {% for error in create_form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
       </label>
 
-      <label class="form-field">
-        <span>Display order</span>
-        {{ create_form.display_order(class_="input", min="0") }}
-        {% for error in create_form.display_order.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </label>
-
       <div class="form-field service-management-form__actions">
         {{ create_form.submit(class_="btn btn-primary", value="Add Service") }}
       </div>
@@ -62,8 +56,13 @@
     <div class="section-bar">
       <div>
         <h2>Service catalog</h2>
-        <p class="subtle-text">Inactive services are removed from public forms but remain visible in historical records.</p>
+        <p class="subtle-text">Inactive services are removed from public forms but remain visible in historical records. Use Arrange services to control list order.</p>
       </div>
+      {% if services %}
+        <div class="form-actions service-management-toolbar">
+          <button type="button" class="btn btn-secondary btn-small service-management-toolbar__button" data-service-order-open="service-order-dialog">Arrange services</button>
+        </div>
+      {% endif %}
     </div>
 
     <div class="service-management-list">
@@ -96,12 +95,6 @@
               {% for error in form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             </label>
 
-            <label class="form-field">
-              <span>Display order</span>
-              {{ form.display_order(class_="input", min="0") }}
-              {% for error in form.display_order.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-
             <div class="form-field service-management-form__actions">
               {{ form.submit(class_="btn btn-primary", value="Save Changes") }}
             </div>
@@ -123,5 +116,170 @@
       {% endfor %}
     </div>
   </section>
+
+  {% if services %}
+    <dialog class="gallery-dialog" id="service-order-dialog" data-service-order-dialog>
+      <div class="gallery-dialog__card" role="dialog" aria-modal="true" aria-labelledby="service-order-title">
+        <header class="gallery-dialog__header">
+          <div class="gallery-dialog__copy">
+            <h2 id="service-order-title">Arrange services</h2>
+            <p class="subtle-text">Set the order used across customer-facing request forms and internal service pickers.</p>
+          </div>
+          <button type="button" class="inline-remove-button inline-remove-button--bare gallery-dialog__close" data-service-order-close aria-label="Close arrange services dialog">&times;</button>
+        </header>
+
+        <form method="post" action="{{ url_for('admin.reorder_service_options_route') }}" class="service-order-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <ol class="service-order-list" data-service-order-list>
+            {% for service in services %}
+              <li class="service-order-item" data-service-order-item data-service-id="{{ service.id }}">
+                <input type="hidden" name="service_id" value="{{ service.id }}">
+                <div class="service-order-item__copy">
+                  <strong>{{ service.name }}</strong>
+                  {% if service.normalized_description %}
+                    <span class="subtle-text">{{ service.normalized_description }}</span>
+                  {% endif %}
+                  <span class="subtle-text" data-service-order-position>Position {{ loop.index }}</span>
+                </div>
+                <span class="status-badge service-management-status{% if service.is_active %} service-management-status--active{% else %} service-management-status--inactive{% endif %}">
+                  {{ 'Active' if service.is_active else 'Inactive' }}
+                </span>
+                <div class="service-order-item__actions">
+                  <button type="button" class="btn btn-secondary btn-small" data-service-move="up">Up</button>
+                  <button type="button" class="btn btn-secondary btn-small" data-service-move="down">Down</button>
+                </div>
+              </li>
+            {% endfor %}
+          </ol>
+
+          <footer class="gallery-dialog__footer">
+            <p class="subtle-text">The saved order applies anywhere services are listed by display order.</p>
+            <div class="form-actions gallery-dialog__actions">
+              <button type="button" class="btn btn-secondary" data-service-order-close>Cancel</button>
+              <button type="submit" class="btn btn-primary">Save arrangement</button>
+            </div>
+          </footer>
+        </form>
+      </div>
+    </dialog>
+  {% endif %}
 </main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const dialog = document.querySelector('[data-service-order-dialog]');
+  const orderList = document.querySelector('[data-service-order-list]');
+
+  function syncPageScrollLock() {
+    document.body.classList.toggle('gallery-popup-open', Boolean(dialog && dialog.hasAttribute('open')));
+  }
+
+  function openDialog() {
+    if (!dialog) {
+      return;
+    }
+
+    if (typeof dialog.showModal === 'function') {
+      dialog.showModal();
+    } else {
+      dialog.setAttribute('open', 'open');
+    }
+
+    syncPageScrollLock();
+  }
+
+  function closeDialog() {
+    if (!dialog) {
+      return;
+    }
+
+    if (dialog.open && typeof dialog.close === 'function') {
+      dialog.close();
+    } else {
+      dialog.removeAttribute('open');
+    }
+
+    syncPageScrollLock();
+  }
+
+  function refreshOrderList() {
+    if (!orderList) {
+      return;
+    }
+
+    const items = Array.from(orderList.querySelectorAll('[data-service-order-item]'));
+    items.forEach(function (item, index) {
+      const position = item.querySelector('[data-service-order-position]');
+      const moveUpButton = item.querySelector('[data-service-move="up"]');
+      const moveDownButton = item.querySelector('[data-service-move="down"]');
+
+      if (position) {
+        position.textContent = 'Position ' + (index + 1);
+      }
+
+      if (moveUpButton) {
+        moveUpButton.disabled = index === 0;
+      }
+
+      if (moveDownButton) {
+        moveDownButton.disabled = index === items.length - 1;
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-service-order-open]').forEach(function (button) {
+    button.addEventListener('click', openDialog);
+  });
+
+  if (dialog) {
+    dialog.querySelectorAll('[data-service-order-close]').forEach(function (button) {
+      button.addEventListener('click', closeDialog);
+    });
+
+    dialog.addEventListener('click', function (event) {
+      if (event.target === dialog) {
+        closeDialog();
+      }
+    });
+
+    dialog.addEventListener('cancel', function (event) {
+      event.preventDefault();
+      closeDialog();
+    });
+
+    dialog.addEventListener('close', syncPageScrollLock);
+  }
+
+  if (orderList) {
+    orderList.addEventListener('click', function (event) {
+      const button = event.target.closest('[data-service-move]');
+      if (!button) {
+        return;
+      }
+
+      const item = button.closest('[data-service-order-item]');
+      if (!item) {
+        return;
+      }
+
+      if (button.dataset.serviceMove === 'up' && item.previousElementSibling) {
+        orderList.insertBefore(item, item.previousElementSibling);
+      }
+
+      if (button.dataset.serviceMove === 'down' && item.nextElementSibling) {
+        orderList.insertBefore(item.nextElementSibling, item);
+      }
+
+      refreshOrderList();
+    });
+
+    refreshOrderList();
+  }
+
+  syncPageScrollLock();
+})();
+</script>
 {% endblock %}

@@ -101,7 +101,7 @@ def get_service_option(service_id: int) -> ServiceOption:
     return service
 
 
-def create_service_option(*, name: str, description: str | None = None, display_order: int = 0) -> ServiceOption:
+def create_service_option(*, name: str, description: str | None = None, display_order: int | None = None) -> ServiceOption:
     require_services_enabled()
     cleaned_name = _clean_service_name(name)
     _ensure_unique_service_name(cleaned_name)
@@ -109,7 +109,7 @@ def create_service_option(*, name: str, description: str | None = None, display_
     service = ServiceOption(
         name=cleaned_name,
         description=_clean_service_description(description),
-        display_order=display_order,
+        display_order=_next_display_order() if display_order is None else _clean_display_order(display_order),
         is_active=True,
     )
     db.session.add(service)
@@ -122,7 +122,7 @@ def update_service_option(
     *,
     name: str,
     description: str | None = None,
-    display_order: int = 0,
+    display_order: int | None = None,
 ) -> ServiceOption:
     require_services_enabled()
     service = get_service_option(service_id)
@@ -131,9 +131,38 @@ def update_service_option(
 
     service.name = cleaned_name
     service.description = _clean_service_description(description)
-    service.display_order = display_order
+    if display_order is not None:
+        service.display_order = _clean_display_order(display_order)
     db.session.commit()
     return service
+
+
+def reorder_service_options(*, service_ids: list[int]) -> list[ServiceOption]:
+    require_services_enabled()
+    if not service_ids:
+        raise BadRequest("Choose at least one service to arrange.")
+
+    normalized_service_ids: list[int] = []
+    seen_service_ids: set[int] = set()
+    for raw_service_id in service_ids:
+        service_id = int(raw_service_id)
+        if service_id in seen_service_ids:
+            raise BadRequest("Service arrangement contains duplicate services.")
+        seen_service_ids.add(service_id)
+        normalized_service_ids.append(service_id)
+
+    services = {
+        service.id: service
+        for service in ServiceOption.query.filter(ServiceOption.id.in_(normalized_service_ids)).all()
+    }
+    if len(services) != len(normalized_service_ids):
+        raise BadRequest("One or more services could not be found.")
+
+    for index, service_id in enumerate(normalized_service_ids):
+        services[service_id].display_order = index
+
+    db.session.commit()
+    return [services[service_id] for service_id in normalized_service_ids]
 
 
 def set_service_option_active(service_id: int, *, is_active: bool) -> ServiceOption:
@@ -155,6 +184,14 @@ def _clean_service_description(raw_description: str | None) -> str | None:
     return (raw_description or "").strip() or None
 
 
+def _clean_display_order(raw_display_order: int | None) -> int:
+    if raw_display_order is None:
+        raise BadRequest("Display order is required.")
+    if int(raw_display_order) < 0:
+        raise BadRequest("Display order must be zero or greater.")
+    return int(raw_display_order)
+
+
 def _ensure_unique_service_name(cleaned_name: str, existing_service_id: int | None = None) -> None:
     query = ServiceOption.query.filter(func.lower(ServiceOption.name) == cleaned_name.lower())
     if existing_service_id is not None:
@@ -167,3 +204,10 @@ def _format_service_label(service: ServiceOption) -> str:
     if service.is_active:
         return service.name
     return f"{service.name} (inactive)"
+
+
+def _next_display_order() -> int:
+    max_display_order = db.session.query(func.max(ServiceOption.display_order)).scalar()
+    if max_display_order is None:
+        return 0
+    return int(max_display_order) + 1

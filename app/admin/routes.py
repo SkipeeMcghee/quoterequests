@@ -46,6 +46,7 @@ from app.services.gallery_catalog import (
     create_gallery_item,
     get_gallery_item,
     list_gallery_items,
+    reorder_gallery_items,
     require_gallery_enabled,
     set_gallery_item_active,
     update_gallery_item,
@@ -55,6 +56,7 @@ from app.services.service_catalog import (
     get_service_option,
     is_services_enabled,
     list_services,
+    reorder_service_options,
     require_services_enabled,
     resolve_service_options_by_ids,
     set_service_option_active,
@@ -139,6 +141,13 @@ def _is_content_enabled() -> bool:
 
 def _is_ajax_request() -> bool:
     return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def _first_form_error(form, default_message: str) -> str:
+    for field_errors in form.errors.values():
+        if field_errors:
+            return field_errors[0]
+    return default_message
 
 
 def _format_customer_option_label(customer) -> str:
@@ -789,7 +798,6 @@ def _build_service_management_forms(
             prefix=f"service-{service.id}",
             name=service.name,
             description=service.description,
-            display_order=service.display_order,
         )
         status_forms[service.id] = ActionForm(prefix=f"service-status-{service.id}")
 
@@ -820,7 +828,6 @@ def _build_gallery_management_forms(
             caption=gallery_item.caption,
             service_id=gallery_item.service_id or 0,
             featured=gallery_item.featured,
-            display_order=gallery_item.display_order,
         )
         status_forms[gallery_item.id] = ActionForm(prefix=f"gallery-status-{gallery_item.id}")
 
@@ -915,7 +922,6 @@ def gallery_content():
                 caption=create_form.caption.data,
                 service_id=create_form.service_id.data or None,
                 featured=create_form.featured.data,
-                display_order=create_form.display_order.data,
             )
         except Exception as exc:
             flash(str(exc), "error")
@@ -932,23 +938,66 @@ def update_gallery_item_route(item_id: int):
     require_gallery_enabled()
     get_gallery_item(item_id)
     form = GalleryItemEditForm(prefix=f"gallery-{item_id}")
+    is_ajax_request = _is_ajax_request()
     if form.validate_on_submit():
         try:
-            update_gallery_item(
+            gallery_item = update_gallery_item(
                 item_id,
                 title=form.title.data,
                 caption=form.caption.data,
                 service_id=form.service_id.data or None,
                 featured=form.featured.data,
-                display_order=form.display_order.data,
             )
         except Exception as exc:
+            if is_ajax_request:
+                return jsonify({"ok": False, "error": str(exc)}), 400
             flash(str(exc), "error")
         else:
+            if is_ajax_request:
+                return jsonify(
+                    {
+                        "ok": True,
+                        "message": "Gallery image saved.",
+                        "item": {
+                            "id": gallery_item.id,
+                            "title": gallery_item.title,
+                            "caption": gallery_item.normalized_caption,
+                            "service_name": gallery_item.service_name,
+                            "featured": gallery_item.featured,
+                        },
+                    }
+                )
             flash("Gallery image updated.", "success")
             return redirect(url_for("admin.gallery_content"))
 
+    if is_ajax_request:
+        return jsonify({"ok": False, "error": _first_form_error(form, "Gallery image could not be updated.")}), 400
+
     return _render_gallery_management_page(gallery_form_overrides={item_id: form})
+
+
+@bp.post("/content/gallery/order")
+@login_required
+def reorder_gallery_items_route():
+    require_gallery_enabled()
+
+    raw_item_ids = request.form.getlist("item_id")
+    if not raw_item_ids:
+        flash("No gallery images were available to arrange.", "error")
+        return redirect(url_for("admin.gallery_content"))
+
+    try:
+        item_ids = [int(item_id) for item_id in raw_item_ids]
+        visible_item_ids = {int(item_id) for item_id in request.form.getlist("visible_item_id")}
+        reorder_gallery_items(item_ids=item_ids, visible_item_ids=visible_item_ids)
+    except ValueError:
+        flash("Gallery arrangement included an invalid image id.", "error")
+    except Exception as exc:
+        flash(str(exc), "error")
+    else:
+        flash("Gallery arrangement updated.", "success")
+
+    return redirect(url_for("admin.gallery_content"))
 
 
 @bp.post("/content/gallery/<int:item_id>/status")
@@ -977,7 +1026,6 @@ def service_settings():
             create_service_option(
                 name=create_form.name.data,
                 description=create_form.description.data,
-                display_order=create_form.display_order.data,
             )
         except Exception as exc:
             flash(str(exc), "error")
@@ -1000,7 +1048,6 @@ def update_service_route(service_id: int):
                 service_id,
                 name=form.name.data,
                 description=form.description.data,
-                display_order=form.display_order.data,
             )
         except Exception as exc:
             flash(str(exc), "error")
@@ -1009,6 +1056,29 @@ def update_service_route(service_id: int):
             return redirect(url_for("admin.service_settings"))
 
     return _render_service_settings_page(service_form_overrides={service_id: form})
+
+
+@bp.post("/settings/services/order")
+@login_required
+def reorder_service_options_route():
+    require_services_enabled()
+
+    raw_service_ids = request.form.getlist("service_id")
+    if not raw_service_ids:
+        flash("No services were available to arrange.", "error")
+        return redirect(url_for("admin.service_settings"))
+
+    try:
+        service_ids = [int(service_id) for service_id in raw_service_ids]
+        reorder_service_options(service_ids=service_ids)
+    except ValueError:
+        flash("Service arrangement included an invalid service id.", "error")
+    except Exception as exc:
+        flash(str(exc), "error")
+    else:
+        flash("Service arrangement updated.", "success")
+
+    return redirect(url_for("admin.service_settings"))
 
 
 @bp.post("/settings/services/<int:service_id>/status")
