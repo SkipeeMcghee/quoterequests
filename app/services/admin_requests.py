@@ -32,6 +32,113 @@ from app.services.uploads import save_customer_photos
 
 
 _APPOINTMENT_TITLE_UNSET = object()
+_BUSINESS_NAME_SUFFIXES = {
+    "llc",
+    "inc",
+    "corp",
+    "corporation",
+    "co",
+    "company",
+    "ltd",
+    "limited",
+    "llp",
+    "pllc",
+    "plc",
+}
+_BUSINESS_NAME_HINTS = {
+    "services",
+    "service",
+    "solutions",
+    "solution",
+    "cleaning",
+    "construction",
+    "contracting",
+    "contractors",
+    "landscaping",
+    "plumbing",
+    "electric",
+    "electrical",
+    "painting",
+    "roofing",
+    "maintenance",
+    "industries",
+    "systems",
+    "group",
+    "agency",
+    "studio",
+    "studios",
+    "design",
+    "works",
+    "holdings",
+    "properties",
+    "realty",
+    "motors",
+    "auto",
+    "garage",
+    "clinic",
+    "church",
+    "ministries",
+    "school",
+    "restaurant",
+    "cafe",
+    "salon",
+    "shop",
+}
+
+
+def _clean_customer_name_value(value: str | None) -> str | None:
+    return (value or "").strip() or None
+
+
+def _customer_individual_name(customer: Customer) -> str | None:
+    individual_name = _clean_customer_name_value(customer.individual_name)
+    if individual_name:
+        return individual_name
+    if customer.display_name_preference != "business":
+        return _clean_customer_name_value(customer.primary_name)
+    return None
+
+
+def _customer_business_name(customer: Customer) -> str | None:
+    business_name = _clean_customer_name_value(customer.business_name)
+    if business_name:
+        return business_name
+    if customer.display_name_preference == "business":
+        return _clean_customer_name_value(customer.primary_name)
+    return None
+
+
+def _guess_customer_name_type(raw_name: str | None) -> str | None:
+    cleaned_name = _clean_customer_name_value(raw_name)
+    if not cleaned_name:
+        return None
+
+    normalized_tokens = [
+        token.strip("()")
+        for token in cleaned_name.lower().replace(",", " ").replace(".", " ").split()
+        if token.strip("()")
+    ]
+
+    if any(token in _BUSINESS_NAME_SUFFIXES for token in normalized_tokens):
+        return "business"
+    if any(token in _BUSINESS_NAME_HINTS for token in normalized_tokens):
+        return "business"
+    if "&" in cleaned_name and any(token in {"partners", "sons", "associates"} for token in normalized_tokens):
+        return "business"
+    return "individual"
+
+
+def _set_customer_name_state(
+    customer: Customer,
+    *,
+    individual_name: str | None,
+    business_name: str | None,
+    display_name_preference: str | None,
+) -> None:
+    customer.individual_name = _clean_customer_name_value(individual_name)
+    customer.business_name = _clean_customer_name_value(business_name)
+    customer.display_name_preference = (display_name_preference or "").strip().lower() or None
+    customer.sync_primary_name()
 
 
 def list_quote_requests() -> list[QuoteRequest]:
@@ -119,24 +226,38 @@ def create_customer_from_quote_request(request_id: int) -> Customer:
     if quote_request.customer_id is not None:
         raise BadRequest("Request is already linked to a customer.")
 
-    primary_name = quote_request.full_name.strip() if quote_request.full_name else None
+    submitted_name = _clean_customer_name_value(quote_request.full_name)
+    guessed_name_type = _guess_customer_name_type(submitted_name) or "individual"
     primary_phone = (quote_request.phone or "").strip() or None
     primary_email = (quote_request.email or "").strip().lower() or None
     primary_city = quote_request.city.strip() if quote_request.city else None
 
     customer = Customer(
-        primary_name=primary_name,
         primary_phone=primary_phone,
         primary_email=primary_email,
         primary_city=primary_city,
         billing_amount=None,
         billing_frequency=None,
     )
+    _set_customer_name_state(
+        customer,
+        individual_name=submitted_name if guessed_name_type != "business" else None,
+        business_name=submitted_name if guessed_name_type == "business" else None,
+        display_name_preference=guessed_name_type,
+    )
     db.session.add(customer)
     db.session.flush()
 
-    if primary_name:
-        db.session.add(CustomerField(customer_id=customer.id, kind="name", value=primary_name, is_primary=True, source_quote_request_id=quote_request.id))
+    if customer.individual_name:
+        db.session.add(
+            CustomerField(
+                customer_id=customer.id,
+                kind="name",
+                value=customer.individual_name,
+                is_primary=True,
+                source_quote_request_id=quote_request.id,
+            )
+        )
     if primary_phone:
         db.session.add(CustomerField(customer_id=customer.id, kind="phone", value=primary_phone, is_primary=True, source_quote_request_id=quote_request.id))
     if primary_email:
@@ -196,18 +317,23 @@ def create_customer(
         raise BadRequest("Customer city cannot be blank.")
 
     customer = Customer(
-        primary_name=cleaned_name,
         primary_phone=(primary_phone or "").strip() or None,
         primary_email=(primary_email or "").strip().lower() or None,
         primary_city=cleaned_city,
         billing_amount=None,
         billing_frequency=None,
     )
+    _set_customer_name_state(
+        customer,
+        individual_name=cleaned_name,
+        business_name=None,
+        display_name_preference="individual",
+    )
     db.session.add(customer)
     db.session.flush()
 
-    if customer.primary_name:
-        db.session.add(CustomerField(customer_id=customer.id, kind="name", value=customer.primary_name, is_primary=True))
+    if customer.individual_name:
+        db.session.add(CustomerField(customer_id=customer.id, kind="name", value=customer.individual_name, is_primary=True))
     if customer.primary_phone:
         db.session.add(CustomerField(customer_id=customer.id, kind="phone", value=customer.primary_phone, is_primary=True))
     if customer.primary_email:
@@ -701,6 +827,12 @@ def merge_customers(source_customer_id: int, target_customer_id: int) -> Custome
 
     if source.primary_name and not target.primary_name:
         target.primary_name = source.primary_name
+    if _customer_individual_name(source) and not _customer_individual_name(target):
+        target.individual_name = _customer_individual_name(source)
+    if _customer_business_name(source) and not _customer_business_name(target):
+        target.business_name = _customer_business_name(source)
+    if source.display_name_preference in Customer.DISPLAY_NAME_PREFERENCES and target.display_name_preference not in Customer.DISPLAY_NAME_PREFERENCES:
+        target.display_name_preference = source.display_name_preference
     if source.primary_phone and not target.primary_phone:
         target.primary_phone = source.primary_phone
     if source.primary_email and not target.primary_email:
@@ -737,6 +869,7 @@ def merge_customers(source_customer_id: int, target_customer_id: int) -> Custome
     for quote_request in source.quote_requests:
         quote_request.customer_id = target.id
 
+    target.sync_primary_name()
     db.session.delete(source)
     db.session.commit()
     return target
@@ -769,7 +902,8 @@ def add_customer_field(customer_id: int, kind: str, value: str) -> CustomerField
 
     if is_primary:
         if kind == "name":
-            customer.primary_name = cleaned_value
+            customer.individual_name = cleaned_value
+            customer.sync_primary_name()
         elif kind == "phone":
             customer.primary_phone = cleaned_value
         elif kind == "email":
@@ -792,7 +926,8 @@ def set_primary_customer_field(customer_id: int, field_id: int) -> CustomerField
             existing.is_primary = (existing.id == field_id)
 
     if field.kind == "name":
-        customer.primary_name = field.value
+        customer.individual_name = field.value
+        customer.sync_primary_name()
     elif field.kind == "phone":
         customer.primary_phone = field.value
     elif field.kind == "email":
@@ -857,23 +992,13 @@ def set_customer_billing_address(customer_id: int, address_id: int) -> CustomerA
 
 def update_customer_billing(customer_id: int, billing_amount, billing_frequency: str | None) -> Customer:
     customer = get_customer(customer_id)
-    if billing_amount is not None and billing_amount != "":
-        try:
-            billing_amount = Decimal(str(billing_amount))
-        except (InvalidOperation, ValueError):
-            raise BadRequest("Enter a valid billing amount.")
-        if billing_amount < 0:
-            raise BadRequest("Billing amount cannot be negative.")
-        customer.billing_amount = billing_amount
-    else:
-        customer.billing_amount = None
-
-    if billing_frequency:
-        if billing_frequency not in Customer.BILLING_FREQUENCIES:
-            raise BadRequest("Choose a valid billing frequency.")
-        customer.billing_frequency = billing_frequency
-    else:
-        customer.billing_frequency = None
+    normalized_amount, normalized_frequency = _normalize_billing_values(
+        billing_amount,
+        billing_frequency,
+        Customer.BILLING_FREQUENCIES,
+    )
+    customer.billing_amount = normalized_amount
+    customer.billing_frequency = normalized_frequency
 
     db.session.commit()
     return customer
@@ -891,16 +1016,30 @@ def add_customer_note(customer_id: int, note_text: str, user: User) -> CustomerN
     return note
 
 
-def update_customer_info(customer_id: int, primary_name: str, primary_phone: str | None, primary_email: str | None, primary_city: str | None) -> Customer:
+def update_customer_info(
+    customer_id: int,
+    individual_name: str | None,
+    business_name: str | None,
+    display_name_preference: str | None,
+    primary_phone: str | None,
+    primary_email: str | None,
+    primary_city: str | None,
+) -> Customer:
     customer = get_customer(customer_id)
-    cleaned_name = (primary_name or "").strip()
-    if not cleaned_name:
-        raise BadRequest("Customer name cannot be blank.")
+    cleaned_individual_name = _clean_customer_name_value(individual_name)
+    cleaned_business_name = _clean_customer_name_value(business_name)
+    if not (cleaned_individual_name or cleaned_business_name):
+        raise BadRequest("Enter an individual name or a business name.")
     cleaned_city = (primary_city or "").strip()
     if not cleaned_city:
         raise BadRequest("Customer city cannot be blank.")
 
-    customer.primary_name = cleaned_name
+    _set_customer_name_state(
+        customer,
+        individual_name=cleaned_individual_name,
+        business_name=cleaned_business_name,
+        display_name_preference=display_name_preference,
+    )
     customer.primary_phone = (primary_phone or "").strip() or None
     customer.primary_email = (primary_email or "").strip().lower() or None
     customer.primary_city = cleaned_city
@@ -1151,6 +1290,8 @@ def _normalize_recurring_work_values(
     ends_on=None,
     start_time=None,
     end_time=None,
+    billing_amount=None,
+    billing_frequency: str | None = None,
     status: str = "active",
     notes: str | None = None,
 ) -> dict[str, object]:
@@ -1182,6 +1323,12 @@ def _normalize_recurring_work_values(
     if status not in RecurringWork.STATUSES:
         raise BadRequest("Choose a valid recurring work status.")
 
+    normalized_billing_amount, normalized_billing_frequency = _normalize_billing_values(
+        billing_amount,
+        billing_frequency,
+        RecurringWork.BILLING_FREQUENCIES,
+    )
+
     return {
         "title": cleaned_title,
         "frequency": frequency,
@@ -1191,9 +1338,37 @@ def _normalize_recurring_work_values(
         "ends_on": ends_on,
         "start_time": start_time,
         "end_time": end_time,
+        "billing_amount": normalized_billing_amount,
+        "billing_frequency": normalized_billing_frequency,
         "status": status,
         "notes": (notes or "").strip() or None,
     }
+
+
+def _normalize_billing_values(
+    billing_amount,
+    billing_frequency: str | None,
+    valid_frequencies: tuple[str, ...],
+) -> tuple[Decimal | None, str | None]:
+    normalized_frequency = (billing_frequency or "").strip().lower() or None
+
+    if billing_amount is not None and billing_amount != "":
+        try:
+            normalized_amount = Decimal(str(billing_amount))
+        except (InvalidOperation, ValueError):
+            raise BadRequest("Enter a valid billing amount.")
+        if normalized_amount < 0:
+            raise BadRequest("Billing amount cannot be negative.")
+    else:
+        normalized_amount = None
+
+    if normalized_frequency and normalized_frequency not in valid_frequencies:
+        raise BadRequest("Choose a valid billing frequency.")
+
+    if (normalized_amount is None) ^ (normalized_frequency is None):
+        raise BadRequest("Enter both billing amount and billing frequency.")
+
+    return normalized_amount, normalized_frequency
 
 
 def create_recurring_work(
@@ -1207,6 +1382,8 @@ def create_recurring_work(
     ends_on=None,
     start_time=None,
     end_time=None,
+    billing_amount=None,
+    billing_frequency: str | None = None,
     status: str = "active",
     notes: str | None = None,
 ) -> RecurringWork:
@@ -1220,6 +1397,8 @@ def create_recurring_work(
         ends_on=ends_on,
         start_time=start_time,
         end_time=end_time,
+        billing_amount=billing_amount,
+        billing_frequency=billing_frequency,
         status=status,
         notes=notes,
     )
@@ -1241,6 +1420,8 @@ def update_recurring_work(
     ends_on=None,
     start_time=None,
     end_time=None,
+    billing_amount=None,
+    billing_frequency: str | None = None,
     status: str = "active",
     notes: str | None = None,
 ) -> RecurringWork:
@@ -1254,6 +1435,8 @@ def update_recurring_work(
         ends_on=ends_on,
         start_time=start_time,
         end_time=end_time,
+        billing_amount=billing_amount,
+        billing_frequency=billing_frequency,
         status=status,
         notes=notes,
     )
@@ -1266,6 +1449,8 @@ def update_recurring_work(
     recurring_work.ends_on = values["ends_on"]
     recurring_work.start_time = values["start_time"]
     recurring_work.end_time = values["end_time"]
+    recurring_work.billing_amount = values["billing_amount"]
+    recurring_work.billing_frequency = values["billing_frequency"]
     recurring_work.status = values["status"]
     recurring_work.notes = values["notes"]
     db.session.commit()

@@ -2392,6 +2392,8 @@ def new_recurring_work(customer_id: int):
                     ends_on=form.ends_on.data,
                     start_time=form.time_value("start_time"),
                     end_time=form.time_value("end_time"),
+                    billing_amount=form.billing_amount.data,
+                    billing_frequency=form.billing_frequency.data,
                     status=form.status.data,
                     notes=form.notes.data,
                 )
@@ -2460,6 +2462,8 @@ def edit_recurring_work_route(recurring_work_id: int):
                     ends_on=recurring_work_form.ends_on.data,
                     start_time=recurring_work_form.time_value("start_time"),
                     end_time=recurring_work_form.time_value("end_time"),
+                    billing_amount=recurring_work_form.billing_amount.data,
+                    billing_frequency=recurring_work_form.billing_frequency.data,
                     status=recurring_work_form.status.data,
                     notes=recurring_work_form.notes.data,
                 )
@@ -2518,14 +2522,11 @@ def customer_detail(customer_id: int):
     if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     customer = get_customer(customer_id)
-    billing_form = CustomerBillingForm(
-        billing_amount=customer.billing_amount,
-        billing_frequency=customer.billing_frequency,
-        prefix="customer-billing",
-    )
     customer_info_form = CustomerInfoForm(
         prefix="customer-info",
-        primary_name=customer.primary_name,
+        individual_name=customer.individual_name or (customer.primary_name if customer.display_name_preference != "business" else None),
+        business_name=customer.business_name or (customer.primary_name if customer.display_name_preference == "business" else None),
+        display_name_preference=customer.display_name_preference or ("individual" if customer.primary_name else None),
         primary_phone=customer.primary_phone,
         primary_email=customer.primary_email,
         primary_city=customer.primary_city,
@@ -2563,7 +2564,6 @@ def customer_detail(customer_id: int):
     return render_template(
         "admin/customer_detail.html",
         customer=customer,
-        billing_form=billing_form,
         customer_info_form=customer_info_form,
         address_form=address_form,
         photo_upload_form=photo_upload_form,
@@ -2655,7 +2655,9 @@ def update_customer_info_route(customer_id: int):
         try:
             update_customer_info(
                 customer_id,
-                form.primary_name.data,
+                form.individual_name.data,
+                form.business_name.data,
+                form.display_name_preference.data,
                 form.primary_phone.data,
                 form.primary_email.data,
                 form.primary_city.data,

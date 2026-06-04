@@ -3069,17 +3069,14 @@ thead th {
 .customer-media-grid,
 .customer-record-layout {
   display: grid;
+  grid-template-columns: 1fr;
   gap: 1rem;
   margin-bottom: 1rem;
 }
 
-.customer-workflow-overview {
-  grid-template-columns: 1.15fr 0.85fr;
-}
-
 .customer-primary-card__content {
   display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
 }
@@ -3089,6 +3086,10 @@ thead th {
   gap: 0.75rem;
 }
 
+.customer-primary-card__activity {
+  margin: -0.35rem 0 0;
+}
+
 .customer-primary-card__identity h3 {
   margin: 0;
   color: var(--accent-strong);
@@ -3096,6 +3097,7 @@ thead th {
 }
 
 .customer-primary-card__contact a,
+.customer-section-links a,
 .customer-workflow-links--text a,
 .customer-recurring-item__body a {
   color: var(--accent-strong);
@@ -3104,6 +3106,8 @@ thead th {
 
 .customer-primary-card__contact a:hover,
 .customer-primary-card__contact a:focus-visible,
+.customer-section-links a:hover,
+.customer-section-links a:focus-visible,
 .customer-workflow-links--text a:hover,
 .customer-workflow-links--text a:focus-visible,
 .customer-recurring-item__body a:hover,
@@ -3111,9 +3115,14 @@ thead th {
   text-decoration: none;
 }
 
+.customer-primary-card__support {
+  display: grid;
+  gap: 1rem;
+}
+
 .customer-highlight-metrics {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   gap: 0.75rem;
   margin: 0;
 }
@@ -3136,12 +3145,16 @@ thead th {
   font-weight: 700;
 }
 
-.customer-workflow-card {
-  align-content: start;
-}
-
 .customer-workflow-links {
   gap: 0.65rem;
+}
+
+.customer-section-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+  align-items: center;
+  margin: 0;
 }
 
 .customer-workflow-links--text {
@@ -3150,21 +3163,97 @@ thead th {
   margin-top: 1rem;
 }
 
-.customer-media-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.customer-record-layout {
-  grid-template-columns: 1.15fr 0.85fr;
-  align-items: start;
-}
-
 .customer-record-layout__main,
 .customer-record-layout__side,
 .customer-recurring-list,
 .customer-tool-list {
   display: grid;
   gap: 1rem;
+}
+
+.customer-merge-flow {
+  display: grid;
+  gap: 1rem;
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.customer-merge-card {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.customer-merge-card h2 {
+  margin: 0;
+}
+
+.customer-merge-form {
+  gap: 1rem;
+}
+
+.customer-merge-preview {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  background: rgba(23, 77, 56, 0.06);
+  border: 1px solid rgba(23, 77, 56, 0.12);
+}
+
+.customer-merge-preview strong {
+  color: var(--accent-strong);
+  font-size: 1.15rem;
+}
+
+.customer-merge-preview--result {
+  background: var(--surface-brand-soft);
+  border-color: var(--line-accent-soft);
+}
+
+.customer-merge-preview__meta {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.customer-merge-preview__meta div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.customer-merge-note {
+  margin: 0;
+}
+
+.customer-merge-operator {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+}
+
+.customer-merge-operator__symbol {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-accent-soft);
+  background: var(--surface-accent-muted);
+  color: var(--accent-strong);
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.customer-merge-operator--result .customer-merge-operator__symbol {
+  background: var(--surface-brand-soft);
+}
+
+.customer-merge-operator__label {
+  color: var(--muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .customer-list-toolbar {
@@ -3201,6 +3290,7 @@ thead th {
 .customer-aux-item,
 .customer-recurring-item,
 .customer-billing-summary,
+.customer-billing-plan,
 .customer-recurring-empty {
   display: flex;
   align-items: start;
@@ -3213,7 +3303,8 @@ thead th {
 }
 
 .customer-aux-item__content,
-.customer-recurring-item__body {
+.customer-recurring-item__body,
+.customer-billing-plan__content {
   display: grid;
   gap: 0.25rem;
 }
@@ -3229,6 +3320,25 @@ thead th {
 .customer-billing-summary,
 .customer-recurring-empty {
   display: grid;
+}
+
+.customer-billing-plan-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.customer-billing-plan {
+  flex-wrap: wrap;
+}
+
+.customer-billing-plan__amount {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-align: right;
+}
+
+.customer-billing-summary--total {
+  margin-top: 1rem;
 }
 
 .customer-billing-summary p,

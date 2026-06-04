@@ -66,6 +66,16 @@
         </span>
       </article>
       <article>
+        <strong>Billing</strong>
+        <span>
+          {% if work.billing_amount is not none and work.billing_frequency %}
+            {{ work.billing_amount }} / {{ work.billing_frequency }}
+          {% else %}
+            Not set
+          {% endif %}
+        </span>
+      </article>
+      <article>
         <strong>Start date</strong>
         <span>{{ work.starts_on.strftime('%b %d, %Y') }}</span>
       </article>
@@ -134,6 +144,16 @@
               {{ work.start_time.strftime('%H:%M') }} – {{ work.end_time.strftime('%H:%M') }}
             {% else %}
               Not set
+            {% endif %}
+          </dd>
+        </div>
+        <div>
+          <dt>Billing</dt>
+          <dd>
+            {% if work.billing_amount is not none and work.billing_frequency %}
+              {{ work.billing_amount }} / {{ work.billing_frequency }}
+            {% else %}
+              None
             {% endif %}
           </dd>
         </div>
@@ -238,6 +258,18 @@
       <div class="form-grid recurring-choice-grid">
         {{ render_time_select(recurring_work_form.start_time_hour, recurring_work_form.start_time_minute, "Default start time") }}
         {{ render_time_select(recurring_work_form.end_time_hour, recurring_work_form.end_time_minute, "Default end time") }}
+      </div>
+      <div class="form-grid recurring-choice-grid">
+        <label class="form-field">
+          <span>Billing amount</span>
+          {{ recurring_work_form.billing_amount(class_='input') }}
+          {% for error in recurring_work_form.billing_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <label class="form-field">
+          <span>Billing frequency</span>
+          {{ recurring_work_form.billing_frequency(class_='select') }}
+          {% for error in recurring_work_form.billing_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
       </div>
       <label class="form-field">
         <span>Notes</span>

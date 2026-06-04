@@ -40,75 +40,78 @@
         <div class="customer-primary-card__identity">
           <p class="eyebrow">Customer</p>
           <h3>{{ customer.primary_name or 'Unnamed customer' }}</h3>
+          <p class="subtle-text customer-primary-card__activity">Last activity: {% if customer.last_activity %}{{ customer.last_activity.strftime('%b %d, %Y') }}{% else %}No recent activity{% endif %}</p>
           <div class="contact-block customer-primary-card__contact">
             <div class="contact-row"><span class="contact-label">Phone:</span> <span>{% if customer.primary_phone %}<a href="tel:{{ customer.primary_phone }}">{{ customer.primary_phone }}</a>{% else %}Not provided{% endif %}</span></div>
             <div class="contact-row"><span class="contact-label">Email:</span> <span>{% if customer.primary_email %}<a href="mailto:{{ customer.primary_email }}">{{ customer.primary_email }}</a>{% else %}Not provided{% endif %}</span></div>
             <div class="contact-row"><span class="contact-label">City:</span> <span>{{ customer.primary_city or 'Not provided' }}</span></div>
-            <div class="contact-row"><span class="contact-label">Last activity:</span> <span>{% if customer.last_activity %}{{ customer.last_activity.strftime('%b %d, %Y') }}{% else %}No recent activity{% endif %}</span></div>
+            {% if customer.business_name %}
+              <div class="contact-row"><span class="contact-label">Business:</span> <span>{{ customer.business_name }}</span></div>
+            {% endif %}
           </div>
         </div>
-        <dl class="customer-highlight-metrics">
-          <div>
-            <dt>Requests</dt>
-            <dd>{{ request_count }}</dd>
+        <div class="customer-primary-card__support">
+          <dl class="customer-highlight-metrics">
+            <div>
+              <dt>Requests</dt>
+              <dd>{{ request_count }}</dd>
+            </div>
+            <div>
+              <dt>Scheduled events</dt>
+              <dd>{{ appointment_count }}</dd>
+            </div>
+            <div>
+              <dt>Notes</dt>
+              <dd>{{ note_count }}</dd>
+            </div>
+            <div>
+              <dt>Images</dt>
+              <dd>{{ photo_count }}</dd>
+            </div>
+            {% if enable_recurring_work %}
+            <div>
+              <dt>Recurring plans</dt>
+              <dd>{{ recurring_count }}</dd>
+            </div>
+            {% endif %}
+            <div>
+              <dt>Billing</dt>
+              <dd>
+                {% if customer.recurring_billing_total is not none %}
+                  {{ customer.recurring_billing_total }}
+                  <div class="subtle-text">{{ customer.billed_recurring_works|length }} billed plan{% if customer.billed_recurring_works|length != 1 %}s{% endif %}</div>
+                {% else %}
+                  Not set
+                {% endif %}
+              </dd>
+            </div>
+          </dl>
+          <p class="subtle-text customer-section-links">
+            <span>Jump to:</span>
+            <a href="#notes">Notes</a>
+            <span aria-hidden="true">·</span>
+            <a href="#gallery">Images</a>
+            <span aria-hidden="true">·</span>
+            <a href="#requests">Request history</a>
+            <span aria-hidden="true">·</span>
+            <a href="#appointments">Scheduled events</a>
+            {% if enable_recurring_work %}
+              <span aria-hidden="true">·</span>
+              <a href="#recurring-work">Recurring work</a>
+            {% endif %}
+            <span aria-hidden="true">·</span>
+            <a href="#billing">Billing</a>
+          </p>
+          <div class="customer-workflow-links customer-workflow-links--text">
+            {% if enable_calendar and appointment_count %}
+              <a href="{{ url_for('admin.calendar_view', view='list') }}">Open the full schedule</a>
+            {% endif %}
+            {% if enable_recurring_work %}
+              <a href="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}">Add recurring work for this customer</a>
+              <a href="{{ url_for('admin.recurring_work_list') }}">Open the recurring work directory</a>
+            {% endif %}
           </div>
-          <div>
-            <dt>Scheduled events</dt>
-            <dd>{{ appointment_count }}</dd>
-          </div>
-          <div>
-            <dt>Notes</dt>
-            <dd>{{ note_count }}</dd>
-          </div>
-          <div>
-            <dt>Images</dt>
-            <dd>{{ photo_count }}</dd>
-          </div>
-          {% if enable_recurring_work %}
-          <div>
-            <dt>Recurring plans</dt>
-            <dd>{{ recurring_count }}</dd>
-          </div>
-          {% endif %}
-          <div>
-            <dt>Billing</dt>
-            <dd>
-              {% if customer.billing_amount is not none %}
-                {{ customer.billing_amount }}{% if customer.billing_frequency %}/{{ customer.billing_frequency }}{% endif %}
-              {% else %}
-                Not set
-              {% endif %}
-            </dd>
-          </div>
-        </dl>
-      </div>
-    </article>
-
-    <article class="summary-card customer-workflow-card">
-      <div class="section-bar compact-bar">
-        <div>
-          <h2>Workflow shortcuts</h2>
-          <p class="subtle-text">Jump directly to the parts of the record used most often during follow-up and scheduling.</p>
         </div>
-      </div>
-      <div class="button-row customer-workflow-links">
-        <a class="btn btn-secondary btn-small" href="#notes">Notes</a>
-        <a class="btn btn-secondary btn-small" href="#gallery">Images</a>
-        <a class="btn btn-secondary btn-small" href="#requests">Request History</a>
-        <a class="btn btn-secondary btn-small" href="#appointments">Scheduled Events</a>
-        {% if enable_recurring_work %}
-          <a class="btn btn-secondary btn-small" href="#recurring-work">Recurring Work</a>
-        {% endif %}
-        <a class="btn btn-secondary btn-small" href="#billing">Billing</a>
-      </div>
-      <div class="customer-workflow-links customer-workflow-links--text">
-        {% if enable_calendar and appointment_count %}
-          <a href="{{ url_for('admin.calendar_view', view='list') }}">Open the full schedule</a>
-        {% endif %}
-        {% if enable_recurring_work %}
-          <a href="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}">Add recurring work for this customer</a>
-          <a href="{{ url_for('admin.recurring_work_list') }}">Open the recurring work directory</a>
-        {% endif %}
       </div>
     </article>
   </section>
@@ -395,9 +398,32 @@
           {{ customer_info_form.hidden_tag() }}
           <div class="form-grid">
             <label class="form-field">
-              <span>Name</span>
-              {{ customer_info_form.primary_name(class_="input") }}
-              {% for error in customer_info_form.primary_name.errors %}
+              <span>Individual name</span>
+              {{ customer_info_form.individual_name(class_="input") }}
+              {% for error in customer_info_form.individual_name.errors %}
+                <small class="field-error">{{ error }}</small>
+              {% endfor %}
+            </label>
+            <label class="form-field">
+              <span>Business name</span>
+              {{ customer_info_form.business_name(class_="input") }}
+              {% for error in customer_info_form.business_name.errors %}
+                <small class="field-error">{{ error }}</small>
+              {% endfor %}
+            </label>
+          </div>
+          <div class="form-grid">
+            <label class="form-field">
+              <span>Display name</span>
+              {{ customer_info_form.display_name_preference(class_="select") }}
+              <small class="field-help">
+                {% if customer_info_form.display_name_preference.choices|length > 1 %}
+                  Choose which saved name appears across the admin.
+                {% else %}
+                  Only one saved name is available, so it is used automatically.
+                {% endif %}
+              </small>
+              {% for error in customer_info_form.display_name_preference.errors %}
                 <small class="field-error">{{ error }}</small>
               {% endfor %}
             </label>
@@ -559,32 +585,51 @@
         <div class="section-bar compact-bar">
           <div>
             <h2>Billing</h2>
-            <p class="subtle-text">Billing stays separate from request and appointment history.</p>
+            <p class="subtle-text">Billing on this record now comes from each recurring work plan for the customer.</p>
           </div>
         </div>
         <div class="customer-billing-summary">
-          <strong>Current billing</strong>
-          <p class="subtle-text">
-            {% if customer.billing_amount is not none %}
-              {{ customer.billing_amount }}{% if customer.billing_frequency %} / {{ customer.billing_frequency }}{% endif %}
-            {% else %}
-              No billing details set yet.
-            {% endif %}
-          </p>
+          <strong>Recurring work billing</strong>
+          <p class="subtle-text">Each billed recurring plan appears below, followed by the combined total.</p>
         </div>
-        <form method="post" action="{{ url_for('admin.update_customer_billing_route', customer_id=customer.id) }}" class="stacked-form">
-          {{ billing_form.hidden_tag() }}
-          <label class="form-field">
-            <span>Amount</span>
-            {{ billing_form.billing_amount(class_="input") }}
-            {% for error in billing_form.billing_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
-          <label class="form-field">
-            <span>Frequency</span>
-            {{ billing_form.billing_frequency(class_="select") }}
-          </label>
-          {{ billing_form.submit(class_="btn btn-primary") }}
-        </form>
+        {% if not enable_recurring_work %}
+          <div class="notice-card customer-billing-empty">
+            <strong>Recurring work is disabled right now.</strong>
+            <p>Enable recurring work to manage billing per plan for this customer.</p>
+          </div>
+        {% elif customer.billed_recurring_works %}
+          <div class="customer-billing-plan-list">
+            {% for recurring_work in customer.billed_recurring_works %}
+              <article class="customer-billing-plan">
+                <div class="customer-billing-plan__content">
+                  <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id, source='customer', customer_id=customer.id) }}">{{ recurring_work.title or 'Recurring work' }}</a></strong>
+                  <span class="subtle-text">{{ recurring_work.status|capitalize }}{% if recurring_work.starts_on %} · starts {{ recurring_work.starts_on.strftime('%b %d, %Y') }}{% endif %}</span>
+                </div>
+                <div class="customer-billing-plan__amount">
+                  {{ recurring_work.billing_amount }}{% if recurring_work.billing_frequency %} / {{ recurring_work.billing_frequency }}{% endif %}
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+          <div class="customer-billing-summary customer-billing-summary--total">
+            <strong>Total recurring billing</strong>
+            <p>{{ customer.recurring_billing_total }}</p>
+            <p class="subtle-text">{{ customer.billed_recurring_works|length }} billed recurring plan{% if customer.billed_recurring_works|length != 1 %}s{% endif %} on this customer.</p>
+          </div>
+        {% elif recurring_works %}
+          <div class="notice-card customer-billing-empty">
+            <strong>No recurring work billing is configured yet.</strong>
+            <p>Add billing details on each recurring plan, then the totals will appear here.</p>
+          </div>
+        {% else %}
+          <div class="notice-card customer-billing-empty">
+            <strong>No recurring work is configured for this customer yet.</strong>
+            <p>Create recurring work first, then add billing on the plan itself.</p>
+            <div class="button-row">
+              <a class="btn btn-primary" href="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}">Add Recurring Work</a>
+            </div>
+          </div>
+        {% endif %}
       </article>
 
       <article class="summary-card" id="customer-tools">

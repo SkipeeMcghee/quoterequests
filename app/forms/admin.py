@@ -94,11 +94,51 @@ class CreateCustomerForm(FlaskForm):
 
 
 class CustomerInfoForm(FlaskForm):
-    primary_name = StringField("Name", validators=[DataRequired(), Length(max=255)])
+    individual_name = StringField("Individual name", validators=[Optional(), Length(max=255)])
+    business_name = StringField("Business name", validators=[Optional(), Length(max=255)])
+    display_name_preference = SelectField("Display name", choices=[("individual", "Individual name")], validators=[Optional()])
     primary_phone = StringField("Phone", validators=[Optional(), Length(max=50)])
     primary_email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
     primary_city = StringField("City", validators=[DataRequired(), Length(max=255)])
     submit = SubmitField("Save Customer")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.display_name_preference.validate_choice = False
+        self.set_display_name_choices(self.individual_name.data, self.business_name.data)
+
+    def set_display_name_choices(self, individual_name: str | None, business_name: str | None) -> None:
+        choices = []
+        if (individual_name or "").strip():
+            choices.append(("individual", "Individual name"))
+        if (business_name or "").strip():
+            choices.append(("business", "Business name"))
+        if not choices:
+            choices = [("individual", "Individual name")]
+        self.display_name_preference.choices = choices
+        available = {value for value, _label in choices}
+        if self.display_name_preference.data not in available:
+            self.display_name_preference.data = choices[0][0]
+
+    def validate(self, extra_validators=None):
+        self.set_display_name_choices(self.individual_name.data, self.business_name.data)
+        valid = super().validate(extra_validators=extra_validators)
+        has_individual = bool((self.individual_name.data or "").strip())
+        has_business = bool((self.business_name.data or "").strip())
+
+        if not (has_individual or has_business):
+            self.individual_name.errors.append("Enter an individual name or a business name.")
+            valid = False
+
+        selected_name = (self.display_name_preference.data or "").strip()
+        if selected_name == "business" and not has_business:
+            self.display_name_preference.errors.append("Add a business name before using it as the display name.")
+            valid = False
+        if selected_name == "individual" and not has_individual:
+            self.display_name_preference.errors.append("Add an individual name before using it as the display name.")
+            valid = False
+
+        return valid
 
 
 class CustomerAddressForm(FlaskForm):
@@ -400,6 +440,17 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
     start_time_minute = SelectField("Default start time minute", validators=[Optional()])
     end_time_hour = SelectField("Default end time hour", validators=[Optional()])
     end_time_minute = SelectField("Default end time minute", validators=[Optional()])
+    billing_amount = DecimalField(
+        "Billing amount",
+        places=2,
+        validators=[Optional(), NumberRange(min=0)],
+        render_kw={"step": "0.01", "min": "0", "inputmode": "decimal"},
+    )
+    billing_frequency = SelectField(
+        "Billing frequency",
+        choices=[("", "None"), *[(frequency, frequency.replace("_", " ").capitalize()) for frequency in RecurringWork.BILLING_FREQUENCIES]],
+        validators=[Optional()],
+    )
     status = SelectField(
         "Status",
         choices=[(status, status.capitalize()) for status in RecurringWork.STATUSES],
@@ -416,6 +467,16 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
 
     def validate(self, extra_validators=None):
         valid = super().validate(extra_validators=extra_validators)
+        has_billing_amount = self.billing_amount.data not in (None, "")
+        has_billing_frequency = bool((self.billing_frequency.data or "").strip())
+
+        if has_billing_amount and not has_billing_frequency:
+            self.billing_frequency.errors.append("Choose a billing frequency.")
+            valid = False
+        if has_billing_frequency and not has_billing_amount:
+            self.billing_amount.errors.append("Enter a billing amount.")
+            valid = False
+
         return self.validate_time_selects() and valid
 
 

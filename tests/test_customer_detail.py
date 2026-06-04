@@ -1,8 +1,31 @@
+from decimal import Decimal
 from datetime import date, time
 from types import SimpleNamespace
 
 from app.extensions import db
-from app.models import Appointment, Customer, CustomerNote, RecurringWork, User
+from app.models import Appointment, Customer, CustomerNote, QuoteRequest, RecurringWork, User
+
+
+def test_customer_list_hides_last_activity_column(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='List Customer', primary_city='City')
+        db.session.add(customer)
+        db.session.commit()
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.get('/admin/customers')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'Customer directory' in body
+    assert '<th>Last activity</th>' not in body
 
 
 def test_customer_detail_loads_with_empty_related_data(client, app, admin_user):
@@ -29,6 +52,140 @@ def test_customer_detail_loads_with_empty_related_data(client, app, admin_user):
     assert 'No linked quote or work requests.' in body
     assert 'No linked appointments.' in body
     assert 'No photos uploaded for this customer yet.' in body
+
+
+def test_customer_detail_uses_inline_activity_summary_and_no_shortcuts_card(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+        ENABLE_RECURRING_WORK=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='Layout Customer', primary_city='City')
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.get(f'/admin/customers/{customer_id}')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'Workflow shortcuts' not in body
+    assert 'Last activity: No recent activity' in body
+    assert 'Jump to:' in body
+
+
+def test_create_customer_from_request_guesses_business_name(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+    )
+    with app.app_context():
+        quote_request = QuoteRequest(
+            full_name='Bright Window Cleaning LLC',
+            city='Metro City',
+            phone='555-0199',
+            email='hello@brightwindows.example',
+        )
+        db.session.add(quote_request)
+        db.session.commit()
+        request_id = quote_request.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.post(
+        f'/admin/requests/{request_id}/create-customer',
+        data={'create-customer-submit': 'Add Customer'},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        quote_request = db.session.get(QuoteRequest, request_id)
+        customer = quote_request.customer
+        assert customer is not None
+        assert customer.business_name == 'Bright Window Cleaning LLC'
+        assert customer.individual_name is None
+        assert customer.display_name_preference == 'business'
+        assert customer.primary_name == 'Bright Window Cleaning LLC'
+
+
+def test_customer_merge_page_shows_source_target_and_final_account_flow(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+    )
+    with app.app_context():
+        source = Customer(primary_name='Source Customer', primary_city='Source City', primary_email='source@example.com')
+        target = Customer(primary_name='Target Customer', primary_city='Target City', primary_email='target@example.com')
+        db.session.add_all([source, target])
+        db.session.commit()
+        source_id = source.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.get(f'/admin/customers/{source_id}/merge')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'Source customer' in body
+    assert 'Surviving customer' in body
+    assert 'Merge into' in body
+    assert 'Final account' in body
+    assert body.count('Target Customer') >= 3
+
+
+def test_customer_detail_can_choose_business_display_name(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+    )
+    with app.app_context():
+        customer = Customer(
+            primary_name='Jamie Rivera',
+            individual_name='Jamie Rivera',
+            display_name_preference='individual',
+            primary_city='City',
+        )
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.post(
+        f'/admin/customers/{customer_id}/info',
+        data={
+            'customer-info-individual_name': 'Jamie Rivera',
+            'customer-info-business_name': 'Rivera Property Services',
+            'customer-info-display_name_preference': 'business',
+            'customer-info-primary_phone': '555-0100',
+            'customer-info-primary_email': 'jamie@example.com',
+            'customer-info-primary_city': 'City',
+            'customer-info-submit': 'Save Customer',
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        customer = db.session.get(Customer, customer_id)
+        assert customer.individual_name == 'Jamie Rivera'
+        assert customer.business_name == 'Rivera Property Services'
+        assert customer.display_name_preference == 'business'
+        assert customer.primary_name == 'Rivera Property Services'
 
 
 def test_customer_detail_can_add_multiple_addresses_and_mark_billing(client, app, admin_user):
@@ -132,6 +289,61 @@ def test_customer_detail_handles_incomplete_recurring_work(client, app, admin_us
     assert 'Weekly schedule unavailable' in body
 
 
+def test_customer_detail_billing_section_aggregates_recurring_work_values(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+        ENABLE_RECURRING_WORK=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='Billing Customer', primary_city='City')
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+        db.session.add_all(
+            [
+                RecurringWork(
+                    customer_id=customer_id,
+                    title='Weekly exterior windows',
+                    frequency='weekly',
+                    day_of_week=4,
+                    starts_on=date(2026, 5, 1),
+                    status='active',
+                    billing_amount=Decimal('125.00'),
+                    billing_frequency='monthly',
+                ),
+                RecurringWork(
+                    customer_id=customer_id,
+                    title='Lobby touchups',
+                    frequency='monthly',
+                    day_of_month=15,
+                    starts_on=date(2026, 5, 1),
+                    status='active',
+                    billing_amount=Decimal('75.00'),
+                    billing_frequency='per_job',
+                ),
+            ]
+        )
+        db.session.commit()
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.get(f'/admin/customers/{customer_id}')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'Recurring work billing' in body
+    assert 'Weekly exterior windows' in body
+    assert 'Lobby touchups' in body
+    assert '125.00 / monthly' in body
+    assert '75.00 / per_job' in body
+    assert 'Total recurring billing' in body
+    assert '200.00' in body
+
+
 def test_customer_detail_links_to_customer_scoped_recurring_work_flow(client, app, admin_user):
     app.config.update(
         ENABLE_CUSTOMER_RECORDS=True,
@@ -194,6 +406,8 @@ def test_admin_can_create_recurring_work_from_customer_context(client, app, admi
             'recurring-work-start_time_minute': '0',
             'recurring-work-end_time_hour': '11',
             'recurring-work-end_time_minute': '0',
+            'recurring-work-billing_amount': '125.00',
+            'recurring-work-billing_frequency': 'monthly',
             'recurring-work-status': 'active',
             'recurring-work-notes': 'Bring extension ladder.',
             'recurring-work-submit': 'Save Recurring Work',
@@ -211,6 +425,8 @@ def test_admin_can_create_recurring_work_from_customer_context(client, app, admi
         assert work.day_of_week == 4
         assert work.start_time == time(9, 0)
         assert work.end_time == time(11, 0)
+        assert work.billing_amount == Decimal('125.00')
+        assert work.billing_frequency == 'monthly'
 
 
 def test_recurring_work_detail_shows_generation_links_and_customer_context(client, app, admin_user):

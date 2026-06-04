@@ -36,7 +36,6 @@
             <th>Customer</th>
             <th>Primary contact</th>
             <th>Billing</th>
-            <th>Last activity</th>
           </tr>
         </thead>
         <tbody>
@@ -53,23 +52,25 @@
                 </div>
               </td>
               <td>
-                {% if customer.billing_amount is not none %}
-                  {{ customer.billing_amount }}
+                {% if customer.recurring_billing_total is not none %}
+                  {{ customer.recurring_billing_total }}
+                  {% if customer.billed_recurring_works|length == 1 and customer.billed_recurring_works[0].billing_frequency %}
+                    <span class="subtle-text">/{{ customer.billed_recurring_works[0].billing_frequency }}</span>
+                  {% else %}
+                    <div class="subtle-text">{{ customer.billed_recurring_works|length }} billed plan{% if customer.billed_recurring_works|length != 1 %}s{% endif %}</div>
+                  {% endif %}
                 {% else %}
                   Not set
-                {% endif %}
-                {% if customer.billing_frequency %}
-                  <span class="subtle-text">/{{ customer.billing_frequency }}</span>
                 {% endif %}
               </td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="4" class="empty-state">No customers created yet.</td>
+              <td colspan="3" class="empty-state">No customers created yet.</td>
             </tr>
           {% endfor %}
           <tr id="customer-filter-empty" hidden>
-            <td colspan="4" class="empty-state">No customers match the current search.</td>
+            <td colspan="3" class="empty-state">No customers match the current search.</td>
           </tr>
         </tbody>
       </table>

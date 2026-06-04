@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from app.extensions import db
 
@@ -9,9 +10,13 @@ class Customer(db.Model):
     __tablename__ = "customers"
 
     BILLING_FREQUENCIES = ("weekly", "monthly", "per_job")
+    DISPLAY_NAME_PREFERENCES = ("individual", "business")
 
     id = db.Column(db.Integer, primary_key=True)
     primary_name = db.Column(db.String(255), nullable=True)
+    individual_name = db.Column(db.String(255), nullable=True)
+    business_name = db.Column(db.String(255), nullable=True)
+    display_name_preference = db.Column(db.String(16), nullable=True)
     primary_email = db.Column(db.String(255), nullable=True, index=True)
     primary_phone = db.Column(db.String(50), nullable=True, index=True)
     primary_city = db.Column(db.String(255), nullable=True)
@@ -66,6 +71,38 @@ class Customer(db.Model):
     def __repr__(self) -> str:
         return f"<Customer {self.id} {self.primary_name or 'Unnamed'}>"
 
+    def sync_primary_name(self) -> None:
+        cleaned_primary = (self.primary_name or "").strip() or None
+        cleaned_individual = (self.individual_name or "").strip() or None
+        cleaned_business = (self.business_name or "").strip() or None
+        preference = (self.display_name_preference or "").strip().lower() or None
+
+        if preference not in self.DISPLAY_NAME_PREFERENCES:
+            preference = None
+
+        if not cleaned_individual and not cleaned_business and cleaned_primary:
+            cleaned_individual = cleaned_primary
+
+        if preference == "business" and cleaned_business:
+            chosen_name = cleaned_business
+        elif preference == "individual" and cleaned_individual:
+            chosen_name = cleaned_individual
+        elif cleaned_individual:
+            preference = "individual"
+            chosen_name = cleaned_individual
+        elif cleaned_business:
+            preference = "business"
+            chosen_name = cleaned_business
+        else:
+            chosen_name = cleaned_primary
+            preference = "individual" if chosen_name else None
+            cleaned_individual = chosen_name
+
+        self.primary_name = chosen_name
+        self.individual_name = cleaned_individual
+        self.business_name = cleaned_business
+        self.display_name_preference = preference
+
     @property
     def billing_address(self) -> "CustomerAddress" | None:
         billed = [address for address in self.addresses if address.is_billing]
@@ -81,6 +118,27 @@ class Customer(db.Model):
         for field in self.fields:
             result.setdefault(field.kind, []).append(field)
         return result
+
+    @property
+    def display_name_label(self) -> str:
+        if self.display_name_preference == "business" and self.business_name:
+            return "Business name"
+        return "Individual name"
+
+    @property
+    def billed_recurring_works(self) -> list["RecurringWork"]:
+        return [
+            work
+            for work in self.recurring_works
+            if work.billing_amount is not None and work.billing_frequency
+        ]
+
+    @property
+    def recurring_billing_total(self) -> Decimal | None:
+        billed_works = self.billed_recurring_works
+        if not billed_works:
+            return None
+        return sum((work.billing_amount or Decimal("0.00") for work in billed_works), Decimal("0.00"))
 
     @property
     def last_activity(self):
@@ -161,6 +219,7 @@ class RecurringWork(db.Model):
     __tablename__ = "recurring_works"
 
     FREQUENCIES = ("weekly", "monthly")
+    BILLING_FREQUENCIES = Customer.BILLING_FREQUENCIES
     STATUSES = ("active", "inactive")
 
     id = db.Column(db.Integer, primary_key=True)
@@ -175,6 +234,8 @@ class RecurringWork(db.Model):
     ends_on = db.Column(db.Date(), nullable=True)
     start_time = db.Column(db.Time(), nullable=True)
     end_time = db.Column(db.Time(), nullable=True)
+    billing_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    billing_frequency = db.Column(db.String(16), nullable=True)
     status = db.Column(db.String(16), nullable=False, default="active")
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))

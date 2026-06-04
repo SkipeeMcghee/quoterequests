@@ -5,45 +5,138 @@
 
 {% block content %}
 <main class="shell dashboard-shell">
+  {% set selected_target = namespace(customer=none) %}
+  {% for target in targets %}
+    {% if target.id == merge_form.target_customer_id.data %}
+      {% set selected_target.customer = target %}
+    {% endif %}
+  {% endfor %}
+  {% set initial_target = selected_target.customer or (targets[0] if targets else none) %}
   {{ render_admin_page_header(
     title='Merge Customer Record',
-    description='Choose the surviving customer record and confirm the merge.',
+    description='Review the source record, choose the surviving customer, then confirm the final account below.',
     nav_mode='sub',
     return_url=url_for('admin.customer_list'),
     return_label='Back to Customers',
     meta=source.primary_name or 'Unnamed customer'
   ) }}
 
-  <section class="section-intro">
-    <div class="detail-card">
+  <section class="customer-merge-flow">
+    <article class="detail-card customer-merge-card customer-merge-card--source">
+      <p class="eyebrow">Step 1</p>
       <h2>Source customer</h2>
+      <p class="subtle-text">This record is the source. Its linked history moves away, then this record is removed.</p>
       <dl class="detail-list vertical-list">
         <div><dt>Name</dt><dd>{{ source.primary_name or 'None' }}</dd></div>
         <div><dt>Email</dt><dd>{{ source.primary_email or 'None' }}</dd></div>
         <div><dt>Phone</dt><dd>{{ source.primary_phone or 'None' }}</dd></div>
         <div><dt>City</dt><dd>{{ source.primary_city or 'None' }}</dd></div>
       </dl>
-    </div>
-  </section>
+    </article>
 
-  <section class="detail-card">
-    <form method="post" action="{{ url_for('admin.customer_merge_action', customer_id=source.id) }}" class="stacked-form">
-      {{ merge_form.hidden_tag() }}
-      <label class="form-field">
-        <span>Surviving customer</span>
-        {{ merge_form.target_customer_id(class_="select") }}
-        {% for error in merge_form.target_customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </label>
-      <label class="form-field">
-        <span>Confirm merge</span>
-        {{ merge_form.confirm() }}
-        {% for error in merge_form.confirm.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </label>
-      <div class="subtle-text">
-        All linked quote/work requests will move to the surviving customer. Source customer will be deleted.
+    <div class="customer-merge-operator" aria-hidden="true">
+      <span class="customer-merge-operator__symbol">+</span>
+      <span class="customer-merge-operator__label">Merge into</span>
+    </div>
+
+    <article class="detail-card customer-merge-card customer-merge-card--target">
+      <p class="eyebrow">Step 2</p>
+      <h2>Surviving customer</h2>
+      <p class="subtle-text">Choose the customer record that stays after the merge.</p>
+      <form method="post" action="{{ url_for('admin.customer_merge_action', customer_id=source.id) }}" class="stacked-form customer-merge-form">
+        {{ merge_form.hidden_tag() }}
+        <label class="form-field">
+          <span>Surviving customer</span>
+          {{ merge_form.target_customer_id(class_="select", id="merge-target-select") }}
+          {% for error in merge_form.target_customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+
+        <div class="customer-merge-preview" aria-live="polite">
+          <p class="eyebrow">Selected surviving account</p>
+          <strong id="merge-target-name">{{ initial_target.primary_name if initial_target else 'Choose a surviving customer' }}</strong>
+          <div class="customer-merge-preview__meta">
+            <div><span class="contact-label">Email:</span> <span id="merge-target-email">{{ initial_target.primary_email if initial_target and initial_target.primary_email else 'None' }}</span></div>
+            <div><span class="contact-label">Phone:</span> <span id="merge-target-phone">{{ initial_target.primary_phone if initial_target and initial_target.primary_phone else 'None' }}</span></div>
+            <div><span class="contact-label">City:</span> <span id="merge-target-city">{{ initial_target.primary_city if initial_target and initial_target.primary_city else 'None' }}</span></div>
+          </div>
+        </div>
+
+        <label class="form-field">
+          <span>Confirm merge</span>
+          {{ merge_form.confirm() }}
+          {% for error in merge_form.confirm.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <p class="subtle-text customer-merge-note">All linked quote/work requests move to the surviving customer. The source customer is deleted.</p>
+        {{ merge_form.submit(class_="btn btn-danger") }}
+      </form>
+    </article>
+
+    <div class="customer-merge-operator customer-merge-operator--result" aria-hidden="true">
+      <span class="customer-merge-operator__symbol">=</span>
+      <span class="customer-merge-operator__label">Final account</span>
+    </div>
+
+    <article class="detail-card customer-merge-card customer-merge-card--result">
+      <p class="eyebrow">Result</p>
+      <h2>Final account</h2>
+      <p class="subtle-text">After the merge, this surviving customer is the only record left.</p>
+      <div class="customer-merge-preview customer-merge-preview--result" aria-live="polite">
+        <strong id="merge-result-name">{{ initial_target.primary_name if initial_target else 'Choose a surviving customer' }}</strong>
+        <div class="customer-merge-preview__meta">
+          <div><span class="contact-label">Email:</span> <span id="merge-result-email">{{ initial_target.primary_email if initial_target and initial_target.primary_email else 'None' }}</span></div>
+          <div><span class="contact-label">Phone:</span> <span id="merge-result-phone">{{ initial_target.primary_phone if initial_target and initial_target.primary_phone else 'None' }}</span></div>
+          <div><span class="contact-label">City:</span> <span id="merge-result-city">{{ initial_target.primary_city if initial_target and initial_target.primary_city else 'None' }}</span></div>
+        </div>
       </div>
-      {{ merge_form.submit(class_="btn btn-danger") }}
-    </form>
+    </article>
   </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+{% if targets %}
+<script>
+(function () {
+  const select = document.getElementById('merge-target-select');
+
+  if (!select) {
+    return;
+  }
+
+  const targetData = {
+    {% for target in targets %}
+    '{{ target.id }}': {
+      name: {{ (target.primary_name or 'Unnamed customer')|tojson }},
+      email: {{ (target.primary_email or 'None')|tojson }},
+      phone: {{ (target.primary_phone or 'None')|tojson }},
+      city: {{ (target.primary_city or 'None')|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+  };
+
+  const fallback = {
+    name: 'Choose a surviving customer',
+    email: 'None',
+    phone: 'None',
+    city: 'None'
+  };
+
+  const syncPreview = function (prefix, selected) {
+    document.getElementById(prefix + '-name').textContent = selected.name;
+    document.getElementById(prefix + '-email').textContent = selected.email;
+    document.getElementById(prefix + '-phone').textContent = selected.phone;
+    document.getElementById(prefix + '-city').textContent = selected.city;
+  };
+
+  const update = function () {
+    const selected = targetData[select.value] || fallback;
+    syncPreview('merge-target', selected);
+    syncPreview('merge-result', selected);
+  };
+
+  select.addEventListener('change', update);
+  update();
+})();
+</script>
+{% endif %}
 {% endblock %}

@@ -21,7 +21,7 @@
       <div class="section-bar compact-bar">
         <div>
           <h2>Recurring work details</h2>
-          <p class="subtle-text">Start with the service title, cadence, and default time. After save you can generate upcoming appointments from the recurring plan.</p>
+          <p class="subtle-text">Start with the service title, cadence, billing, and default time. After save you can generate upcoming appointments from the recurring plan.</p>
         </div>
       </div>
       <form method="post" action="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}" class="stacked-form">
@@ -73,6 +73,19 @@
         <div class="form-grid recurring-choice-grid">
           {{ render_time_select(form.start_time_hour, form.start_time_minute, "Default start time") }}
           {{ render_time_select(form.end_time_hour, form.end_time_minute, "Default end time") }}
+        </div>
+
+        <div class="form-grid recurring-choice-grid">
+          <label class="form-field">
+            <span>Billing amount</span>
+            {{ form.billing_amount(class_='input') }}
+            {% for error in form.billing_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Billing frequency</span>
+            {{ form.billing_frequency(class_='select') }}
+            {% for error in form.billing_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
         </div>
 
         <label class="form-field">
