@@ -1,6 +1,6 @@
 import json
 import io
-from calendar import month_name, monthcalendar, monthrange
+from calendar import Calendar, SUNDAY, month_name, monthrange
 from datetime import date, time, timedelta
 from flask import current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
@@ -107,12 +107,16 @@ from app.services.admin_requests import (
     link_quote_request_to_customer,
     mark_quote_request_viewed,
     add_customer_address,
+    archive_recurring_work,
     generate_recurring_appointments_for_customer,
     link_quote_request_to_customer,
     merge_customers,
+    preview_recurring_work_sync,
     reschedule_appointment,
+    set_recurring_appointment_exception,
     set_customer_billing_address,
     set_primary_customer_field,
+    sync_recurring_work_appointments,
     update_appointment,
     update_appointment_status,
     update_customer_billing,
@@ -627,21 +631,56 @@ def _resolve_recurring_return(*, source: str | None, customer=None) -> tuple[str
     return url_for("admin.recurring_work_list"), "Back to Recurring Work"
 
 
-def _validate_recurring_work_form(form: RecurringWorkForm) -> tuple[int | None, int | None, bool]:
-    selected_day_of_week = form.day_of_week.data if form.day_of_week.data is not None and form.day_of_week.data >= 0 else None
-    selected_day_of_month = form.day_of_month.data if form.day_of_month.data else None
+def _validate_recurring_work_form(form: RecurringWorkForm) -> tuple[dict[str, object] | None, int | None, int | None, bool]:
+    selected_day_of_week = None
+    selected_day_of_month = None
+    recurrence_config = None
     is_valid = True
 
-    if form.frequency.data == "weekly":
-        if selected_day_of_week is None:
-            form.day_of_week.errors.append("Choose a weekday for weekly recurring work.")
+    interval_value = form.recurrence_interval.data
+    if interval_value in (None, ""):
+        form.recurrence_interval.errors.append("Choose how often this recurring plan repeats.")
+        is_valid = False
+    elif int(interval_value) < 1:
+        form.recurrence_interval.errors.append("Repeat interval must be at least 1.")
+        is_valid = False
+
+    if form.recurrence_unit.data == "week":
+        selected_weekdays = sorted({weekday for weekday in form.weekdays.data or [] if 0 <= int(weekday) <= 6})
+        if not selected_weekdays:
+            form.weekdays.errors.append("Choose at least one weekday for this recurring plan.")
             is_valid = False
-        selected_day_of_month = None
-    if form.frequency.data == "monthly":
-        if selected_day_of_month is None:
-            form.day_of_month.errors.append("Choose a day of month for monthly recurring work.")
+        else:
+            selected_day_of_week = selected_weekdays[0]
+            recurrence_config = {
+                "unit": "week",
+                "interval": int(interval_value or 1),
+                "weekdays": selected_weekdays,
+                "month_days": [],
+            }
+
+    if form.recurrence_unit.data == "month":
+        month_days = []
+        if form.month_day_primary.data:
+            month_days.append(int(form.month_day_primary.data))
+        if form.month_day_secondary.data:
+            month_days.append(int(form.month_day_secondary.data))
+
+        deduped_month_days = sorted(set(month_days))
+        if month_days and len(deduped_month_days) != len(month_days):
+            form.month_day_secondary.errors.append("Choose a different second monthly day.")
             is_valid = False
-        selected_day_of_week = None
+        if not deduped_month_days:
+            form.month_day_primary.errors.append("Choose at least one day of month for this recurring plan.")
+            is_valid = False
+        else:
+            selected_day_of_month = deduped_month_days[0]
+            recurrence_config = {
+                "unit": "month",
+                "interval": int(interval_value or 1),
+                "weekdays": [],
+                "month_days": deduped_month_days,
+            }
 
     if form.ends_on.data and form.starts_on.data and form.ends_on.data < form.starts_on.data:
         form.ends_on.errors.append("End date must be on or after the start date.")
@@ -652,7 +691,102 @@ def _validate_recurring_work_form(form: RecurringWorkForm) -> tuple[int | None, 
         form.end_time_hour.errors.append("Default end time must be after the default start time.")
         is_valid = False
 
-    return selected_day_of_week, selected_day_of_month, is_valid
+    return recurrence_config, selected_day_of_week, selected_day_of_month, is_valid
+
+
+def _parse_recurring_preview_days_ahead(raw_value: str | None) -> int:
+    try:
+        days_ahead = int(raw_value or "60")
+    except (TypeError, ValueError):
+        raise BadRequest("Choose a valid preview window.")
+
+    if days_ahead not in {30, 60}:
+        raise BadRequest("Choose a valid preview window.")
+    return days_ahead
+
+
+def _serialize_recurring_sync_plan(plan, *, days_ahead: int) -> dict[str, object]:
+    if plan.total_changes:
+        change_parts: list[str] = []
+        if plan.created_count:
+            change_parts.append(f"create {plan.created_count}")
+        if plan.updated_count:
+            change_parts.append(f"update {plan.updated_count}")
+        if plan.deleted_count:
+            change_parts.append(f"remove {plan.deleted_count}")
+        message = f"Saving this plan would {', '.join(change_parts)} managed child event{'s' if plan.total_changes != 1 else ''} in the next {days_ahead} days."
+    else:
+        message = f"Saving this plan would not change any managed child events in the next {days_ahead} days."
+
+    if plan.protected_count:
+        secondary_message = f"{plan.protected_count} exception or status-locked child event{'s stay' if plan.protected_count != 1 else ' stays'} untouched."
+    else:
+        secondary_message = "No protected child events are inside this preview window."
+
+    return {
+        "created": plan.created_count,
+        "updated": plan.updated_count,
+        "deleted": plan.deleted_count,
+        "protected": plan.protected_count,
+        "unchanged": plan.unchanged_count,
+        "window_days": days_ahead,
+        "message": message,
+        "secondary_message": secondary_message,
+    }
+
+
+def _serialize_recurring_work_display_state(work) -> dict[str, object]:
+    generated_appointments = sorted(
+        work.appointments,
+        key=lambda appointment: (
+            appointment.scheduled_date or date.max,
+            appointment.start_time or time.min,
+            appointment.id,
+        ),
+    )
+    today_value = date.today()
+
+    if work.start_time and work.end_time:
+        time_summary = f"{work.start_time.strftime('%H:%M')} – {work.end_time.strftime('%H:%M')}"
+    elif work.start_time:
+        time_summary = f"Starts {work.start_time.strftime('%H:%M')}"
+    else:
+        time_summary = "No default time"
+
+    if work.billing_amount is not None and work.billing_frequency:
+        billing_summary = f"{work.billing_amount} / {work.billing_frequency}"
+    else:
+        billing_summary = "Not set"
+
+    return {
+        "id": work.id,
+        "title": work.title or "Service not set",
+        "status": work.status,
+        "status_label": work.status.capitalize(),
+        "frequency": work.frequency,
+        "frequency_label": work.frequency_label,
+        "cadence_summary": work.cadence_summary,
+        "time_summary": time_summary,
+        "billing_summary": billing_summary,
+        "starts_on_label": work.starts_on.strftime('%b %d, %Y') if work.starts_on else "",
+        "ends_on_label": work.ends_on.strftime('%b %d, %Y') if work.ends_on else "None",
+        "generated_count": len(generated_appointments),
+        "upcoming_generated_count": sum(
+            1
+            for appointment in generated_appointments
+            if appointment.scheduled_date and appointment.scheduled_date >= today_value and appointment.status != "Cancelled"
+        ),
+        "future_managed_event_count": sum(
+            1
+            for appointment in generated_appointments
+            if appointment.scheduled_date and appointment.scheduled_date >= today_value and not appointment.is_recurring_sync_locked
+        ),
+        "protected_event_count": sum(
+            1
+            for appointment in generated_appointments
+            if appointment.scheduled_date and appointment.scheduled_date >= today_value and appointment.is_recurring_sync_locked
+        ),
+    }
 
 
 def _render_recurring_work_detail_page(
@@ -700,11 +834,42 @@ def _render_recurring_work_detail_page(
             sort="soonest",
         )
 
+    preview_days_ahead = _parse_recurring_preview_days_ahead(str(generate_recurring_appointments_form.days_ahead.data or "60"))
+    current_sync_preview = preview_recurring_work_sync(
+        work.id,
+        title=work.title or "",
+        frequency=work.frequency,
+        recurrence_config=work.recurrence_config,
+        day_of_week=work.day_of_week,
+        day_of_month=work.day_of_month,
+        starts_on=work.starts_on,
+        ends_on=work.ends_on,
+        start_time=work.start_time,
+        end_time=work.end_time,
+        billing_amount=work.billing_amount,
+        billing_frequency=work.billing_frequency,
+        status=work.status,
+        notes=work.notes,
+        days_ahead=preview_days_ahead,
+    )
+    recurring_preview_payload = _serialize_recurring_sync_plan(current_sync_preview, days_ahead=preview_days_ahead)
+    future_managed_event_count = sum(
+        1
+        for appointment in generated_appointments
+        if appointment.scheduled_date and appointment.scheduled_date >= today_value and not appointment.is_recurring_sync_locked
+    )
+    recurring_exception_urls = {
+        appointment.id: url_for("admin.set_recurring_exception_route", appointment_id=appointment.id, **recurring_source_args)
+        for appointment in generated_appointments
+    }
+
     return render_template(
         "admin/recurring_work_detail.html",
         work=work,
         recurring_work_form=recurring_work_form,
         generate_recurring_appointments_form=generate_recurring_appointments_form,
+        archive_recurring_form=ActionForm(prefix="archive-recurring"),
+        recurring_exception_form=ActionForm(prefix="recurring-exception"),
         generated_appointments=generated_appointments,
         generated_count=len(generated_appointments),
         upcoming_generated_count=sum(
@@ -716,6 +881,13 @@ def _render_recurring_work_detail_page(
         recurring_return_label=recurring_return_label,
         recurring_calendar_url=recurring_calendar_url,
         recurring_list_url=recurring_list_url,
+        recurring_preview_payload=recurring_preview_payload,
+        recurring_preview_url=url_for("admin.preview_recurring_work_impact_route", recurring_work_id=work.id),
+        recurring_preview_window_choices=generate_recurring_appointments_form.days_ahead.choices,
+        recurring_preview_window_default=str(preview_days_ahead),
+        archive_recurring_work_url=url_for("admin.archive_recurring_work_route", recurring_work_id=work.id, **recurring_source_args),
+        future_managed_event_count=future_managed_event_count,
+        recurring_exception_urls=recurring_exception_urls,
         edit_recurring_work_url=url_for("admin.edit_recurring_work_route", recurring_work_id=work.id, **recurring_source_args),
         generate_recurring_work_url=url_for("admin.generate_recurring_work_appointments_route", recurring_work_id=work.id, **recurring_source_args),
     )
@@ -1133,7 +1305,7 @@ def calendar_view():
     except ValueError:
         return redirect(url_for("admin.calendar_view"))
 
-    month_matrix = monthcalendar(year, month)
+    month_matrix = Calendar(firstweekday=SUNDAY).monthdayscalendar(year, month)
     appointments_by_date = {}
     for appointment in appointments:
         appointments_by_date.setdefault(appointment.scheduled_date, []).append(appointment)
@@ -1160,7 +1332,7 @@ def calendar_view():
 
     prev_year, prev_month = (year, month - 1) if month > 1 else (year - 1, 12)
     next_year, next_month = (year, month + 1) if month < 12 else (year + 1, 1)
-    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    day_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
     return render_template(
         "admin/calendar.html",
@@ -2346,8 +2518,14 @@ def delete_staff_availability_route(staff_member_id: int, availability_id: int):
 def recurring_work_list():
     if not current_app.config.get("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
+    works = list_recurring_works()
+    if current_app.config.get("ENABLE_SCHEDULING"):
+        for work in works:
+            sync_recurring_work_appointments(work.id)
+        works = list_recurring_works()
+
     works = sorted(
-        list_recurring_works(),
+        works,
         key=lambda work: (
             work.status != "active",
             (work.customer.primary_name or "").lower() if work.customer else "",
@@ -2373,19 +2551,28 @@ def new_recurring_work(customer_id: int):
     if request.method == "GET":
         if form.frequency.data is None:
             form.frequency.data = "weekly"
+        if form.recurrence_unit.data in (None, ""):
+            form.recurrence_unit.data = "week"
+        if form.recurrence_interval.data in (None, ""):
+            form.recurrence_interval.data = 1
         if form.status.data is None:
             form.status.data = "active"
         if form.starts_on.data is None:
             form.starts_on.data = date.today()
+        if not form.weekdays.data and form.starts_on.data is not None:
+            form.weekdays.data = [form.starts_on.data.weekday()]
+        if not form.month_day_primary.data and form.starts_on.data is not None:
+            form.month_day_primary.data = form.starts_on.data.day
 
     if form.validate_on_submit():
-        selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(form)
+        recurrence_config, selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(form)
         if has_valid_schedule:
             try:
                 work = create_recurring_work(
                     customer.id,
                     title=form.title.data,
                     frequency=form.frequency.data,
+                    recurrence_config=recurrence_config,
                     day_of_week=selected_day_of_week,
                     day_of_month=selected_day_of_month,
                     starts_on=form.starts_on.data,
@@ -2397,6 +2584,8 @@ def new_recurring_work(customer_id: int):
                     status=form.status.data,
                     notes=form.notes.data,
                 )
+                if current_app.config.get("ENABLE_SCHEDULING"):
+                    sync_recurring_work_appointments(work.id)
                 flash("Recurring work saved.", "success")
                 return redirect(
                     url_for(
@@ -2423,11 +2612,10 @@ def recurring_work_detail(recurring_work_id: int):
     if not current_app.config.get("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
     work = get_recurring_work(recurring_work_id)
+    if current_app.config.get("ENABLE_SCHEDULING"):
+        sync_recurring_work_appointments(work.id)
+        work = get_recurring_work(recurring_work_id)
     recurring_work_form = RecurringWorkForm(prefix="recurring-work", obj=work)
-    if recurring_work_form.day_of_week.data is None:
-        recurring_work_form.day_of_week.data = -1
-    if recurring_work_form.day_of_month.data is None:
-        recurring_work_form.day_of_month.data = 0
     generate_recurring_appointments_form = RecurringWorkGenerationForm(prefix="generate-recurring")
     return _render_recurring_work_detail_page(
         work=work,
@@ -2435,6 +2623,52 @@ def recurring_work_detail(recurring_work_id: int):
         generate_recurring_appointments_form=generate_recurring_appointments_form,
         source_args=_recurring_source_args_from_request(),
     )
+
+
+@bp.post("/recurring-work/<int:recurring_work_id>/impact-preview")
+@login_required
+def preview_recurring_work_impact_route(recurring_work_id: int):
+    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+        raise NotFound()
+
+    form = RecurringWorkForm(prefix="recurring-work")
+    try:
+        preview_days_ahead = _parse_recurring_preview_days_ahead(request.form.get("preview-days-ahead"))
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    if not form.validate():
+        return jsonify({"ok": False, "error": _first_form_error(form, "Complete the required fields to preview future impact.")}), 400
+
+    recurrence_config, selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(form)
+    if not has_valid_schedule:
+        return jsonify({"ok": False, "error": _first_form_error(form, "Complete the cadence details to preview future impact.")}), 400
+
+    try:
+        preview_plan = preview_recurring_work_sync(
+            recurring_work_id,
+            title=form.title.data,
+            frequency=form.frequency.data,
+            recurrence_config=recurrence_config,
+            day_of_week=selected_day_of_week,
+            day_of_month=selected_day_of_month,
+            starts_on=form.starts_on.data,
+            ends_on=form.ends_on.data,
+            start_time=form.time_value("start_time"),
+            end_time=form.time_value("end_time"),
+            billing_amount=form.billing_amount.data,
+            billing_frequency=form.billing_frequency.data,
+            status=form.status.data,
+            notes=form.notes.data,
+            days_ahead=preview_days_ahead,
+        )
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    return jsonify({
+        "ok": True,
+        **_serialize_recurring_sync_plan(preview_plan, days_ahead=preview_days_ahead),
+    })
 
 
 @bp.post("/recurring-work/<int:recurring_work_id>/edit")
@@ -2447,15 +2681,17 @@ def edit_recurring_work_route(recurring_work_id: int):
     recurring_work_form = RecurringWorkForm(prefix="recurring-work")
     generate_recurring_appointments_form = RecurringWorkGenerationForm(prefix="generate-recurring")
     recurring_source_args = _recurring_source_args_from_request()
+    is_ajax_request = _is_ajax_request()
 
     if recurring_work_form.validate_on_submit():
-        selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(recurring_work_form)
+        recurrence_config, selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(recurring_work_form)
         if has_valid_schedule:
             try:
                 update_recurring_work(
                     recurring_work_id,
                     title=recurring_work_form.title.data,
                     frequency=recurring_work_form.frequency.data,
+                    recurrence_config=recurrence_config,
                     day_of_week=selected_day_of_week,
                     day_of_month=selected_day_of_month,
                     starts_on=recurring_work_form.starts_on.data,
@@ -2467,10 +2703,26 @@ def edit_recurring_work_route(recurring_work_id: int):
                     status=recurring_work_form.status.data,
                     notes=recurring_work_form.notes.data,
                 )
+                if current_app.config.get("ENABLE_SCHEDULING"):
+                    sync_recurring_work_appointments(recurring_work_id)
+                work = get_recurring_work(recurring_work_id)
+                if is_ajax_request:
+                    return jsonify(
+                        {
+                            "ok": True,
+                            "message": "Recurring work saved.",
+                            "work": _serialize_recurring_work_display_state(work),
+                        }
+                    )
                 flash("Recurring work updated.", "success")
                 return redirect(url_for("admin.recurring_work_detail", recurring_work_id=recurring_work_id, **recurring_source_args))
             except Exception as exc:
+                if is_ajax_request:
+                    return jsonify({"ok": False, "error": str(exc)}), 400
                 flash(str(exc), "error")
+
+    if is_ajax_request:
+        return jsonify({"ok": False, "error": _first_form_error(recurring_work_form, "Recurring work could not be saved.")}), 400
 
     return _render_recurring_work_detail_page(
         work=work,
@@ -2478,6 +2730,32 @@ def edit_recurring_work_route(recurring_work_id: int):
         generate_recurring_appointments_form=generate_recurring_appointments_form,
         source_args=recurring_source_args,
     )
+
+
+@bp.post("/recurring-work/<int:recurring_work_id>/archive")
+@login_required
+def archive_recurring_work_route(recurring_work_id: int):
+    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+        return redirect(url_for("admin.dashboard"))
+
+    recurring_source_args = _recurring_source_args_from_request()
+    form = ActionForm(prefix="archive-recurring")
+    if form.validate_on_submit():
+        try:
+            sync_result = archive_recurring_work(recurring_work_id)
+            if sync_result.deleted:
+                flash(
+                    f"Recurring plan archived and removed {sync_result.deleted} future managed event{'s' if sync_result.deleted != 1 else ''}.",
+                    "success",
+                )
+            else:
+                flash("Recurring plan archived. No future managed events needed removal.", "success")
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Unable to archive this recurring plan.", "error")
+
+    return redirect(url_for("admin.recurring_work_detail", recurring_work_id=recurring_work_id, **recurring_source_args))
 
 
 @bp.post("/recurring-work/<int:recurring_work_id>/generate")
@@ -2493,14 +2771,21 @@ def generate_recurring_work_appointments_route(recurring_work_id: int):
     recurring_source_args = _recurring_source_args_from_request()
     if form.validate_on_submit():
         try:
-            created_count = generate_appointments_for_recurring_work(recurring_work_id, days_ahead=int(form.days_ahead.data))
-            if created_count:
+            sync_result = sync_recurring_work_appointments(recurring_work_id, days_ahead=int(form.days_ahead.data))
+            if sync_result.total_changes:
+                summary_parts: list[str] = []
+                if sync_result.created:
+                    summary_parts.append(f"created {sync_result.created}")
+                if sync_result.updated:
+                    summary_parts.append(f"updated {sync_result.updated}")
+                if sync_result.deleted:
+                    summary_parts.append(f"removed {sync_result.deleted}")
                 flash(
-                    f"Generated {created_count} upcoming appointment{'s' if created_count != 1 else ''} for {work.title or 'this recurring work'}.",
+                    f"Synced upcoming appointments for {work.title or 'this recurring work'}: {', '.join(summary_parts)}.",
                     "success",
                 )
             else:
-                flash("No upcoming appointments were generated. This recurring plan may already be up to date or inactive.", "warning")
+                flash("Upcoming appointments already match this recurring plan.", "success")
         except Exception as exc:
             flash(str(exc), "error")
     else:
@@ -2516,12 +2801,52 @@ def generate_recurring_work_appointments_route(recurring_work_id: int):
     )
 
 
+@bp.post("/appointments/<int:appointment_id>/recurring-exception")
+@login_required
+def set_recurring_exception_route(appointment_id: int):
+    if not current_app.config.get("ENABLE_RECURRING_WORK") or not current_app.config.get("ENABLE_SCHEDULING"):
+        return redirect(url_for("admin.dashboard"))
+
+    appointment = get_appointment(appointment_id)
+    recurring_source_args = _recurring_source_args_from_request()
+    form = ActionForm(prefix="recurring-exception")
+    target_is_exception = request.form.get("is_exception") == "1"
+
+    if form.validate_on_submit():
+        try:
+            appointment = set_recurring_appointment_exception(appointment_id, is_exception=target_is_exception)
+            flash(
+                "Child event marked as a recurring exception." if target_is_exception else "Child event returned to recurring sync.",
+                "success",
+            )
+        except Exception as exc:
+            flash(str(exc), "error")
+    else:
+        flash("Unable to update the recurring exception state.", "error")
+
+    if appointment.recurring_work_id:
+        return redirect(
+            url_for(
+                "admin.recurring_work_detail",
+                recurring_work_id=appointment.recurring_work_id,
+                _anchor="generated-appointments",
+                **recurring_source_args,
+            )
+        )
+    return redirect(url_for("admin.appointment_detail", appointment_id=appointment_id))
+
+
 @bp.get("/customers/<int:customer_id>")
 @login_required
 def customer_detail(customer_id: int):
     if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     customer = get_customer(customer_id)
+    if current_app.config.get("ENABLE_RECURRING_WORK") and current_app.config.get("ENABLE_SCHEDULING"):
+        for recurring_work in customer.recurring_works:
+            sync_recurring_work_appointments(recurring_work.id)
+        customer = get_customer(customer_id)
+
     customer_info_form = CustomerInfoForm(
         prefix="customer-info",
         individual_name=customer.individual_name or (customer.primary_name if customer.display_name_preference != "business" else None),

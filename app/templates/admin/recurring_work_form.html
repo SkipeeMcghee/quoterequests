@@ -21,36 +21,78 @@
       <div class="section-bar compact-bar">
         <div>
           <h2>Recurring work details</h2>
-          <p class="subtle-text">Start with the service title, cadence, billing, and default time. After save you can generate upcoming appointments from the recurring plan.</p>
+          <p class="subtle-text">Choose the service, start from a preset if it helps, then shape the actual repeating rule below. Upcoming events will sync from that rule automatically.</p>
         </div>
       </div>
-      <form method="post" action="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}" class="stacked-form">
+      <form method="post" action="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}" class="stacked-form" data-recurring-rule-form>
         {{ form.hidden_tag() }}
         <label class="form-field">
-          <span class="field-label-row">Service or work title <span class="required-pill">Required</span></span>
-          {{ form.title(class_='input', required=true) }}
+          <span class="field-label-row">Service <span class="required-pill">Required</span></span>
+          {{ form.title(class_='select', required=true) }}
           {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
 
-        <div class="form-grid recurring-choice-grid">
+        <section class="recurring-form-section recurring-form-section--rule">
+          <div>
+            <h3>Preset and custom rule</h3>
+            <p class="subtle-text">Presets fill the builder below. After that, the repeat rule underneath is what actually gets saved.</p>
+          </div>
           <label class="form-field">
-            <span class="field-label-row">Frequency <span class="required-pill">Required</span></span>
-            {{ form.frequency(class_='select') }}
+            <span class="field-label-row">Preset <span class="required-pill">Required</span></span>
+            {{ form.frequency(class_='select', **{'data-recurring-preset-input': 'true'}) }}
+            <small class="field-help">Use a preset as a shortcut, or leave it on custom and build the cadence directly.</small>
             {% for error in form.frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
-          <label class="form-field">
-            <span>Weekly day</span>
-            {{ form.day_of_week(class_='select') }}
-            <small class="field-help">Use this when the frequency is weekly.</small>
-            {% for error in form.day_of_week.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
-          <label class="form-field">
-            <span>Monthly day</span>
-            {{ form.day_of_month(class_='select') }}
-            <small class="field-help">Use this when the frequency is monthly.</small>
-            {% for error in form.day_of_month.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
-        </div>
+
+          <div class="form-grid recurring-choice-grid recurring-choice-grid--rule">
+            <label class="form-field">
+              <span class="field-label-row">Repeat every <span class="required-pill">Required</span></span>
+              {{ form.recurrence_interval(class_='input', required=true) }}
+              {% for error in form.recurrence_interval.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span class="field-label-row">Repeat by <span class="required-pill">Required</span></span>
+              {{ form.recurrence_unit(class_='select', **{'data-recurring-unit-input': 'true'}) }}
+              {% for error in form.recurrence_unit.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+          </div>
+
+          <div class="recurring-rule-panel" data-recurring-unit-target="week">
+            <div>
+              <strong>Weekdays</strong>
+              <p class="subtle-text">Select one day for weekly or biweekly routes, or multiple days for custom patterns like twice a week.</p>
+            </div>
+            <div class="recurring-weekday-picker">
+              {% for option in form.weekdays %}
+                <label class="recurring-weekday-option">
+                  {{ option(class_='checkbox-input') }}
+                  <span>{{ option.label.text }}</span>
+                </label>
+              {% endfor %}
+            </div>
+            {% for error in form.weekdays.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </div>
+
+          <div class="recurring-rule-panel" data-recurring-unit-target="month">
+            <div>
+              <strong>Month days</strong>
+              <p class="subtle-text">Use one monthly day for monthly or bimonthly setups, or add a second day for semi-monthly patterns.</p>
+            </div>
+            <div class="form-grid recurring-choice-grid recurring-choice-grid--rule">
+              <label class="form-field">
+                <span>Primary monthly day</span>
+                {{ form.month_day_primary(class_='select') }}
+                {% for error in form.month_day_primary.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+              <label class="form-field">
+                <span>Second monthly day</span>
+                {{ form.month_day_secondary(class_='select') }}
+                <small class="field-help">Optional unless you want a semi-monthly pattern.</small>
+                {% for error in form.month_day_secondary.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+            </div>
+          </div>
+        </section>
 
         <div class="form-grid recurring-choice-grid">
           <label class="form-field">
@@ -120,10 +162,118 @@
         <article>
           <strong>Existing recurring plans</strong>
           <p>{{ customer.recurring_works|length }}</p>
-          <p class="subtle-text">After save, open the recurring plan detail page to edit it or generate upcoming appointments.</p>
+          <p class="subtle-text">After save, open the recurring plan detail page to refine it and review the synced events.</p>
         </article>
       </div>
     </article>
   </section>
 </main>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (function () {
+      var forms = document.querySelectorAll('[data-recurring-rule-form]');
+      forms.forEach(function (form) {
+        var presetInput = form.querySelector('[data-recurring-preset-input]');
+        var unitInput = form.querySelector('[data-recurring-unit-input]');
+        var startsOnInput = form.querySelector('input[name$="starts_on"]');
+        if (!presetInput || !unitInput) {
+          return;
+        }
+
+        var getWeekdayDefault = function () {
+          if (startsOnInput && startsOnInput.value) {
+            var parsed = new Date(startsOnInput.value + 'T00:00:00');
+            if (!Number.isNaN(parsed.getTime())) {
+              return (parsed.getDay() + 6) % 7;
+            }
+          }
+          return (new Date().getDay() + 6) % 7;
+        };
+
+        var getMonthDayDefault = function () {
+          if (startsOnInput && startsOnInput.value) {
+            var parsed = new Date(startsOnInput.value + 'T00:00:00');
+            if (!Number.isNaN(parsed.getTime())) {
+              return parsed.getDate();
+            }
+          }
+          return new Date().getDate();
+        };
+
+        var setWeekdaySelection = function (selectedValues) {
+          var selectedLookup = new Set(selectedValues.map(String));
+          form.querySelectorAll('input[name$="weekdays"]').forEach(function (input) {
+            input.checked = selectedLookup.has(input.value);
+          });
+        };
+
+        var updateVisibility = function () {
+          var unit = unitInput.value;
+          form.querySelectorAll('[data-recurring-unit-target]').forEach(function (field) {
+            var shouldShow = field.getAttribute('data-recurring-unit-target') === unit;
+            field.classList.toggle('is-hidden', !shouldShow);
+            field.querySelectorAll('select, input').forEach(function (input) {
+              input.disabled = !shouldShow;
+            });
+          });
+        };
+
+        var applyPreset = function () {
+          var intervalInput = form.querySelector('input[name$="recurrence_interval"]');
+          var monthPrimaryInput = form.querySelector('select[name$="month_day_primary"]');
+          var monthSecondaryInput = form.querySelector('select[name$="month_day_secondary"]');
+          var defaultWeekday = String(getWeekdayDefault());
+          var defaultMonthDay = String(getMonthDayDefault());
+
+          if (!intervalInput || !monthPrimaryInput || !monthSecondaryInput) {
+            updateVisibility();
+            return;
+          }
+
+          if (presetInput.value === 'weekly') {
+            unitInput.value = 'week';
+            intervalInput.value = '1';
+            setWeekdaySelection([defaultWeekday]);
+          } else if (presetInput.value === 'biweekly') {
+            unitInput.value = 'week';
+            intervalInput.value = '2';
+            setWeekdaySelection([defaultWeekday]);
+          } else if (presetInput.value === 'monthly') {
+            unitInput.value = 'month';
+            intervalInput.value = '1';
+            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
+              monthPrimaryInput.value = defaultMonthDay;
+            }
+            monthSecondaryInput.value = '0';
+          } else if (presetInput.value === 'semi_monthly') {
+            unitInput.value = 'month';
+            intervalInput.value = '1';
+            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
+              monthPrimaryInput.value = defaultMonthDay;
+            }
+            if (!monthSecondaryInput.value || monthSecondaryInput.value === '0' || monthSecondaryInput.value === monthPrimaryInput.value) {
+              monthSecondaryInput.value = monthPrimaryInput.value === '15' ? '1' : '15';
+            }
+          } else if (presetInput.value === 'bimonthly') {
+            unitInput.value = 'month';
+            intervalInput.value = '2';
+            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
+              monthPrimaryInput.value = defaultMonthDay;
+            }
+            monthSecondaryInput.value = '0';
+          }
+
+          updateVisibility();
+        };
+
+        presetInput.addEventListener('change', applyPreset);
+        unitInput.addEventListener('change', updateVisibility);
+        updateVisibility();
+        applyPreset();
+      });
+    }());
+  </script>
 {% endblock %}

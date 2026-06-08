@@ -1,5 +1,5 @@
 from decimal import Decimal
-from datetime import date, time
+from datetime import date, time, timedelta
 from types import SimpleNamespace
 
 from app.extensions import db
@@ -373,6 +373,8 @@ def test_admin_can_create_recurring_work_from_customer_context(client, app, admi
     app.config.update(
         ENABLE_CUSTOMER_RECORDS=True,
         ENABLE_RECURRING_WORK=True,
+        ENABLE_SCHEDULING=True,
+        ENABLE_SERVICES=True,
     )
     with app.app_context():
         customer = Customer(primary_name='Recurring Flow Customer', primary_city='City', primary_email='customer@example.com')
@@ -396,10 +398,13 @@ def test_admin_can_create_recurring_work_from_customer_context(client, app, admi
     response = client.post(
         f'/admin/customers/{customer_id}/recurring-work/new',
         data={
-            'recurring-work-title': 'Weekly window cleaning',
+            'recurring-work-title': 'Window Cleaning',
             'recurring-work-frequency': 'weekly',
-            'recurring-work-day_of_week': '4',
-            'recurring-work-day_of_month': '0',
+            'recurring-work-recurrence_unit': 'week',
+            'recurring-work-recurrence_interval': '1',
+            'recurring-work-weekdays': ['4'],
+            'recurring-work-month_day_primary': '0',
+            'recurring-work-month_day_secondary': '0',
             'recurring-work-starts_on': '2026-05-01',
             'recurring-work-ends_on': '',
             'recurring-work-start_time_hour': '9',
@@ -420,13 +425,15 @@ def test_admin_can_create_recurring_work_from_customer_context(client, app, admi
     with app.app_context():
         work = RecurringWork.query.one()
         assert work.customer_id == customer_id
-        assert work.title == 'Weekly window cleaning'
+        assert work.title == 'Window Cleaning'
         assert work.frequency == 'weekly'
         assert work.day_of_week == 4
+        assert work.recurrence_config == {'unit': 'week', 'interval': 1, 'weekdays': [4], 'month_days': []}
         assert work.start_time == time(9, 0)
         assert work.end_time == time(11, 0)
         assert work.billing_amount == Decimal('125.00')
         assert work.billing_frequency == 'monthly'
+        assert Appointment.query.filter_by(recurring_work_id=work.id).count() > 0
 
 
 def test_recurring_work_detail_shows_generation_links_and_customer_context(client, app, admin_user):
@@ -435,6 +442,7 @@ def test_recurring_work_detail_shows_generation_links_and_customer_context(clien
         ENABLE_RECURRING_WORK=True,
         ENABLE_SCHEDULING=True,
         ENABLE_CALENDAR=True,
+        ENABLE_SERVICES=True,
     )
     with app.app_context():
         customer = Customer(primary_name='Recurring Flow Customer', primary_city='City')
@@ -444,7 +452,7 @@ def test_recurring_work_detail_shows_generation_links_and_customer_context(clien
 
         work = RecurringWork(
             customer_id=customer_id,
-            title='Weekly window cleaning',
+            title='Window Cleaning',
             frequency='weekly',
             day_of_week=4,
             starts_on=date(2026, 5, 1),
@@ -462,16 +470,8 @@ def test_recurring_work_detail_shows_generation_links_and_customer_context(clien
         follow_redirects=True,
     )
 
-    response = client.post(
-        f'/admin/recurring-work/{work_id}/generate?source=customer&customer_id={customer_id}',
-        data={
-            'generate-recurring-days_ahead': '30',
-            'generate-recurring-submit': 'Generate Upcoming Appointments',
-        },
-        follow_redirects=False,
-    )
-    assert response.status_code == 302
-    assert f'/admin/recurring-work/{work_id}?source=customer&customer_id={customer_id}#generated-appointments' in response.headers['Location']
+    response = client.get(f'/admin/recurring-work/{work_id}?source=customer&customer_id={customer_id}')
+    assert response.status_code == 200
 
     with app.app_context():
         appointment = Appointment.query.filter_by(recurring_work_id=work_id).first()
@@ -479,21 +479,258 @@ def test_recurring_work_detail_shows_generation_links_and_customer_context(clien
         appointment_id = appointment.id
         scheduled_date = appointment.scheduled_date
 
-    response = client.get(f'/admin/recurring-work/{work_id}?source=customer&customer_id={customer_id}')
-    assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert 'Back to Customer' in body
-    assert 'Generate upcoming appointments' in body
+    assert 'View Generated Events' in body
+    assert body.count('View Customer') == 1
+    assert 'Schedule sync' in body
+    assert 'Future impact' in body
+    assert 'Sync Upcoming Events' in body
+    assert 'Archive Plan and Remove Future Managed Events' in body
+    assert 'Mark Exception' in body
+    assert 'Save Recurring Work' not in body
     assert 'Generated appointments' in body
+    assert 'Back to Customer Record' not in body
+    assert 'Calendar View' not in body
+    assert 'List View' not in body
+    assert 'recurring-generated-dialog' in body
     assert f'/admin/appointments/{appointment_id}?source=day&amp;date={scheduled_date.isoformat()}&amp;year={scheduled_date.year}&amp;month={scheduled_date.month}&amp;day={scheduled_date.day}' in body
     assert f'/admin/calendar/{scheduled_date.year}/{scheduled_date.month}/{scheduled_date.day}' in body
     assert f'/admin/customers/{customer_id}#recurring-work' in body
+
+
+def test_recurring_work_preview_endpoint_reports_pending_child_changes(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+        ENABLE_RECURRING_WORK=True,
+        ENABLE_SCHEDULING=True,
+        ENABLE_SERVICES=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='Preview Customer', primary_city='City')
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+        work = RecurringWork(
+            customer_id=customer_id,
+            title='Window Cleaning',
+            frequency='weekly',
+            day_of_week=date.today().weekday(),
+            starts_on=date.today(),
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status='active',
+        )
+        db.session.add(work)
+        db.session.commit()
+        work_id = work.id
+
+        db.session.add_all(
+            [
+                Appointment(
+                    customer_id=customer_id,
+                    recurring_work_id=work_id,
+                    title='Window Cleaning',
+                    scheduled_date=date.today(),
+                    start_time=time(9, 0),
+                    end_time=time(11, 0),
+                    status='Scheduled',
+                ),
+                Appointment(
+                    customer_id=customer_id,
+                    recurring_work_id=work_id,
+                    title='Window Cleaning',
+                    scheduled_date=date.today().replace(day=date.today().day) + timedelta(days=1),
+                    start_time=time(9, 0),
+                    end_time=time(11, 0),
+                    status='Scheduled',
+                ),
+            ]
+        )
+        db.session.commit()
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.post(
+        f'/admin/recurring-work/{work_id}/impact-preview',
+        data={
+            'recurring-work-title': 'Window Cleaning',
+            'recurring-work-frequency': 'weekly',
+            'recurring-work-recurrence_unit': 'week',
+            'recurring-work-recurrence_interval': '1',
+            'recurring-work-weekdays': [str(date.today().weekday())],
+            'recurring-work-month_day_primary': '0',
+            'recurring-work-month_day_secondary': '0',
+            'recurring-work-starts_on': date.today().isoformat(),
+            'recurring-work-ends_on': '',
+            'recurring-work-start_time_hour': '10',
+            'recurring-work-start_time_minute': '0',
+            'recurring-work-end_time_hour': '12',
+            'recurring-work-end_time_minute': '0',
+            'recurring-work-billing_amount': '',
+            'recurring-work-billing_frequency': '',
+            'recurring-work-status': 'active',
+            'recurring-work-notes': '',
+            'preview-days-ahead': '30',
+        },
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['ok'] is True
+    assert payload['updated'] == 1
+    assert payload['deleted'] == 1
+    assert payload['created'] > 0
+
+
+def test_recurring_work_edit_autosave_returns_json(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+        ENABLE_RECURRING_WORK=True,
+        ENABLE_SCHEDULING=True,
+        ENABLE_SERVICES=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='Autosave Customer', primary_city='City')
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+        work = RecurringWork(
+            customer_id=customer_id,
+            title='Window Cleaning',
+            frequency='weekly',
+            recurrence_config={'unit': 'week', 'interval': 1, 'weekdays': [date.today().weekday()], 'month_days': []},
+            day_of_week=date.today().weekday(),
+            starts_on=date.today(),
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status='active',
+        )
+        db.session.add(work)
+        db.session.commit()
+        work_id = work.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.post(
+        f'/admin/recurring-work/{work_id}/edit?source=customer&customer_id={customer_id}',
+        data={
+            'recurring-work-title': 'Window Cleaning',
+            'recurring-work-frequency': 'biweekly',
+            'recurring-work-recurrence_unit': 'week',
+            'recurring-work-recurrence_interval': '2',
+            'recurring-work-weekdays': [str(date.today().weekday())],
+            'recurring-work-month_day_primary': '0',
+            'recurring-work-month_day_secondary': '0',
+            'recurring-work-starts_on': date.today().isoformat(),
+            'recurring-work-ends_on': '',
+            'recurring-work-start_time_hour': '10',
+            'recurring-work-start_time_minute': '0',
+            'recurring-work-end_time_hour': '12',
+            'recurring-work-end_time_minute': '0',
+            'recurring-work-billing_amount': '',
+            'recurring-work-billing_frequency': '',
+            'recurring-work-status': 'active',
+            'recurring-work-notes': 'Autosaved change',
+        },
+        headers={'X-Requested-With': 'XMLHttpRequest'},
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload['ok'] is True
+    assert payload['message'] == 'Recurring work saved.'
+    assert payload['work']['frequency_label'] == 'Biweekly'
+    assert payload['work']['time_summary'] == '10:00 – 12:00'
+
+    with app.app_context():
+        refreshed = db.session.get(RecurringWork, work_id)
+        assert refreshed is not None
+        assert refreshed.frequency == 'biweekly'
+        assert refreshed.recurrence_config == {'unit': 'week', 'interval': 2, 'weekdays': [date.today().weekday()], 'month_days': []}
+        assert refreshed.start_time == time(10, 0)
+        assert refreshed.end_time == time(12, 0)
+        assert refreshed.notes == 'Autosaved change'
+
+
+def test_admin_can_mark_recurring_child_event_as_exception(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+        ENABLE_RECURRING_WORK=True,
+        ENABLE_SCHEDULING=True,
+        ENABLE_SERVICES=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='Exception Customer', primary_city='City')
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+        work = RecurringWork(
+            customer_id=customer_id,
+            title='Window Cleaning',
+            frequency='weekly',
+            day_of_week=date.today().weekday(),
+            starts_on=date.today(),
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status='active',
+        )
+        db.session.add(work)
+        db.session.commit()
+        work_id = work.id
+
+        appointment = Appointment(
+            customer_id=customer_id,
+            recurring_work_id=work_id,
+            title='Window Cleaning',
+            scheduled_date=date.today(),
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status='Scheduled',
+        )
+        db.session.add(appointment)
+        db.session.commit()
+        appointment_id = appointment.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.post(
+        f'/admin/appointments/{appointment_id}/recurring-exception?source=customer&customer_id={customer_id}',
+        data={'is_exception': '1'},
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert f'/admin/recurring-work/{work_id}?source=customer&customer_id={customer_id}#generated-appointments' in response.headers['Location']
+
+    with app.app_context():
+        refreshed = db.session.get(Appointment, appointment_id)
+        assert refreshed is not None
+        assert refreshed.recurring_exception is True
+
+    detail_response = client.get(f'/admin/recurring-work/{work_id}?source=customer&customer_id={customer_id}')
+    assert detail_response.status_code == 200
+    detail_body = detail_response.get_data(as_text=True)
+    assert 'Resume Sync' in detail_body
 
 
 def test_recurring_work_list_shows_scannable_plan_columns(client, app, admin_user):
     app.config.update(
         ENABLE_CUSTOMER_RECORDS=True,
         ENABLE_RECURRING_WORK=True,
+        ENABLE_SERVICES=True,
     )
     with app.app_context():
         customer = Customer(primary_name='Recurring Flow Customer', primary_city='City')
@@ -502,7 +739,7 @@ def test_recurring_work_list_shows_scannable_plan_columns(client, app, admin_use
 
         work = RecurringWork(
             customer_id=customer.id,
-            title='Monthly gutter cleaning',
+            title='Inspection',
             frequency='monthly',
             day_of_month=15,
             starts_on=date(2026, 5, 1),
@@ -520,12 +757,12 @@ def test_recurring_work_list_shows_scannable_plan_columns(client, app, admin_use
     response = client.get('/admin/recurring-work')
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert 'Recurring plan' in body
+    assert 'Service' in body
     assert 'Cadence' in body
     assert 'Default time' in body
     assert 'Generated' in body
     assert 'Recurring Flow Customer' in body
-    assert 'Open Plan' in body
+    assert 'Open Plan' not in body
 
 
 def test_customer_detail_handles_note_without_author(client, app, admin_user):

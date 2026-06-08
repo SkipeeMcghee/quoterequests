@@ -218,7 +218,17 @@ class CustomerPhoto(db.Model):
 class RecurringWork(db.Model):
     __tablename__ = "recurring_works"
 
-    FREQUENCIES = ("weekly", "monthly")
+    FREQUENCIES = ("weekly", "biweekly", "monthly", "semi_monthly", "bimonthly", "custom")
+    FREQUENCY_LABELS = {
+        "weekly": "Weekly",
+        "biweekly": "Biweekly",
+        "monthly": "Monthly",
+        "semi_monthly": "Semi-monthly",
+        "bimonthly": "Every 2 months",
+        "custom": "Custom",
+    }
+    WEEKDAY_SHORT_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    WEEKDAY_LONG_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     BILLING_FREQUENCIES = Customer.BILLING_FREQUENCIES
     STATUSES = ("active", "inactive")
 
@@ -228,6 +238,7 @@ class RecurringWork(db.Model):
     source_appointment_id = db.Column(db.Integer, db.ForeignKey("appointments.id", use_alter=True), nullable=True, index=True)
     title = db.Column(db.String(255), nullable=True)
     frequency = db.Column(db.String(16), nullable=False)
+    recurrence_config = db.Column(db.JSON(), nullable=True)
     day_of_week = db.Column(db.SmallInteger(), nullable=True)
     day_of_month = db.Column(db.SmallInteger(), nullable=True)
     starts_on = db.Column(db.Date(), nullable=False)
@@ -249,6 +260,123 @@ class RecurringWork(db.Model):
         foreign_keys="Appointment.recurring_work_id",
         order_by="Appointment.scheduled_date.desc()",
     )
+
+    @staticmethod
+    def _normalize_weekdays(raw_values) -> list[int]:
+        if raw_values in (None, ""):
+            return []
+
+        if isinstance(raw_values, (int, str)):
+            raw_iterable = [raw_values]
+        else:
+            raw_iterable = list(raw_values)
+
+        normalized: list[int] = []
+        seen_values: set[int] = set()
+        for raw_value in raw_iterable:
+            try:
+                weekday = int(raw_value)
+            except (TypeError, ValueError):
+                continue
+
+            if weekday < 0 or weekday > 6 or weekday in seen_values:
+                continue
+
+            seen_values.add(weekday)
+            normalized.append(weekday)
+
+        return sorted(normalized)
+
+    @staticmethod
+    def _normalize_month_days(raw_values) -> list[int]:
+        if raw_values in (None, ""):
+            return []
+
+        if isinstance(raw_values, (int, str)):
+            raw_iterable = [raw_values]
+        else:
+            raw_iterable = list(raw_values)
+
+        normalized: list[int] = []
+        seen_values: set[int] = set()
+        for raw_value in raw_iterable:
+            try:
+                month_day = int(raw_value)
+            except (TypeError, ValueError):
+                continue
+
+            if month_day < 1 or month_day > 31 or month_day in seen_values:
+                continue
+
+            seen_values.add(month_day)
+            normalized.append(month_day)
+
+        return sorted(normalized)
+
+    @property
+    def resolved_recurrence_config(self) -> dict[str, object]:
+        raw_config = self.recurrence_config or {}
+        unit = str(raw_config.get("unit") or "").strip().lower()
+        if unit not in {"week", "month"}:
+            unit = "month" if self.frequency in {"monthly", "semi_monthly", "bimonthly"} else "week"
+
+        try:
+            interval = int(raw_config.get("interval") or 1)
+        except (TypeError, ValueError):
+            interval = 1
+        if interval < 1:
+            interval = 1
+
+        weekdays = self._normalize_weekdays(raw_config.get("weekdays"))
+        month_days = self._normalize_month_days(raw_config.get("month_days"))
+
+        if unit == "week" and not weekdays and self.day_of_week is not None:
+            weekdays = self._normalize_weekdays([self.day_of_week])
+        if unit == "month" and not month_days and self.day_of_month is not None:
+            month_days = self._normalize_month_days([self.day_of_month])
+
+        return {
+            "unit": unit,
+            "interval": interval,
+            "weekdays": weekdays,
+            "month_days": month_days,
+        }
+
+    @property
+    def frequency_label(self) -> str:
+        return self.FREQUENCY_LABELS.get(self.frequency, "Custom")
+
+    @property
+    def cadence_summary(self) -> str:
+        config = self.resolved_recurrence_config
+        interval = int(config["interval"])
+
+        if config["unit"] == "week":
+            weekday_labels = [self.WEEKDAY_SHORT_LABELS[weekday] for weekday in config["weekdays"]]
+            if interval == 1:
+                prefix = "Every week"
+            elif interval == 2:
+                prefix = "Every 2 weeks"
+            else:
+                prefix = f"Every {interval} weeks"
+
+            if weekday_labels:
+                return f"{prefix} on {', '.join(weekday_labels)}"
+            return prefix
+
+        month_days = [str(month_day) for month_day in config["month_days"]]
+        if interval == 1:
+            prefix = "Every month"
+        elif interval == 2:
+            prefix = "Every 2 months"
+        else:
+            prefix = f"Every {interval} months"
+
+        if len(month_days) == 1:
+            return f"{prefix} on day {month_days[0]}"
+        if len(month_days) > 1:
+            return f"{prefix} on days {', '.join(month_days)}"
+        return prefix
 
     def __repr__(self) -> str:
         return f"<RecurringWork {self.id} customer={self.customer_id} frequency={self.frequency} starts={self.starts_on}>"

@@ -219,6 +219,7 @@ class Appointment(db.Model):
     customer_notes = db.Column(db.Text, nullable=True)
     internal_notes = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(32), nullable=False, default="Requested")
+    recurring_exception = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
     previous_appointment_id = db.Column(db.Integer, db.ForeignKey("appointments.id"), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -260,6 +261,10 @@ class Appointment(db.Model):
         if self.id is not None:
             return f"Event #{self.id}"
         return "Scheduled event"
+
+    @property
+    def is_recurring_sync_locked(self) -> bool:
+        return bool(self.recurring_exception or self.status not in APPOINTMENT_STATUSES[:2])
 
     def __repr__(self) -> str:
         return (

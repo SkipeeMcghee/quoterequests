@@ -370,13 +370,13 @@
             {% endfor %}
           </div>
           <div class="notice-card customer-recurring-guidance">
-            <strong>Next step: open a recurring plan to generate upcoming appointments.</strong>
-            <p>Generation now happens on the recurring work detail page so it is always clear which plan is creating scheduled events.</p>
+            <strong>Next step: open a recurring plan to review its cadence and synced events.</strong>
+            <p>Upcoming appointments now stay aligned automatically when the plan changes or is opened.</p>
           </div>
         {% else %}
           <div class="notice-card customer-recurring-empty">
             <strong>No recurring work is configured for this customer yet.</strong>
-            <p>Create the first recurring plan here, then open it to edit the cadence and generate upcoming appointments.</p>
+            <p>Create the first recurring plan here. Once saved, upcoming appointments will stay in sync automatically.</p>
             <div class="button-row">
               <a class="btn btn-primary" href="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}">Add Recurring Work</a>
             </div>

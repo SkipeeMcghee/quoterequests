@@ -8,7 +8,7 @@
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Recurring Work',
-    description='Edit this repeating service plan and generate upcoming scheduled events from it.',
+    description='Edit this repeating service plan and keep its scheduled events aligned automatically.',
     nav_mode='sub',
     return_url=recurring_return_url,
     return_label=recurring_return_label,
@@ -17,19 +17,14 @@
       {% if work.customer %}
         <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">View Customer</a>
       {% endif %}
-      {% if recurring_calendar_url %}
-        <a class="btn btn-secondary" href="{{ recurring_calendar_url }}">Calendar View</a>
-      {% endif %}
-      {% if recurring_list_url %}
-        <a class="btn btn-secondary" href="{{ recurring_list_url }}">List View</a>
-      {% endif %}
+      <button type="button" class="btn btn-secondary" data-recurring-generated-open="recurring-generated-dialog">View Generated Events</button>
   {% endcall %}
 
-  <section class="summary-card recurring-plan-overview">
+  <section class="summary-card recurring-plan-overview" id="plan-overview">
     <div class="recurring-plan-overview__header">
       <div>
         <p class="eyebrow">Recurring plan</p>
-        <h2>{{ work.title or 'Recurring work' }}</h2>
+        <h2 data-recurring-summary-title>{{ work.title or 'Service not set' }}</h2>
         <p class="subtle-text">
           {% if work.customer %}
             <a href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">{{ work.customer.primary_name or 'Customer' }}</a>
@@ -39,256 +34,288 @@
         </p>
       </div>
       <div class="recurring-plan-overview__status">
-        <span class="status-badge">{{ work.status|capitalize }}</span>
-        <span class="subtle-text">{{ generated_count }} generated appointment{% if generated_count != 1 %}s{% endif %}</span>
+        <span class="status-badge" data-recurring-summary-status>{{ work.status|capitalize }}</span>
+        <span class="subtle-text" data-recurring-summary-generated>{{ upcoming_generated_count }} upcoming of {{ generated_count }} total child event{% if generated_count != 1 %}s{% endif %}</span>
       </div>
     </div>
 
-    <div class="recurring-plan-metrics">
-      <article>
-        <strong>Customer</strong>
-        <span>{% if work.customer %}{{ work.customer.primary_name or 'Customer' }}{% else %}Not linked{% endif %}</span>
-      </article>
-      <article>
-        <strong>Frequency</strong>
-        <span>{{ work.frequency|capitalize }}</span>
-      </article>
-      <article>
-        <strong>Default time</strong>
-        <span>
-          {% if work.start_time and work.end_time %}
-            {{ work.start_time.strftime('%H:%M') }} – {{ work.end_time.strftime('%H:%M') }}
-          {% elif work.start_time %}
-            Starts {{ work.start_time.strftime('%H:%M') }}
-          {% else %}
-            No default time
-          {% endif %}
-        </span>
-      </article>
-      <article>
-        <strong>Billing</strong>
-        <span>
-          {% if work.billing_amount is not none and work.billing_frequency %}
-            {{ work.billing_amount }} / {{ work.billing_frequency }}
-          {% else %}
-            Not set
-          {% endif %}
-        </span>
-      </article>
-      <article>
-        <strong>Start date</strong>
-        <span>{{ work.starts_on.strftime('%b %d, %Y') }}</span>
-      </article>
-      <article>
-        <strong>End date</strong>
-        <span>{{ work.ends_on.strftime('%b %d, %Y') if work.ends_on else 'No end date' }}</span>
-      </article>
-      <article>
-        <strong>Upcoming generated</strong>
-        <span>{{ upcoming_generated_count }}</span>
-      </article>
+    <div class="recurring-plan-overview__meta-row">
+      <span class="tag-pill" data-recurring-summary-frequency>{{ work.frequency_label }}</span>
+      <span class="tag-pill" data-recurring-summary-cadence>{{ work.cadence_summary }}</span>
+      <span class="tag-pill" data-recurring-summary-time>
+        {% if work.start_time and work.end_time %}
+          {{ work.start_time.strftime('%H:%M') }} – {{ work.end_time.strftime('%H:%M') }}
+        {% else %}
+          No default time
+        {% endif %}
+      </span>
+      <span class="tag-pill" data-recurring-summary-starts>Starts {{ work.starts_on.strftime('%b %d, %Y') }}</span>
     </div>
 
-    <div class="recurring-plan-links">
-      {% if work.customer %}
-        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id, _anchor='recurring-work') }}">Back to Customer Record</a>
-      {% endif %}
-      {% if recurring_calendar_url %}
-        <a class="btn btn-secondary" href="{{ recurring_calendar_url }}">Open Calendar View</a>
-      {% endif %}
-      {% if recurring_list_url %}
-        <a class="btn btn-secondary" href="{{ recurring_list_url }}">Open List View</a>
-      {% endif %}
-    </div>
   </section>
 
-  <section class="detail-grid">
-    <article class="summary-card">
+  <section class="detail-grid recurring-detail-sections">
+    <article class="summary-card recurring-impact-card" id="recurring-impact" data-recurring-impact-preview data-recurring-preview-url="{{ recurring_preview_url }}">
       <div class="section-bar compact-bar">
-        <h2>Plan details</h2>
+        <div>
+          <h2>Future impact</h2>
+          <p class="subtle-text">Preview how saving the current edits would affect managed child events before anything is committed.</p>
+        </div>
       </div>
-      <dl class="detail-list vertical-list">
-        <div>
-          <dt>Customer</dt>
-          <dd>
-            {% if work.customer %}
-              <a href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">{{ work.customer.primary_name or 'Unnamed' }}</a>
-            {% else %}
-              None
-            {% endif %}
-          </dd>
-        </div>
-        <div>
-          <dt>Service or work title</dt>
-          <dd>{{ work.title or 'Recurring work' }}</dd>
-        </div>
-        <div>
-          <dt>Frequency</dt>
-          <dd>{{ work.frequency|capitalize }}</dd>
-        </div>
-        {% if work.frequency == 'weekly' %}
-          <div>
-            <dt>Day</dt>
-            <dd>{{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][work.day_of_week] }}</dd>
-          </div>
-        {% else %}
-          <div>
-            <dt>Day</dt>
-            <dd>{{ work.day_of_month }}</dd>
-          </div>
-        {% endif %}
-        <div>
-          <dt>Preferred time</dt>
-          <dd>
-            {% if work.start_time and work.end_time %}
-              {{ work.start_time.strftime('%H:%M') }} – {{ work.end_time.strftime('%H:%M') }}
-            {% else %}
-              Not set
-            {% endif %}
-          </dd>
-        </div>
-        <div>
-          <dt>Billing</dt>
-          <dd>
-            {% if work.billing_amount is not none and work.billing_frequency %}
-              {{ work.billing_amount }} / {{ work.billing_frequency }}
-            {% else %}
-              None
-            {% endif %}
-          </dd>
-        </div>
-        <div>
-          <dt>Starts on</dt>
-          <dd>{{ work.starts_on.strftime('%b %d, %Y') }}</dd>
-        </div>
-        <div>
-          <dt>Ends on</dt>
-          <dd>{{ work.ends_on.strftime('%b %d, %Y') if work.ends_on else 'None' }}</dd>
-        </div>
-        <div>
-          <dt>Status</dt>
-          <dd>{{ work.status }}</dd>
-        </div>
-        {% if work.notes %}
-          <div>
-            <dt>Notes</dt>
-            <dd>{{ work.notes }}</dd>
-          </div>
-        {% endif %}
-      </dl>
+      <label class="form-field recurring-impact-window">
+        <span>Preview window</span>
+        <select class="select" data-recurring-preview-window>
+          {% for value, label in recurring_preview_window_choices %}
+            <option value="{{ value }}" {% if value == recurring_preview_window_default %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="recurring-impact-grid">
+        <article>
+          <strong data-recurring-impact-created>{{ recurring_preview_payload.created }}</strong>
+          <span>Would create</span>
+        </article>
+        <article>
+          <strong data-recurring-impact-updated>{{ recurring_preview_payload.updated }}</strong>
+          <span>Would update</span>
+        </article>
+        <article>
+          <strong data-recurring-impact-deleted>{{ recurring_preview_payload.deleted }}</strong>
+          <span>Would remove</span>
+        </article>
+        <article>
+          <strong data-recurring-impact-protected>{{ recurring_preview_payload.protected }}</strong>
+          <span>Would stay protected</span>
+        </article>
+      </div>
+      <p class="recurring-impact-card__message" data-recurring-impact-message>{{ recurring_preview_payload.message }}</p>
+      <p class="subtle-text recurring-impact-card__secondary" data-recurring-impact-secondary>{{ recurring_preview_payload.secondary_message }}</p>
     </article>
 
-    <article class="summary-card">
+    <article class="summary-card recurring-plan-actions-card">
       <div class="section-bar compact-bar">
         <div>
-          <h2>Generate upcoming appointments</h2>
-          <p class="subtle-text">Create scheduled events from this recurring plan for the selected time window.</p>
+          <h2>Schedule sync</h2>
+          <p class="subtle-text">The next 30 or 60 days stay aligned automatically when this plan is opened or changed. Use manual sync only when you want to refresh the window immediately.</p>
         </div>
       </div>
-      <form method="post" action="{{ generate_recurring_work_url }}" class="stacked-form">
+      <form method="post" action="{{ generate_recurring_work_url }}" class="stacked-form recurring-plan-actions">
         {{ generate_recurring_appointments_form.hidden_tag() }}
         <label class="form-field">
-          <span>Generate appointments for</span>
+          <span>Keep upcoming events ready for</span>
           {{ generate_recurring_appointments_form.days_ahead(class_='select') }}
           {% for error in generate_recurring_appointments_form.days_ahead.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
         <div class="button-row">
           {{ generate_recurring_appointments_form.submit(class_='btn btn-primary') }}
-          {% if recurring_calendar_url %}
-            <a class="btn btn-secondary" href="{{ recurring_calendar_url }}">Calendar View</a>
-          {% endif %}
-          {% if recurring_list_url %}
-            <a class="btn btn-secondary" href="{{ recurring_list_url }}">List View</a>
-          {% endif %}
         </div>
       </form>
+
+      <div class="recurring-danger-zone">
+        <strong>Bulk control</strong>
+        <p class="subtle-text">Archive the plan and remove every future managed child event at once. Protected exceptions and status-locked events stay linked.</p>
+        <form method="post" action="{{ archive_recurring_work_url }}" class="inline-form" data-confirm-text="Archive this recurring plan and remove {{ future_managed_event_count }} future managed child event{% if future_managed_event_count != 1 %}s{% endif %}?">
+          {{ archive_recurring_form.hidden_tag() }}
+          <button type="submit" class="btn btn-danger">Archive Plan and Remove Future Managed Events</button>
+        </form>
+      </div>
     </article>
   </section>
 
-  <section class="summary-card">
+  <section class="summary-card" id="recurring-edit">
     <div class="section-bar compact-bar">
       <div>
-        <h2>Edit recurring plan</h2>
-        <p class="subtle-text">Keep the customer, cadence, default time, and active status visible while updating the plan.</p>
+        <h2>Recurring plan details</h2>
+        <p class="subtle-text">This page saves automatically. The fields below now serve as both the live display and the editing surface for the plan.</p>
       </div>
+      <p class="subtle-text recurring-autosave-status" data-recurring-autosave-status aria-live="polite"></p>
     </div>
-    <form method="post" action="{{ edit_recurring_work_url }}" class="stacked-form">
+    <form method="post" action="{{ edit_recurring_work_url }}" class="stacked-form" data-recurring-frequency-form data-recurring-edit-form>
       {{ recurring_work_form.hidden_tag() }}
-      <label class="form-field">
-        <span class="field-label-row">Service or work title <span class="required-pill">Required</span></span>
-        {{ recurring_work_form.title(class_='input', required=true) }}
-        {% for error in recurring_work_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </label>
-      <div class="form-grid recurring-choice-grid">
+      <section class="recurring-form-section recurring-form-section--context">
+        <div>
+          <h3>Plan context</h3>
+          <p class="subtle-text">These linked records and counts update as the recurring rule changes and autosaves.</p>
+        </div>
+        <div class="recurring-edit-context">
+          <article>
+            <strong>Customer</strong>
+            <p>
+              {% if work.customer %}
+                <a href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">{{ work.customer.primary_name or 'Unnamed' }}</a>
+              {% else %}
+                No linked customer
+              {% endif %}
+            </p>
+          </article>
+          <article>
+            <strong>Linked request</strong>
+            <p data-recurring-summary-request>
+              {% if work.quote_request_id %}
+                <a href="{{ url_for('admin.request_detail', request_id=work.quote_request_id) }}">{{ work.quote_request.request_reference }}</a>
+              {% else %}
+                None
+              {% endif %}
+            </p>
+          </article>
+          <article>
+            <strong>Managed child events</strong>
+            <p data-recurring-summary-managed>{{ future_managed_event_count }} future event{% if future_managed_event_count != 1 %}s{% endif %}</p>
+          </article>
+          <article>
+            <strong>Protected child events</strong>
+            <p data-recurring-summary-protected>{{ recurring_preview_payload.protected }} inside current preview window</p>
+          </article>
+          <article>
+            <strong>Billing snapshot</strong>
+            <p data-recurring-summary-billing>
+              {% if work.billing_amount is not none and work.billing_frequency %}
+                {{ work.billing_amount }} / {{ work.billing_frequency }}
+              {% else %}
+                Not set
+              {% endif %}
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="recurring-form-section">
+        <div>
+          <h3>Service and cadence</h3>
+          <p class="subtle-text">Pick the service, start from a preset if it helps, then define the actual repeating rule that should govern future child events.</p>
+        </div>
         <label class="form-field">
-          <span class="field-label-row">Frequency <span class="required-pill">Required</span></span>
-          {{ recurring_work_form.frequency(class_='select') }}
+          <span class="field-label-row">Service <span class="required-pill">Required</span></span>
+          {{ recurring_work_form.title(class_='select', required=true) }}
+          {% for error in recurring_work_form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <label class="form-field">
+          <span class="field-label-row">Preset <span class="required-pill">Required</span></span>
+          {{ recurring_work_form.frequency(class_='select', **{'data-recurring-preset-input': 'true'}) }}
+          <small class="field-help">Presets fill the builder below. The repeat rule underneath is what actually gets saved.</small>
           {% for error in recurring_work_form.frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
+        <div class="form-grid recurring-choice-grid recurring-choice-grid--rule">
+          <label class="form-field">
+            <span class="field-label-row">Repeat every <span class="required-pill">Required</span></span>
+            {{ recurring_work_form.recurrence_interval(class_='input', required=true) }}
+            {% for error in recurring_work_form.recurrence_interval.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span class="field-label-row">Repeat by <span class="required-pill">Required</span></span>
+            {{ recurring_work_form.recurrence_unit(class_='select', **{'data-recurring-unit-input': 'true'}) }}
+            {% for error in recurring_work_form.recurrence_unit.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+        </div>
+
+        <div class="recurring-rule-panel" data-recurring-unit-target="week">
+          <div>
+            <strong>Weekdays</strong>
+            <p class="subtle-text">Select one day for weekly or biweekly routes, or multiple days for custom patterns like twice a week.</p>
+          </div>
+          <div class="recurring-weekday-picker">
+            {% for option in recurring_work_form.weekdays %}
+              <label class="recurring-weekday-option">
+                {{ option(class_='checkbox-input') }}
+                <span>{{ option.label.text }}</span>
+              </label>
+            {% endfor %}
+          </div>
+          {% for error in recurring_work_form.weekdays.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+
+        <div class="recurring-rule-panel" data-recurring-unit-target="month">
+          <div>
+            <strong>Month days</strong>
+            <p class="subtle-text">Use one monthly day for monthly or bimonthly setups, or add a second day for semi-monthly patterns.</p>
+          </div>
+          <div class="form-grid recurring-choice-grid recurring-choice-grid--rule">
+            <label class="form-field">
+              <span>Primary monthly day</span>
+              {{ recurring_work_form.month_day_primary(class_='select') }}
+              {% for error in recurring_work_form.month_day_primary.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+            <label class="form-field">
+              <span>Second monthly day</span>
+              {{ recurring_work_form.month_day_secondary(class_='select') }}
+              <small class="field-help">Optional unless you want a semi-monthly pattern.</small>
+              {% for error in recurring_work_form.month_day_secondary.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="recurring-form-section">
+        <div>
+          <h3>Active window and timing</h3>
+          <p class="subtle-text">These fields decide when the recurring rule is allowed to place or refresh child events.</p>
+        </div>
+        <div class="form-grid recurring-choice-grid">
+          <label class="form-field">
+            <span class="field-label-row">Start date <span class="required-pill">Required</span></span>
+            {{ recurring_work_form.starts_on(class_='input', required=true) }}
+            {% for error in recurring_work_form.starts_on.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>End date</span>
+            {{ recurring_work_form.ends_on(class_='input') }}
+            {% for error in recurring_work_form.ends_on.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Status</span>
+            {{ recurring_work_form.status(class_='select') }}
+            {% for error in recurring_work_form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+        </div>
+        <div class="form-grid recurring-choice-grid">
+          {{ render_time_select(recurring_work_form.start_time_hour, recurring_work_form.start_time_minute, "Default start time") }}
+          {{ render_time_select(recurring_work_form.end_time_hour, recurring_work_form.end_time_minute, "Default end time") }}
+        </div>
+      </section>
+
+      <section class="recurring-form-section">
+        <div>
+          <h3>Billing and notes</h3>
+          <p class="subtle-text">Keep recurring pricing and any field instructions together so operators can scan them quickly.</p>
+        </div>
+        <div class="form-grid recurring-choice-grid">
+          <label class="form-field">
+            <span>Billing amount</span>
+            {{ recurring_work_form.billing_amount(class_='input') }}
+            {% for error in recurring_work_form.billing_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span>Billing frequency</span>
+            {{ recurring_work_form.billing_frequency(class_='select') }}
+            {% for error in recurring_work_form.billing_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+        </div>
         <label class="form-field">
-          <span>Weekly day</span>
-          {{ recurring_work_form.day_of_week(class_='select') }}
-          <small class="field-help">Use this when the frequency is weekly.</small>
-          {% for error in recurring_work_form.day_of_week.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          <span>Notes</span>
+          {{ recurring_work_form.notes(class_='textarea') }}
+          {% for error in recurring_work_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
-        <label class="form-field">
-          <span>Monthly day</span>
-          {{ recurring_work_form.day_of_month(class_='select') }}
-          <small class="field-help">Use this when the frequency is monthly.</small>
-          {% for error in recurring_work_form.day_of_month.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
-      </div>
-      <div class="form-grid recurring-choice-grid">
-        <label class="form-field">
-          <span class="field-label-row">Start date <span class="required-pill">Required</span></span>
-          {{ recurring_work_form.starts_on(class_='input', required=true) }}
-          {% for error in recurring_work_form.starts_on.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
-        <label class="form-field">
-          <span>End date</span>
-          {{ recurring_work_form.ends_on(class_='input') }}
-          {% for error in recurring_work_form.ends_on.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
-        <label class="form-field">
-          <span>Status</span>
-          {{ recurring_work_form.status(class_='select') }}
-          {% for error in recurring_work_form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
-      </div>
-      <div class="form-grid recurring-choice-grid">
-        {{ render_time_select(recurring_work_form.start_time_hour, recurring_work_form.start_time_minute, "Default start time") }}
-        {{ render_time_select(recurring_work_form.end_time_hour, recurring_work_form.end_time_minute, "Default end time") }}
-      </div>
-      <div class="form-grid recurring-choice-grid">
-        <label class="form-field">
-          <span>Billing amount</span>
-          {{ recurring_work_form.billing_amount(class_='input') }}
-          {% for error in recurring_work_form.billing_amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
-        <label class="form-field">
-          <span>Billing frequency</span>
-          {{ recurring_work_form.billing_frequency(class_='select') }}
-          {% for error in recurring_work_form.billing_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
-      </div>
-      <label class="form-field">
-        <span>Notes</span>
-        {{ recurring_work_form.notes(class_='textarea') }}
-        {% for error in recurring_work_form.notes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </label>
-      {{ recurring_work_form.submit(class_='btn btn-primary') }}
+      </section>
     </form>
   </section>
 
-  <section class="table-card recurring-generated-card" id="generated-appointments">
-    <div class="recurring-generated-summary">
-      <div>
-        <h2>Generated appointments</h2>
-        <p class="subtle-text">Open each scheduled event, jump into the matching day agenda, or return to the customer record from here.</p>
+  <div id="generated-appointments" hidden></div>
+
+  <dialog class="gallery-dialog gallery-dialog--order recurring-generated-dialog" id="recurring-generated-dialog" data-recurring-generated-dialog>
+    <div class="gallery-dialog__card" role="dialog" aria-modal="true" aria-labelledby="recurring-generated-title">
+      <header class="gallery-dialog__header">
+        <div class="gallery-dialog__copy">
+          <h2 id="recurring-generated-title">Generated appointments</h2>
+          <p class="subtle-text">Review the child events this plan owns. Mark one as an exception when it should stop following future recurring sync updates.</p>
+        </div>
+        <button type="button" class="inline-remove-button inline-remove-button--bare gallery-dialog__close" data-recurring-generated-close aria-label="Close generated appointments dialog">&times;</button>
+      </header>
+
+      <div class="recurring-generated-dialog__summary">
+        <p class="subtle-text">{{ generated_count }} total · {{ upcoming_generated_count }} upcoming</p>
       </div>
-      <p class="subtle-text">{{ generated_count }} total · {{ upcoming_generated_count }} upcoming</p>
-    </div>
-    <div class="table-scroll">
+
+      <div class="table-scroll recurring-generated-dialog__body">
         <table>
           <thead>
             <tr>
@@ -314,6 +341,13 @@
                   <div class="customer-table-meta">
                     <a class="recurring-generated-link" href="{{ appointment_detail_url }}">Event #{{ appointment.id }}</a>
                     <span class="subtle-text">{{ appointment.display_title }}</span>
+                    {% if appointment.recurring_exception %}
+                      <span class="recurring-sync-pill recurring-sync-pill--exception">Exception</span>
+                    {% elif appointment.is_recurring_sync_locked %}
+                      <span class="recurring-sync-pill recurring-sync-pill--locked">Status locked</span>
+                    {% else %}
+                      <span class="recurring-sync-pill recurring-sync-pill--managed">Managed</span>
+                    {% endif %}
                   </div>
                 </td>
                 <td>
@@ -346,22 +380,497 @@
                 </td>
                 <td><span class="status-badge status-{{ appointment.status|lower|replace(' ', '-') }}">{{ appointment.status }}</span></td>
                 <td class="actions-cell">
-                  <div class="button-group">
+                  <div class="button-group recurring-appointment-actions" onclick="event.stopPropagation()">
                     <a class="btn btn-secondary btn-small" href="{{ appointment_detail_url }}">Open Event</a>
                     {% if day_agenda_url and enable_calendar %}
                       <a class="btn btn-secondary btn-small" href="{{ day_agenda_url }}">Day Agenda</a>
+                    {% endif %}
+                    {% if appointment.recurring_exception or appointment.status in ('Requested', 'Scheduled') %}
+                      <form method="post" action="{{ recurring_exception_urls[appointment.id] }}" class="inline-form">
+                        {{ recurring_exception_form.hidden_tag() }}
+                        <input type="hidden" name="is_exception" value="{{ '0' if appointment.recurring_exception else '1' }}">
+                        <button type="submit" class="btn btn-secondary btn-small">
+                          {{ 'Resume Sync' if appointment.recurring_exception else 'Mark Exception' }}
+                        </button>
+                      </form>
                     {% endif %}
                   </div>
                 </td>
               </tr>
             {% else %}
               <tr>
-                <td colspan="6" class="empty-state">No generated appointments yet. Save the plan, then use Generate Upcoming Appointments to place it on the schedule.</td>
+                <td colspan="6" class="empty-state">No upcoming appointments are due inside the current sync window for this plan.</td>
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-  </section>
+
+      <div class="gallery-dialog__footer recurring-generated-dialog__footer">
+        <button type="button" class="btn btn-secondary" data-recurring-generated-close>Close</button>
+      </div>
+    </div>
+  </dialog>
 </main>
+{% endblock %}
+
+{% block scripts %}
+  {{ super() }}
+  <script>
+    (function () {
+      var forms = document.querySelectorAll('[data-recurring-edit-form]');
+      var editForm = document.querySelector('[data-recurring-edit-form]');
+      var previewCard = document.querySelector('[data-recurring-impact-preview]');
+      var previewWindow = previewCard ? previewCard.querySelector('[data-recurring-preview-window]') : null;
+      var previewUrl = previewCard ? previewCard.getAttribute('data-recurring-preview-url') : null;
+      var previewRequestTimeout = null;
+      var activePreviewController = null;
+      var autosaveForm = document.querySelector('[data-recurring-edit-form]');
+      var autosaveStatus = autosaveForm ? autosaveForm.closest('.summary-card').querySelector('[data-recurring-autosave-status]') : null;
+
+      function setAutosaveStatus(message, isError) {
+        if (!autosaveStatus) {
+          return;
+        }
+
+        if (autosaveForm && autosaveForm._recurringAutosaveTimer) {
+          window.clearTimeout(autosaveForm._recurringAutosaveTimer);
+          autosaveForm._recurringAutosaveTimer = null;
+        }
+
+        autosaveStatus.textContent = message || '';
+        autosaveStatus.dataset.state = message ? (isError ? 'error' : 'saved') : '';
+
+        if (message && !isError && autosaveForm) {
+          autosaveForm._recurringAutosaveTimer = window.setTimeout(function () {
+            autosaveStatus.textContent = '';
+            autosaveStatus.dataset.state = '';
+          }, 1800);
+        }
+      }
+
+      function applyRecurringAutosavePayload(payload) {
+        if (!payload || !payload.work) {
+          return;
+        }
+
+        var work = payload.work;
+        var summaryTitle = document.querySelector('[data-recurring-summary-title]');
+        var summaryStatus = document.querySelector('[data-recurring-summary-status]');
+        var summaryGenerated = document.querySelector('[data-recurring-summary-generated]');
+        var summaryFrequency = document.querySelector('[data-recurring-summary-frequency]');
+        var summaryCadence = document.querySelector('[data-recurring-summary-cadence]');
+        var summaryTime = document.querySelector('[data-recurring-summary-time]');
+        var summaryStarts = document.querySelector('[data-recurring-summary-starts]');
+        var summaryManaged = document.querySelector('[data-recurring-summary-managed]');
+        var summaryProtected = document.querySelector('[data-recurring-summary-protected]');
+        var summaryBilling = document.querySelector('[data-recurring-summary-billing]');
+
+        if (summaryTitle) {
+          summaryTitle.textContent = work.title;
+        }
+        if (summaryStatus) {
+          summaryStatus.textContent = work.status_label;
+        }
+        if (summaryGenerated) {
+          summaryGenerated.textContent = work.upcoming_generated_count + ' upcoming of ' + work.generated_count + ' total child event' + (work.generated_count === 1 ? '' : 's');
+        }
+        if (summaryFrequency) {
+          summaryFrequency.textContent = work.frequency_label;
+        }
+        if (summaryCadence) {
+          summaryCadence.textContent = work.cadence_summary;
+        }
+        if (summaryTime) {
+          summaryTime.textContent = work.time_summary;
+        }
+        if (summaryStarts) {
+          summaryStarts.textContent = 'Starts ' + work.starts_on_label;
+        }
+        if (summaryManaged) {
+          summaryManaged.textContent = work.future_managed_event_count + ' future event' + (work.future_managed_event_count === 1 ? '' : 's');
+        }
+        if (summaryProtected) {
+          summaryProtected.textContent = work.protected_event_count + ' inside current preview window';
+        }
+        if (summaryBilling) {
+          summaryBilling.textContent = work.billing_summary;
+        }
+      }
+
+      function submitRecurringAutosave(form) {
+        if (!form || !window.fetch) {
+          return;
+        }
+
+        if (form.dataset.isSubmitting === 'true') {
+          form.dataset.pendingSave = 'true';
+          return;
+        }
+
+        form.dataset.isSubmitting = 'true';
+        form.dataset.pendingSave = 'false';
+        setAutosaveStatus('Saving...', false);
+
+        fetch(form.action, {
+          method: 'POST',
+          body: new FormData(form),
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        }).then(function (response) {
+          return response.json().catch(function () {
+            return { ok: false, error: 'Unable to save the recurring plan right now.' };
+          }).then(function (payload) {
+            if (!response.ok || !payload.ok) {
+              throw new Error(payload.error || 'Unable to save the recurring plan right now.');
+            }
+            return payload;
+          });
+        }).then(function (payload) {
+          applyRecurringAutosavePayload(payload);
+          setAutosaveStatus(payload.message || 'Saved', false);
+        }).catch(function (error) {
+          setAutosaveStatus(error.message || 'Unable to save the recurring plan right now.', true);
+        }).finally(function () {
+          form.dataset.isSubmitting = 'false';
+          if (form.dataset.pendingSave === 'true') {
+            submitRecurringAutosave(form);
+          }
+        });
+      }
+
+      var updatePreviewCard = function (payload) {
+        if (!previewCard) {
+          return;
+        }
+
+        previewCard.dataset.state = 'ready';
+        var created = previewCard.querySelector('[data-recurring-impact-created]');
+        var updated = previewCard.querySelector('[data-recurring-impact-updated]');
+        var deleted = previewCard.querySelector('[data-recurring-impact-deleted]');
+        var protectedCount = previewCard.querySelector('[data-recurring-impact-protected]');
+        var message = previewCard.querySelector('[data-recurring-impact-message]');
+        var secondary = previewCard.querySelector('[data-recurring-impact-secondary]');
+
+        if (created) {
+          created.textContent = payload.created;
+        }
+        if (updated) {
+          updated.textContent = payload.updated;
+        }
+        if (deleted) {
+          deleted.textContent = payload.deleted;
+        }
+        if (protectedCount) {
+          protectedCount.textContent = payload.protected;
+        }
+        if (message) {
+          message.textContent = payload.message;
+        }
+        if (secondary) {
+          secondary.textContent = payload.secondary_message;
+        }
+      };
+
+      var requestPreview = function () {
+        if (!editForm || !previewCard || !previewWindow || !previewUrl) {
+          return;
+        }
+
+        if (activePreviewController) {
+          activePreviewController.abort();
+        }
+
+        previewCard.dataset.state = 'loading';
+        var message = previewCard.querySelector('[data-recurring-impact-message]');
+        if (message) {
+          message.textContent = 'Refreshing future impact preview...';
+        }
+
+        var formData = new FormData(editForm);
+        formData.append('preview-days-ahead', previewWindow.value);
+        activePreviewController = new AbortController();
+
+        fetch(previewUrl, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          signal: activePreviewController.signal
+        })
+          .then(function (response) {
+            return response.json().catch(function () {
+              return {};
+            }).then(function (payload) {
+              if (!response.ok || !payload.ok) {
+                throw new Error(payload.error || 'Unable to preview future impact.');
+              }
+              return payload;
+            });
+          })
+          .then(function (payload) {
+            activePreviewController = null;
+            updatePreviewCard(payload);
+          })
+          .catch(function (error) {
+            if (error && error.name === 'AbortError') {
+              return;
+            }
+
+            activePreviewController = null;
+            previewCard.dataset.state = 'error';
+            var previewMessage = previewCard.querySelector('[data-recurring-impact-message]');
+            var previewSecondary = previewCard.querySelector('[data-recurring-impact-secondary]');
+            if (previewMessage) {
+              previewMessage.textContent = error && error.message ? error.message : 'Unable to preview future impact.';
+            }
+            if (previewSecondary) {
+              previewSecondary.textContent = 'Complete the required cadence fields to refresh this preview.';
+            }
+          });
+      };
+
+      var schedulePreviewRefresh = function () {
+        if (previewRequestTimeout) {
+          window.clearTimeout(previewRequestTimeout);
+        }
+        previewRequestTimeout = window.setTimeout(requestPreview, 180);
+      };
+
+      var generatedDialog = document.getElementById('recurring-generated-dialog');
+      var syncAnchor = 'generated-appointments';
+
+      var updateGeneratedDialogState = function () {
+        if (!generatedDialog) {
+          return;
+        }
+        document.body.classList.toggle('gallery-popup-open', generatedDialog.hasAttribute('open'));
+      };
+
+      var openGeneratedDialog = function () {
+        if (!generatedDialog) {
+          return;
+        }
+
+        if (typeof generatedDialog.showModal === 'function') {
+          generatedDialog.showModal();
+        } else {
+          generatedDialog.setAttribute('open', 'open');
+        }
+        updateGeneratedDialogState();
+      };
+
+      var closeGeneratedDialog = function () {
+        if (!generatedDialog) {
+          return;
+        }
+
+        if (generatedDialog.open && typeof generatedDialog.close === 'function') {
+          generatedDialog.close();
+        } else {
+          generatedDialog.removeAttribute('open');
+        }
+        updateGeneratedDialogState();
+      };
+
+      forms.forEach(function (form) {
+        var presetInput = form.querySelector('[data-recurring-preset-input]');
+        var unitInput = form.querySelector('[data-recurring-unit-input]');
+        var startsOnInput = form.querySelector('input[name$="starts_on"]');
+        if (!presetInput || !unitInput) {
+          return;
+        }
+
+        var getWeekdayDefault = function () {
+          if (startsOnInput && startsOnInput.value) {
+            var parsed = new Date(startsOnInput.value + 'T00:00:00');
+            if (!Number.isNaN(parsed.getTime())) {
+              return (parsed.getDay() + 6) % 7;
+            }
+          }
+          return (new Date().getDay() + 6) % 7;
+        };
+
+        var getMonthDayDefault = function () {
+          if (startsOnInput && startsOnInput.value) {
+            var parsed = new Date(startsOnInput.value + 'T00:00:00');
+            if (!Number.isNaN(parsed.getTime())) {
+              return parsed.getDate();
+            }
+          }
+          return new Date().getDate();
+        };
+
+        var setWeekdaySelection = function (selectedValues) {
+          var selectedLookup = new Set(selectedValues.map(String));
+          form.querySelectorAll('input[name$="weekdays"]').forEach(function (input) {
+            input.checked = selectedLookup.has(input.value);
+          });
+        };
+
+        var updateVisibility = function () {
+          var unit = unitInput.value;
+          form.querySelectorAll('[data-recurring-unit-target]').forEach(function (field) {
+            var shouldShow = field.getAttribute('data-recurring-unit-target') === unit;
+            field.classList.toggle('is-hidden', !shouldShow);
+            field.querySelectorAll('select, input').forEach(function (input) {
+              input.disabled = !shouldShow;
+            });
+          });
+
+          if (form === editForm) {
+            schedulePreviewRefresh();
+          }
+        };
+
+        var applyPreset = function () {
+          var intervalInput = form.querySelector('input[name$="recurrence_interval"]');
+          var monthPrimaryInput = form.querySelector('select[name$="month_day_primary"]');
+          var monthSecondaryInput = form.querySelector('select[name$="month_day_secondary"]');
+          var defaultWeekday = String(getWeekdayDefault());
+          var defaultMonthDay = String(getMonthDayDefault());
+
+          if (!intervalInput || !monthPrimaryInput || !monthSecondaryInput) {
+            updateVisibility();
+            return;
+          }
+
+          if (presetInput.value === 'weekly') {
+            unitInput.value = 'week';
+            intervalInput.value = '1';
+            setWeekdaySelection([defaultWeekday]);
+          } else if (presetInput.value === 'biweekly') {
+            unitInput.value = 'week';
+            intervalInput.value = '2';
+            setWeekdaySelection([defaultWeekday]);
+          } else if (presetInput.value === 'monthly') {
+            unitInput.value = 'month';
+            intervalInput.value = '1';
+            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
+              monthPrimaryInput.value = defaultMonthDay;
+            }
+            monthSecondaryInput.value = '0';
+          } else if (presetInput.value === 'semi_monthly') {
+            unitInput.value = 'month';
+            intervalInput.value = '1';
+            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
+              monthPrimaryInput.value = defaultMonthDay;
+            }
+            if (!monthSecondaryInput.value || monthSecondaryInput.value === '0' || monthSecondaryInput.value === monthPrimaryInput.value) {
+              monthSecondaryInput.value = monthPrimaryInput.value === '15' ? '1' : '15';
+            }
+          } else if (presetInput.value === 'bimonthly') {
+            unitInput.value = 'month';
+            intervalInput.value = '2';
+            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
+              monthPrimaryInput.value = defaultMonthDay;
+            }
+            monthSecondaryInput.value = '0';
+          }
+
+          updateVisibility();
+        };
+
+        presetInput.addEventListener('change', applyPreset);
+        unitInput.addEventListener('change', updateVisibility);
+        updateVisibility();
+        applyPreset();
+      });
+
+      if (editForm && previewCard && previewWindow) {
+        editForm.querySelectorAll('input, select, textarea').forEach(function (input) {
+          if (input.type === 'hidden') {
+            return;
+          }
+          input.addEventListener('change', schedulePreviewRefresh);
+          input.addEventListener('input', schedulePreviewRefresh);
+        });
+
+        previewWindow.addEventListener('change', requestPreview);
+        requestPreview();
+      }
+
+      if (autosaveForm) {
+        var autosaveDebounceTimer = null;
+
+        autosaveForm.addEventListener('submit', function (event) {
+          event.preventDefault();
+          window.clearTimeout(autosaveDebounceTimer);
+          submitRecurringAutosave(autosaveForm);
+        });
+
+        autosaveForm.addEventListener('input', function (event) {
+          if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
+            return;
+          }
+
+          if (event.target.type === 'checkbox' || event.target.type === 'hidden') {
+            return;
+          }
+
+          window.clearTimeout(autosaveDebounceTimer);
+          autosaveDebounceTimer = window.setTimeout(function () {
+            submitRecurringAutosave(autosaveForm);
+          }, 520);
+        });
+
+        autosaveForm.addEventListener('focusout', function (event) {
+          if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)) {
+            return;
+          }
+
+          if (event.target.type === 'checkbox' || event.target.type === 'hidden') {
+            return;
+          }
+
+          window.clearTimeout(autosaveDebounceTimer);
+          autosaveDebounceTimer = window.setTimeout(function () {
+            submitRecurringAutosave(autosaveForm);
+          }, 80);
+        });
+
+        autosaveForm.addEventListener('change', function (event) {
+          if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement)) {
+            return;
+          }
+
+          if (!(event.target.type === 'checkbox' || event.target.tagName === 'SELECT')) {
+            return;
+          }
+
+          window.clearTimeout(autosaveDebounceTimer);
+          submitRecurringAutosave(autosaveForm);
+        });
+      }
+
+      document.querySelectorAll('[data-recurring-generated-open]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          openGeneratedDialog();
+        });
+      });
+
+      if (generatedDialog) {
+        generatedDialog.querySelectorAll('[data-recurring-generated-close]').forEach(function (button) {
+          button.addEventListener('click', function () {
+            closeGeneratedDialog();
+          });
+        });
+
+        generatedDialog.addEventListener('cancel', function (event) {
+          event.preventDefault();
+          closeGeneratedDialog();
+        });
+
+        generatedDialog.addEventListener('close', function () {
+          updateGeneratedDialogState();
+        });
+
+        if (window.location.hash === '#' + syncAnchor) {
+          openGeneratedDialog();
+        }
+      }
+    }());
+  </script>
 {% endblock %}

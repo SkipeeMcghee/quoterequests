@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from calendar import monthrange
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from sqlalchemy import or_, select
@@ -84,6 +85,72 @@ _BUSINESS_NAME_HINTS = {
     "salon",
     "shop",
 }
+_RECURRING_WORK_MANAGED_APPOINTMENT_STATUSES = {"Requested", "Scheduled"}
+
+
+@dataclass(frozen=True)
+class RecurringWorkSyncResult:
+    created: int = 0
+    updated: int = 0
+    deleted: int = 0
+
+    @property
+    def total_changes(self) -> int:
+        return self.created + self.updated + self.deleted
+
+
+@dataclass(frozen=True)
+class RecurringWorkScheduleState:
+    recurring_work_id: int
+    customer_id: int
+    quote_request_id: int | None
+    title: str | None
+    frequency: str
+    recurrence_config: dict[str, object] | None
+    day_of_week: int | None
+    day_of_month: int | None
+    starts_on: date
+    ends_on: date | None
+    start_time: time | None
+    end_time: time | None
+    status: str
+
+
+@dataclass
+class RecurringWorkSyncPlan:
+    schedule_state: RecurringWorkScheduleState
+    window_start: date
+    window_end: date
+    create_dates: list[date]
+    appointments_to_update: list[Appointment]
+    appointments_to_delete: list[Appointment]
+    protected_appointments: list[Appointment]
+    unchanged_appointments: list[Appointment]
+    service_options: list[ServiceOption] | None
+
+    @property
+    def created_count(self) -> int:
+        return len(self.create_dates)
+
+    @property
+    def updated_count(self) -> int:
+        return len(self.appointments_to_update)
+
+    @property
+    def deleted_count(self) -> int:
+        return len(self.appointments_to_delete)
+
+    @property
+    def protected_count(self) -> int:
+        return len(self.protected_appointments)
+
+    @property
+    def unchanged_count(self) -> int:
+        return len(self.unchanged_appointments)
+
+    @property
+    def total_changes(self) -> int:
+        return self.created_count + self.updated_count + self.deleted_count
 
 
 def _clean_customer_name_value(value: str | None) -> str | None:
@@ -1175,6 +1242,7 @@ def reschedule_appointment(
         customer_notes=appointment.customer_notes,
         internal_notes=internal_notes or appointment.internal_notes,
         status="Requested",
+        recurring_exception=appointment.recurring_exception,
         previous_appointment_id=appointment.id,
     )
     db.session.add(reschedule)
@@ -1284,6 +1352,7 @@ def _normalize_recurring_work_values(
     *,
     title: str,
     frequency: str,
+    recurrence_config: dict[str, object] | None = None,
     day_of_week: int | None,
     day_of_month: int | None,
     starts_on,
@@ -1299,19 +1368,16 @@ def _normalize_recurring_work_values(
     if not cleaned_title:
         raise BadRequest("Enter a service or work title.")
 
-    if frequency not in RecurringWork.FREQUENCIES:
-        raise BadRequest("Choose a valid recurring frequency.")
+    requested_frequency = (frequency or "").strip().lower() or "custom"
+    if requested_frequency not in RecurringWork.FREQUENCIES:
+        raise BadRequest("Choose a valid recurring frequency preset.")
 
-    cleaned_day_of_week = day_of_week
-    cleaned_day_of_month = day_of_month
-    if frequency == "weekly":
-        if cleaned_day_of_week is None or cleaned_day_of_week < 0 or cleaned_day_of_week > 6:
-            raise BadRequest("Choose a weekday for weekly recurring work.")
-        cleaned_day_of_month = None
-    if frequency == "monthly":
-        if cleaned_day_of_month is None or cleaned_day_of_month < 1 or cleaned_day_of_month > 31:
-            raise BadRequest("Choose a day of month for monthly recurring work.")
-        cleaned_day_of_week = None
+    normalized_frequency, normalized_recurrence_config, cleaned_day_of_week, cleaned_day_of_month = _normalize_recurrence_config_input(
+        frequency=requested_frequency,
+        recurrence_config=recurrence_config,
+        day_of_week=day_of_week,
+        day_of_month=day_of_month,
+    )
 
     if starts_on is None:
         raise BadRequest("Choose a start date for recurring work.")
@@ -1331,7 +1397,8 @@ def _normalize_recurring_work_values(
 
     return {
         "title": cleaned_title,
-        "frequency": frequency,
+        "frequency": normalized_frequency,
+        "recurrence_config": normalized_recurrence_config,
         "day_of_week": cleaned_day_of_week,
         "day_of_month": cleaned_day_of_month,
         "starts_on": starts_on,
@@ -1376,6 +1443,7 @@ def create_recurring_work(
     *,
     title: str,
     frequency: str,
+    recurrence_config: dict[str, object] | None = None,
     day_of_week: int | None,
     day_of_month: int | None,
     starts_on,
@@ -1391,6 +1459,7 @@ def create_recurring_work(
     values = _normalize_recurring_work_values(
         title=title,
         frequency=frequency,
+        recurrence_config=recurrence_config,
         day_of_week=day_of_week,
         day_of_month=day_of_month,
         starts_on=starts_on,
@@ -1414,6 +1483,7 @@ def update_recurring_work(
     *,
     title: str,
     frequency: str,
+    recurrence_config: dict[str, object] | None = None,
     day_of_week: int | None,
     day_of_month: int | None,
     starts_on,
@@ -1429,6 +1499,7 @@ def update_recurring_work(
     values = _normalize_recurring_work_values(
         title=title,
         frequency=frequency,
+        recurrence_config=recurrence_config,
         day_of_week=day_of_week,
         day_of_month=day_of_month,
         starts_on=starts_on,
@@ -1443,6 +1514,7 @@ def update_recurring_work(
 
     recurring_work.title = values["title"]
     recurring_work.frequency = values["frequency"]
+    recurring_work.recurrence_config = values["recurrence_config"]
     recurring_work.day_of_week = values["day_of_week"]
     recurring_work.day_of_month = values["day_of_month"]
     recurring_work.starts_on = values["starts_on"]
@@ -1457,72 +1529,271 @@ def update_recurring_work(
     return recurring_work
 
 
-def generate_appointments_for_recurring_work(recurring_work_id: int, days_ahead: int = 60) -> int:
-    recurring_work = get_recurring_work(recurring_work_id)
-    if recurring_work.status != "active":
-        return 0
+def _build_recurring_work_schedule_state(
+    recurring_work: RecurringWork,
+    *,
+    values: dict[str, object] | None = None,
+) -> RecurringWorkScheduleState:
+    normalized_values = values or {}
+    return RecurringWorkScheduleState(
+        recurring_work_id=recurring_work.id,
+        customer_id=int(normalized_values.get("customer_id", recurring_work.customer_id)),
+        quote_request_id=normalized_values.get("quote_request_id", recurring_work.quote_request_id),
+        title=normalized_values.get("title", recurring_work.title),
+        frequency=str(normalized_values.get("frequency", recurring_work.frequency)),
+        recurrence_config=normalized_values.get("recurrence_config", getattr(recurring_work, "recurrence_config", None)),
+        day_of_week=normalized_values.get("day_of_week", recurring_work.day_of_week),
+        day_of_month=normalized_values.get("day_of_month", recurring_work.day_of_month),
+        starts_on=normalized_values.get("starts_on", recurring_work.starts_on),
+        ends_on=normalized_values.get("ends_on", recurring_work.ends_on),
+        start_time=normalized_values.get("start_time", recurring_work.start_time),
+        end_time=normalized_values.get("end_time", recurring_work.end_time),
+        status=str(normalized_values.get("status", recurring_work.status)),
+    )
 
-    start_date = max(date.today(), recurring_work.starts_on)
-    window_end = date.today() + timedelta(days=days_ahead)
-    if recurring_work.ends_on is not None:
-        window_end = min(window_end, recurring_work.ends_on)
 
-    appointments_for_work = db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).all()
-    existing_dates = {
-        appointment.scheduled_date
-        for appointment in appointments_for_work
-        if appointment.scheduled_date is not None
+def _resolve_recurring_work_service_options_for_title(title: str | None) -> list[ServiceOption] | None:
+    if not is_services_enabled():
+        return None
+
+    cleaned_title = (title or "").strip()
+    if not cleaned_title:
+        return None
+
+    service = db.session.scalar(select(ServiceOption).where(ServiceOption.name == cleaned_title))
+    if service is None:
+        return None
+    return [service]
+
+
+def _normalize_recurrence_weekdays(raw_values) -> tuple[int, ...]:
+    if raw_values in (None, ""):
+        return ()
+
+    if isinstance(raw_values, (int, str)):
+        raw_iterable = [raw_values]
+    else:
+        raw_iterable = list(raw_values)
+
+    normalized: list[int] = []
+    seen_values: set[int] = set()
+    for raw_value in raw_iterable:
+        try:
+            weekday = int(raw_value)
+        except (TypeError, ValueError):
+            continue
+
+        if weekday < 0 or weekday > 6 or weekday in seen_values:
+            continue
+
+        seen_values.add(weekday)
+        normalized.append(weekday)
+
+    return tuple(sorted(normalized))
+
+
+def _normalize_recurrence_month_days(raw_values) -> tuple[int, ...]:
+    if raw_values in (None, ""):
+        return ()
+
+    if isinstance(raw_values, (int, str)):
+        raw_iterable = [raw_values]
+    else:
+        raw_iterable = list(raw_values)
+
+    normalized: list[int] = []
+    seen_values: set[int] = set()
+    for raw_value in raw_iterable:
+        try:
+            month_day = int(raw_value)
+        except (TypeError, ValueError):
+            continue
+
+        if month_day < 1 or month_day > 31 or month_day in seen_values:
+            continue
+
+        seen_values.add(month_day)
+        normalized.append(month_day)
+
+    return tuple(sorted(normalized))
+
+
+def _default_recurrence_config(
+    *,
+    frequency: str,
+    day_of_week: int | None,
+    day_of_month: int | None,
+) -> dict[str, object]:
+    if frequency in {"weekly", "biweekly"}:
+        return {
+            "unit": "week",
+            "interval": 2 if frequency == "biweekly" else 1,
+            "weekdays": list(_normalize_recurrence_weekdays([day_of_week])),
+            "month_days": [],
+        }
+
+    if frequency in {"monthly", "semi_monthly", "bimonthly"}:
+        return {
+            "unit": "month",
+            "interval": 2 if frequency == "bimonthly" else 1,
+            "weekdays": [],
+            "month_days": list(_normalize_recurrence_month_days([day_of_month])),
+        }
+
+    return {
+        "unit": "month" if day_of_month is not None else "week",
+        "interval": 1,
+        "weekdays": list(_normalize_recurrence_weekdays([day_of_week])),
+        "month_days": list(_normalize_recurrence_month_days([day_of_month])),
     }
 
-    new_appointments = []
 
-    def add_candidate(candidate_date: date) -> None:
-        if candidate_date < recurring_work.starts_on or candidate_date > window_end:
-            return
-        if candidate_date in existing_dates:
-            return
-        appointment = Appointment(
-            customer_id=recurring_work.customer_id,
-            quote_request_id=recurring_work.quote_request_id,
-            recurring_work_id=recurring_work.id,
-            title=recurring_work.title or "Recurring work",
-            scheduled_date=candidate_date,
-            start_time=recurring_work.start_time,
-            end_time=recurring_work.end_time,
-            status="Scheduled",
-            internal_notes=f"Generated from recurring work #{recurring_work.id}",
-        )
-        db.session.add(appointment)
-        new_appointments.append(appointment)
+def _resolve_recurrence_config(recurring_work: RecurringWork | RecurringWorkScheduleState) -> dict[str, object]:
+    raw_config = getattr(recurring_work, "recurrence_config", None) or _default_recurrence_config(
+        frequency=recurring_work.frequency,
+        day_of_week=recurring_work.day_of_week,
+        day_of_month=recurring_work.day_of_month,
+    )
 
-    if recurring_work.frequency == "weekly":
-        if recurring_work.day_of_week is None:
-            raise BadRequest("Weekly recurring work requires a day of week.")
-        offset = (recurring_work.day_of_week - start_date.weekday()) % 7
-        candidate = start_date + timedelta(days=offset)
+    unit = str(raw_config.get("unit") or "").strip().lower()
+    if unit not in {"week", "month"}:
+        unit = "week" if recurring_work.frequency == "weekly" else "month"
+
+    try:
+        interval = int(raw_config.get("interval") or 1)
+    except (TypeError, ValueError):
+        interval = 1
+    if interval < 1:
+        interval = 1
+
+    weekdays = list(_normalize_recurrence_weekdays(raw_config.get("weekdays")))
+    month_days = list(_normalize_recurrence_month_days(raw_config.get("month_days")))
+
+    if unit == "week" and not weekdays:
+        weekdays = list(_normalize_recurrence_weekdays([recurring_work.day_of_week]))
+    if unit == "month" and not month_days:
+        month_days = list(_normalize_recurrence_month_days([recurring_work.day_of_month]))
+
+    return {
+        "unit": unit,
+        "interval": interval,
+        "weekdays": weekdays,
+        "month_days": month_days,
+    }
+
+
+def _classify_recurrence_frequency(recurrence_config: dict[str, object]) -> str:
+    unit = str(recurrence_config["unit"])
+    interval = int(recurrence_config["interval"])
+    weekdays = list(recurrence_config["weekdays"])
+    month_days = list(recurrence_config["month_days"])
+
+    if unit == "week" and interval == 1 and len(weekdays) == 1:
+        return "weekly"
+    if unit == "week" and interval == 2 and len(weekdays) == 1:
+        return "biweekly"
+    if unit == "month" and interval == 1 and len(month_days) == 1:
+        return "monthly"
+    if unit == "month" and interval == 1 and len(month_days) == 2:
+        return "semi_monthly"
+    if unit == "month" and interval == 2 and len(month_days) == 1:
+        return "bimonthly"
+    return "custom"
+
+
+def _normalize_recurrence_config_input(
+    *,
+    frequency: str,
+    recurrence_config: dict[str, object] | None,
+    day_of_week: int | None,
+    day_of_month: int | None,
+) -> tuple[str, dict[str, object], int | None, int | None]:
+    raw_config = recurrence_config or _default_recurrence_config(
+        frequency=frequency,
+        day_of_week=day_of_week,
+        day_of_month=day_of_month,
+    )
+
+    unit = str(raw_config.get("unit") or "").strip().lower()
+    if unit not in {"week", "month"}:
+        raise BadRequest("Choose whether this recurring plan repeats by week or by month.")
+
+    try:
+        interval = int(raw_config.get("interval") or 1)
+    except (TypeError, ValueError):
+        raise BadRequest("Choose a valid repeat interval.")
+    if interval < 1:
+        raise BadRequest("Repeat interval must be at least 1.")
+
+    weekdays = list(_normalize_recurrence_weekdays(raw_config.get("weekdays")))
+    month_days = list(_normalize_recurrence_month_days(raw_config.get("month_days")))
+
+    if unit == "week" and not weekdays:
+        raise BadRequest("Choose at least one weekday for this recurring plan.")
+    if unit == "month" and not month_days:
+        raise BadRequest("Choose at least one day of month for this recurring plan.")
+
+    normalized_config = {
+        "unit": unit,
+        "interval": interval,
+        "weekdays": weekdays,
+        "month_days": month_days,
+    }
+    normalized_frequency = _classify_recurrence_frequency(normalized_config)
+    primary_day_of_week = weekdays[0] if weekdays else None
+    primary_day_of_month = month_days[0] if month_days else None
+
+    return normalized_frequency, normalized_config, primary_day_of_week, primary_day_of_month
+
+
+def _iter_recurring_work_candidate_dates(
+    recurring_work: RecurringWork | RecurringWorkScheduleState,
+    *,
+    start_date: date,
+    window_end: date,
+) -> list[date]:
+    if start_date > window_end:
+        return []
+
+    candidate_dates: list[date] = []
+    recurrence_config = _resolve_recurrence_config(recurring_work)
+
+    if recurrence_config["unit"] == "week":
+        weekdays = recurrence_config["weekdays"]
+        if not weekdays:
+            raise BadRequest("Weekly recurring work requires at least one weekday.")
+
+        interval = int(recurrence_config["interval"])
+        anchor_week_start = recurring_work.starts_on - timedelta(days=recurring_work.starts_on.weekday())
+        candidate = start_date
         while candidate <= window_end:
-            add_candidate(candidate)
-            candidate += timedelta(days=7)
-    elif recurring_work.frequency == "monthly":
-        if recurring_work.day_of_month is None:
-            raise BadRequest("Monthly recurring work requires a day of month.")
+            weeks_since_anchor = (candidate - anchor_week_start).days // 7
+            if weeks_since_anchor >= 0 and weeks_since_anchor % interval == 0 and candidate.weekday() in weekdays:
+                if candidate >= recurring_work.starts_on:
+                    candidate_dates.append(candidate)
+            candidate += timedelta(days=1)
+        return candidate_dates
 
-        def days_in_month(year: int, month: int) -> int:
-            if month == 12:
-                next_month = date(year + 1, 1, 1)
-            else:
-                next_month = date(year, month + 1, 1)
-            return (next_month - date(year, month, 1)).days
+    if recurrence_config["unit"] == "month":
+        month_days = recurrence_config["month_days"]
+        if not month_days:
+            raise BadRequest("Monthly recurring work requires at least one day of month.")
 
+        interval = int(recurrence_config["interval"])
         candidate_year = start_date.year
         candidate_month = start_date.month
-        candidate_day = recurring_work.day_of_month
 
         while True:
-            if candidate_day <= days_in_month(candidate_year, candidate_month):
-                candidate = date(candidate_year, candidate_month, candidate_day)
-                if candidate >= start_date:
-                    add_candidate(candidate)
+            months_since_anchor = ((candidate_year - recurring_work.starts_on.year) * 12) + (candidate_month - recurring_work.starts_on.month)
+            if months_since_anchor >= 0 and months_since_anchor % interval == 0:
+                days_in_candidate_month = monthrange(candidate_year, candidate_month)[1]
+                for candidate_day in month_days:
+                    if candidate_day > days_in_candidate_month:
+                        continue
+                    candidate = date(candidate_year, candidate_month, candidate_day)
+                    if start_date <= candidate <= window_end and candidate >= recurring_work.starts_on:
+                        candidate_dates.append(candidate)
+
             if candidate_year > window_end.year or (candidate_year == window_end.year and candidate_month >= window_end.month):
                 break
             if candidate_month == 12:
@@ -1530,20 +1801,286 @@ def generate_appointments_for_recurring_work(recurring_work_id: int, days_ahead:
                 candidate_year += 1
             else:
                 candidate_month += 1
-    else:
-        raise BadRequest("Recurring work must be weekly or monthly.")
+        return candidate_dates
 
-    if new_appointments:
+    raise BadRequest("Recurring work must use a valid recurrence unit.")
+
+
+def _appointment_matches_recurring_work_defaults(
+    appointment: Appointment,
+    schedule_state: RecurringWorkScheduleState,
+    *,
+    service_options: list[ServiceOption] | None,
+) -> bool:
+    expected_title = schedule_state.title or "Recurring work"
+
+    if appointment.customer_id != schedule_state.customer_id:
+        return False
+    if appointment.quote_request_id != schedule_state.quote_request_id:
+        return False
+    if appointment.title != expected_title:
+        return False
+    if appointment.start_time != schedule_state.start_time:
+        return False
+    if appointment.end_time != schedule_state.end_time:
+        return False
+
+    if service_options is not None:
+        current_service_ids = [service.id for service in appointment.services]
+        desired_service_ids = [service.id for service in service_options]
+        if current_service_ids != desired_service_ids:
+            return False
+
+    return True
+
+
+def _apply_recurring_work_defaults(
+    appointment: Appointment,
+    schedule_state: RecurringWorkScheduleState,
+    *,
+    service_options: list[ServiceOption] | None,
+) -> None:
+    appointment.customer_id = schedule_state.customer_id
+    appointment.quote_request_id = schedule_state.quote_request_id
+    appointment.title = schedule_state.title or "Recurring work"
+    appointment.start_time = schedule_state.start_time
+    appointment.end_time = schedule_state.end_time
+
+    if service_options is not None:
+        appointment.services = list(service_options)
+
+
+def _appointment_is_recurring_sync_locked(appointment: Appointment) -> bool:
+    return bool(appointment.recurring_exception or appointment.status not in _RECURRING_WORK_MANAGED_APPOINTMENT_STATUSES)
+
+
+def _build_recurring_work_sync_plan(
+    recurring_work: RecurringWork,
+    *,
+    schedule_state: RecurringWorkScheduleState,
+    days_ahead: int = 60,
+) -> RecurringWorkSyncPlan:
+    if days_ahead < 0:
+        raise BadRequest("Generation window cannot be negative.")
+
+    today_value = date.today()
+    window_start = max(today_value, schedule_state.starts_on)
+    window_end = today_value + timedelta(days=days_ahead)
+    if schedule_state.ends_on is not None:
+        window_end = min(window_end, schedule_state.ends_on)
+
+    expected_dates: set[date] = set()
+    if schedule_state.status == "active" and window_start <= window_end:
+        expected_dates = set(
+            _iter_recurring_work_candidate_dates(
+                schedule_state,
+                start_date=window_start,
+                window_end=window_end,
+            )
+        )
+
+    service_options = _resolve_recurring_work_service_options_for_title(schedule_state.title)
+    appointments_for_work = sorted(
+        db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).all(),
+        key=lambda appointment: (appointment.scheduled_date or date.max, appointment.id),
+    )
+
+    appointments_by_date: dict[date, list[Appointment]] = {}
+    for appointment in appointments_for_work:
+        if appointment.scheduled_date is None or appointment.scheduled_date < today_value:
+            continue
+        appointments_by_date.setdefault(appointment.scheduled_date, []).append(appointment)
+
+    create_dates: list[date] = []
+    appointments_to_update: list[Appointment] = []
+    appointments_to_delete: list[Appointment] = []
+    protected_appointments: list[Appointment] = []
+    unchanged_appointments: list[Appointment] = []
+    occupied_dates: set[date] = set()
+
+    for scheduled_date, appointments_on_date in sorted(appointments_by_date.items()):
+        protected_for_date = [
+            appointment
+            for appointment in appointments_on_date
+            if _appointment_is_recurring_sync_locked(appointment)
+        ]
+        managed_for_date = [
+            appointment
+            for appointment in appointments_on_date
+            if not _appointment_is_recurring_sync_locked(appointment)
+        ]
+
+        if protected_for_date:
+            protected_appointments.extend(protected_for_date)
+            occupied_dates.add(scheduled_date)
+            appointments_to_delete.extend(managed_for_date)
+            continue
+
+        if scheduled_date not in expected_dates:
+            appointments_to_delete.extend(managed_for_date)
+            continue
+
+        if managed_for_date:
+            keep_appointment = managed_for_date[0]
+            if _appointment_matches_recurring_work_defaults(
+                keep_appointment,
+                schedule_state,
+                service_options=service_options,
+            ):
+                unchanged_appointments.append(keep_appointment)
+            else:
+                appointments_to_update.append(keep_appointment)
+            occupied_dates.add(scheduled_date)
+            appointments_to_delete.extend(managed_for_date[1:])
+
+    for candidate_date in sorted(expected_dates - occupied_dates):
+        create_dates.append(candidate_date)
+
+    return RecurringWorkSyncPlan(
+        schedule_state=schedule_state,
+        window_start=window_start,
+        window_end=window_end,
+        create_dates=create_dates,
+        appointments_to_update=appointments_to_update,
+        appointments_to_delete=appointments_to_delete,
+        protected_appointments=protected_appointments,
+        unchanged_appointments=unchanged_appointments,
+        service_options=service_options,
+    )
+
+
+def preview_recurring_work_sync(
+    recurring_work_id: int,
+    *,
+    title: str,
+    frequency: str,
+    recurrence_config: dict[str, object] | None = None,
+    day_of_week: int | None,
+    day_of_month: int | None,
+    starts_on,
+    ends_on=None,
+    start_time=None,
+    end_time=None,
+    billing_amount=None,
+    billing_frequency: str | None = None,
+    status: str = "active",
+    notes: str | None = None,
+    days_ahead: int = 60,
+) -> RecurringWorkSyncPlan:
+    recurring_work = get_recurring_work(recurring_work_id)
+    values = _normalize_recurring_work_values(
+        title=title,
+        frequency=frequency,
+        recurrence_config=recurrence_config,
+        day_of_week=day_of_week,
+        day_of_month=day_of_month,
+        starts_on=starts_on,
+        ends_on=ends_on,
+        start_time=start_time,
+        end_time=end_time,
+        billing_amount=billing_amount,
+        billing_frequency=billing_frequency,
+        status=status,
+        notes=notes,
+    )
+    schedule_state = _build_recurring_work_schedule_state(recurring_work, values=values)
+    return _build_recurring_work_sync_plan(
+        recurring_work,
+        schedule_state=schedule_state,
+        days_ahead=days_ahead,
+    )
+
+
+def _apply_recurring_work_sync_plan(recurring_work: RecurringWork, plan: RecurringWorkSyncPlan) -> RecurringWorkSyncResult:
+    for appointment in plan.appointments_to_update:
+        _apply_recurring_work_defaults(
+            appointment,
+            plan.schedule_state,
+            service_options=plan.service_options,
+        )
+
+    for appointment in plan.appointments_to_delete:
+        db.session.delete(appointment)
+
+    for candidate_date in plan.create_dates:
+        appointment = Appointment(
+            customer_id=plan.schedule_state.customer_id,
+            quote_request_id=plan.schedule_state.quote_request_id,
+            recurring_work_id=recurring_work.id,
+            title=plan.schedule_state.title or "Recurring work",
+            scheduled_date=candidate_date,
+            start_time=plan.schedule_state.start_time,
+            end_time=plan.schedule_state.end_time,
+            status="Scheduled",
+            recurring_exception=False,
+            internal_notes=f"Generated from recurring work #{recurring_work.id}",
+        )
+        if plan.service_options is not None:
+            appointment.services = list(plan.service_options)
+        db.session.add(appointment)
+
+    if plan.total_changes:
         db.session.commit()
 
-    return len(new_appointments)
+    return RecurringWorkSyncResult(
+        created=plan.created_count,
+        updated=plan.updated_count,
+        deleted=plan.deleted_count,
+    )
+
+
+def sync_recurring_work_appointments(recurring_work_id: int, days_ahead: int = 60) -> RecurringWorkSyncResult:
+    recurring_work = get_recurring_work(recurring_work_id)
+    plan = _build_recurring_work_sync_plan(
+        recurring_work,
+        schedule_state=_build_recurring_work_schedule_state(recurring_work),
+        days_ahead=days_ahead,
+    )
+    return _apply_recurring_work_sync_plan(recurring_work, plan)
+
+
+def set_recurring_appointment_exception(appointment_id: int, *, is_exception: bool) -> Appointment:
+    appointment = get_appointment(appointment_id)
+    if appointment.recurring_work_id is None:
+        raise BadRequest("Only recurring-work appointments can use exception controls.")
+
+    appointment.recurring_exception = is_exception
+    db.session.commit()
+    return appointment
+
+
+def archive_recurring_work(recurring_work_id: int) -> RecurringWorkSyncResult:
+    recurring_work = get_recurring_work(recurring_work_id)
+    today_value = date.today()
+    future_managed_appointments = [
+        appointment
+        for appointment in recurring_work.appointments
+        if appointment.scheduled_date
+        and appointment.scheduled_date >= today_value
+        and not _appointment_is_recurring_sync_locked(appointment)
+    ]
+
+    recurring_work.status = "inactive"
+    for appointment in future_managed_appointments:
+        db.session.delete(appointment)
+    db.session.commit()
+
+    return RecurringWorkSyncResult(
+        created=0,
+        updated=0,
+        deleted=len(future_managed_appointments),
+    )
+
+
+def generate_appointments_for_recurring_work(recurring_work_id: int, days_ahead: int = 60) -> int:
+    return sync_recurring_work_appointments(recurring_work_id, days_ahead=days_ahead).created
 
 
 def generate_recurring_appointments_for_customer(customer_id: int, days_ahead: int = 60) -> int:
     customer = get_customer(customer_id)
     total_created = 0
     for recurring_work in customer.recurring_works:
-        total_created += generate_appointments_for_recurring_work(recurring_work.id, days_ahead=days_ahead)
+        total_created += sync_recurring_work_appointments(recurring_work.id, days_ahead=days_ahead).created
     return total_created
 
 

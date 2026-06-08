@@ -853,6 +853,7 @@ def test_admin_calendar_view_and_list_view_render_as_alternates(client, app, adm
     body = response.get_data(as_text=True)
     assert "Calendar View" in body
     assert "May 2026" in body
+    assert body.index('class="calendar-cell calendar-cell--header">Sun<') < body.index('class="calendar-cell calendar-cell--header">Mon<')
     assert 'class="calendar-time calendar-time--start">8:00 AM<' in body
     assert 'class="calendar-time calendar-time--end">9:00 AM<' in body
     assert 'calendar-time-flow' in body

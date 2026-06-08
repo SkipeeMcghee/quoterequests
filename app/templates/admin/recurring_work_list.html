@@ -7,7 +7,7 @@
 <main class="shell dashboard-shell">
   {{ render_admin_page_header(
     title='Recurring Work',
-    description='Review repeat service plans by customer and open a plan to edit it or generate upcoming scheduled events.',
+    description='Review repeat service plans by customer and keep future scheduled events aligned automatically.',
     nav_mode='main'
   ) }}
 
@@ -15,7 +15,7 @@
     <div class="section-bar compact-bar">
       <div>
         <h2>Recurring plans</h2>
-        <p class="subtle-text">Each plan belongs to a customer and keeps cadence, billing, and schedule generation in one place.</p>
+        <p class="subtle-text">Each plan keeps service, cadence, billing, and upcoming event sync in one place.</p>
       </div>
     </div>
     <div class="table-scroll">
@@ -23,13 +23,12 @@
         <thead>
           <tr>
             <th>Customer</th>
-            <th>Recurring plan</th>
+            <th>Service</th>
             <th>Cadence</th>
             <th>Default time</th>
             <th>Date range</th>
             <th>Status</th>
             <th>Generated</th>
-            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -49,24 +48,15 @@
               </td>
               <td>
                 <div class="customer-table-meta">
-                  <strong>{{ work.title or 'Recurring work' }}</strong>
+                  <strong>{{ work.title or 'Service not set' }}</strong>
                   <span class="subtle-text">Plan #{{ work.id }}</span>
                 </div>
               </td>
               <td>
-                {% if work.frequency == 'weekly' %}
-                  {% if work.day_of_week is not none and 0 <= work.day_of_week < 7 %}
-                    Weekly on {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][work.day_of_week] }}
-                  {% else %}
-                    Weekly cadence needs a weekday
-                  {% endif %}
-                {% else %}
-                  {% if work.day_of_month is not none %}
-                    Monthly on day {{ work.day_of_month }}
-                  {% else %}
-                    Monthly cadence needs a day of month
-                  {% endif %}
-                {% endif %}
+                <div class="customer-table-meta">
+                  <strong>{{ work.frequency_label }}</strong>
+                  <span class="subtle-text">{{ work.cadence_summary }}</span>
+                </div>
               </td>
               <td>
                 {% if work.start_time and work.end_time %}
@@ -91,10 +81,9 @@
               <td>
                 <div class="customer-table-meta recurring-list-generated">
                   <strong>{{ work.appointments|length }} generated</strong>
-                  <span class="subtle-text">{% if work.appointments %}Open the plan for schedule links.{% else %}No generated appointments yet.{% endif %}</span>
+                  <span class="subtle-text">{% if work.appointments %}Future events refresh automatically from this plan.{% else %}No upcoming events inside the current sync window.{% endif %}</span>
                 </div>
               </td>
-              <td><a class="btn btn-secondary btn-small" href="{{ url_for('admin.recurring_work_detail', recurring_work_id=work.id) }}">Open Plan</a></td>
             </tr>
           {% else %}
             <tr>

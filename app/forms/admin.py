@@ -37,6 +37,115 @@ def _load_gallery_service_choices() -> list[tuple[int, str]]:
     return choices
 
 
+def _load_recurring_work_service_choices(selected_title: str | None = None) -> list[tuple[str, str]]:
+    cleaned_selected_title = (selected_title or "").strip()
+    choices: list[tuple[str, str]] = []
+    known_titles: set[str] = set()
+
+    for service in ServiceOption.ordered_query(include_inactive=True).all():
+        known_titles.add(service.name)
+        label = service.name if service.is_active else f"{service.name} (inactive)"
+        choices.append((service.name, label))
+
+    if cleaned_selected_title and cleaned_selected_title not in known_titles:
+        choices.insert(0, (cleaned_selected_title, f"{cleaned_selected_title} (legacy)"))
+
+    return choices
+
+
+def _normalize_weekday_selection(raw_values) -> list[int]:
+    if raw_values in (None, ""):
+        return []
+
+    if isinstance(raw_values, (int, str)):
+        raw_iterable = [raw_values]
+    else:
+        raw_iterable = list(raw_values)
+
+    normalized: list[int] = []
+    seen_values: set[int] = set()
+    for raw_value in raw_iterable:
+        try:
+            weekday = int(raw_value)
+        except (TypeError, ValueError):
+            continue
+
+        if weekday < 0 or weekday > 6 or weekday in seen_values:
+            continue
+
+        seen_values.add(weekday)
+        normalized.append(weekday)
+
+    return sorted(normalized)
+
+
+def _normalize_month_day_selection(raw_values) -> list[int]:
+    if raw_values in (None, ""):
+        return []
+
+    if isinstance(raw_values, (int, str)):
+        raw_iterable = [raw_values]
+    else:
+        raw_iterable = list(raw_values)
+
+    normalized: list[int] = []
+    seen_values: set[int] = set()
+    for raw_value in raw_iterable:
+        try:
+            month_day = int(raw_value)
+        except (TypeError, ValueError):
+            continue
+
+        if month_day < 1 or month_day > 31 or month_day in seen_values:
+            continue
+
+        seen_values.add(month_day)
+        normalized.append(month_day)
+
+    return sorted(normalized)
+
+
+def _resolve_recurring_work_form_schedule_defaults(source) -> dict[str, object]:
+    if source is None:
+        return {
+            "frequency": "weekly",
+            "unit": "week",
+            "interval": 1,
+            "weekdays": [],
+            "month_days": [],
+        }
+
+    raw_config = getattr(source, "recurrence_config", None) or {}
+    frequency = getattr(source, "frequency", None) or "weekly"
+
+    unit = str(raw_config.get("unit") or "").strip().lower()
+    if unit not in {"week", "month"}:
+        unit = "month" if frequency in {"monthly", "semi_monthly", "bimonthly"} else "week"
+
+    try:
+        interval = int(raw_config.get("interval") or 1)
+    except (TypeError, ValueError):
+        interval = 1
+    if interval < 1:
+        interval = 1
+
+    weekdays = _normalize_weekday_selection(raw_config.get("weekdays"))
+    month_days = _normalize_month_day_selection(raw_config.get("month_days"))
+
+    if unit == "week" and not weekdays and getattr(source, "day_of_week", None) is not None:
+        weekdays = [int(source.day_of_week)]
+    if unit == "month" and not month_days and getattr(source, "day_of_month", None) is not None:
+        month_days = [int(source.day_of_month)]
+
+    return {
+        "frequency": frequency,
+        "unit": unit,
+        "interval": interval,
+        "weekdays": weekdays,
+        "month_days": month_days,
+    }
+
+
 class RequestQuoteForm(FlaskForm):
     amount = DecimalField(
         "Quote amount",
@@ -413,23 +522,49 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
         "end_time": {"label": "default end time"},
     }
 
-    title = StringField("Service or work title", validators=[DataRequired(), Length(max=255)])
+    title = SelectField("Service", validators=[DataRequired(message="Choose a service.")])
     frequency = SelectField(
-        "Frequency",
-        choices=[(frequency, frequency.capitalize()) for frequency in RecurringWork.FREQUENCIES],
+        "Preset",
+        choices=[
+            ("weekly", "Weekly"),
+            ("biweekly", "Biweekly"),
+            ("monthly", "Monthly"),
+            ("semi_monthly", "Semi-monthly"),
+            ("bimonthly", "Every 2 months"),
+            ("custom", "Custom"),
+        ],
         default="weekly",
         validators=[DataRequired()],
     )
-    day_of_week = SelectField(
-        "Weekly day",
-        choices=[(-1, "Choose a weekday"), *[(index, day) for index, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])]],
+    recurrence_unit = SelectField(
+        "Repeat by",
+        choices=[("week", "Week"), ("month", "Month")],
+        default="week",
+        validators=[DataRequired()],
+    )
+    recurrence_interval = IntegerField(
+        "Repeat interval",
+        default=1,
+        validators=[Optional(), NumberRange(min=1, max=12)],
+        render_kw={"min": "1", "max": "12", "step": "1", "inputmode": "numeric"},
+    )
+    weekdays = SelectMultipleField(
+        "Weekdays",
         coerce=int,
-        default=-1,
+        validators=[Optional()],
+        widget=ListWidget(prefix_label=False),
+        option_widget=CheckboxInputWithoutRequired(),
+    )
+    month_day_primary = SelectField(
+        "Primary monthly day",
+        choices=[(0, "Choose a day"), *[(day, str(day)) for day in range(1, 32)]],
+        coerce=int,
+        default=0,
         validators=[Optional()],
     )
-    day_of_month = SelectField(
-        "Monthly day",
-        choices=[(0, "Choose a day of month"), *[(day, str(day)) for day in range(1, 32)]],
+    month_day_secondary = SelectField(
+        "Second monthly day",
+        choices=[(0, "None"), *[(day, str(day)) for day in range(1, 32)]],
         coerce=int,
         default=0,
         validators=[Optional()],
@@ -463,6 +598,27 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
     def __init__(self, *args, **kwargs):
         source = kwargs.get("obj")
         super().__init__(*args, **kwargs)
+        selected_title = (getattr(source, "title", None) or "").strip() or None
+        self.title.choices = _load_recurring_work_service_choices(selected_title=selected_title)
+        self.weekdays.choices = [(index, day) for index, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])]
+
+        schedule_defaults = _resolve_recurring_work_form_schedule_defaults(source)
+        if selected_title and not self.title.data:
+            self.title.data = selected_title
+        if self.frequency.data in (None, ""):
+            self.frequency.data = str(schedule_defaults["frequency"])
+        if self.recurrence_unit.data in (None, ""):
+            self.recurrence_unit.data = str(schedule_defaults["unit"])
+        if self.recurrence_interval.data in (None, ""):
+            self.recurrence_interval.data = int(schedule_defaults["interval"])
+        if not self.weekdays.data:
+            self.weekdays.data = list(schedule_defaults["weekdays"])
+        if self.month_day_primary.data in (None, ""):
+            month_days = list(schedule_defaults["month_days"])
+            self.month_day_primary.data = month_days[0] if month_days else 0
+        if self.month_day_secondary.data in (None, ""):
+            month_days = list(schedule_defaults["month_days"])
+            self.month_day_secondary.data = month_days[1] if len(month_days) > 1 else 0
         self._initialize_time_selects(source=source)
 
     def validate(self, extra_validators=None):
@@ -487,7 +643,7 @@ class RecurringWorkGenerationForm(FlaskForm):
         default="60",
         validators=[DataRequired()],
     )
-    submit = SubmitField("Generate Upcoming Appointments")
+    submit = SubmitField("Sync Upcoming Events")
 
 
 class AppointmentForm(TimeSelectMixin, FlaskForm):

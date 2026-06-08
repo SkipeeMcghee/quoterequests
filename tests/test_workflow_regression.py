@@ -444,10 +444,13 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
     response = client.post(
         recurring_url,
         data={
-            "recurring-work-title": "Monthly customer follow-up",
+            "recurring-work-title": "Window Cleaning",
             "recurring-work-frequency": "weekly",
-            "recurring-work-day_of_week": str(recurring_start.weekday()),
-            "recurring-work-day_of_month": "0",
+            "recurring-work-recurrence_unit": "week",
+            "recurring-work-recurrence_interval": "1",
+            "recurring-work-weekdays": [str(recurring_start.weekday())],
+            "recurring-work-month_day_primary": "0",
+            "recurring-work-month_day_secondary": "0",
             "recurring-work-starts_on": recurring_start.isoformat(),
             "recurring-work-ends_on": "",
             **_time_form_data("recurring-work", "start_time", 9),
@@ -464,7 +467,7 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
         client,
         response.headers["Location"],
         back_label="Back to Customer",
-        expected_text=("Generate upcoming appointments", "Monthly customer follow-up"),
+        expected_text=("Schedule sync", "Window Cleaning"),
     )
     assert "Morning window preferred." in detail_body
 
@@ -473,7 +476,7 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
         assert customer is not None
         assert len(customer.notes) == 1
         assert len(customer.photos) == 1
-        assert len(customer.appointments) == 1
+        assert len(customer.appointments) == 2
         assert len(customer.recurring_works) == 1
 
 
@@ -677,6 +680,7 @@ def test_calendar_list_workflow_end_to_end(client, app, admin_user):
 
 def test_recurring_work_workflow_end_to_end(client, app, admin_user):
     app.config.update(
+        ENABLE_SERVICES=True,
         ENABLE_SCHEDULING=True,
         ENABLE_CUSTOMER_RECORDS=True,
         ENABLE_CALENDAR=True,
@@ -708,10 +712,13 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
     response = client.post(
         recurring_url,
         data={
-            "recurring-work-title": "Weekly exterior windows",
+            "recurring-work-title": "Window Cleaning",
             "recurring-work-frequency": "weekly",
-            "recurring-work-day_of_week": str(recurring_start.weekday()),
-            "recurring-work-day_of_month": "0",
+            "recurring-work-recurrence_unit": "week",
+            "recurring-work-recurrence_interval": "1",
+            "recurring-work-weekdays": [str(recurring_start.weekday())],
+            "recurring-work-month_day_primary": "0",
+            "recurring-work-month_day_secondary": "0",
             "recurring-work-starts_on": recurring_start.isoformat(),
             "recurring-work-ends_on": "",
             **_time_form_data("recurring-work", "start_time", 8),
@@ -729,25 +736,17 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
         client,
         recurring_detail_url,
         back_label="Back to Customer",
-        expected_text=("Generate upcoming appointments", "Weekly exterior windows"),
+        expected_text=("Schedule sync", "Window Cleaning"),
     )
     assert f"Linked request #{request_id}" in recurring_detail_body
+    assert "View Generated Events" in recurring_detail_body
+    assert "Back to Customer Record" not in recurring_detail_body
+    assert "Calendar View" not in recurring_detail_body
+    assert "List View" not in recurring_detail_body
 
     with app.app_context():
         recurring_work = RecurringWork.query.one()
         recurring_work_id = recurring_work.id
-
-    response = client.post(
-        f"/admin/recurring-work/{recurring_work_id}/generate?source=customer&customer_id={customer_id}",
-        data={
-            "generate-recurring-days_ahead": "30",
-            "generate-recurring-submit": "Generate Upcoming Appointments",
-        },
-        follow_redirects=False,
-    )
-    assert response.status_code == 302
-
-    with app.app_context():
         appointment = Appointment.query.filter_by(recurring_work_id=recurring_work_id).first()
         assert appointment is not None
         scheduled_date = appointment.scheduled_date
@@ -767,7 +766,7 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
         main_nav=True,
         expected_nav_labels=("Requests", "Schedule", "Customers", "Recurring Work"),
     )
-    assert "Weekly exterior windows" in recurring_list_body
+    assert "Window Cleaning" in recurring_list_body
 
     calendar_list_body = _assert_page_contract(
         client,

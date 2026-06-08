@@ -4,7 +4,7 @@ from datetime import date, time, timedelta
 
 from app.extensions import db
 from app.models import Appointment, Customer, QuoteRequest, RecurringWork, ServiceOption, StaffMember
-from app.services.admin_requests import create_appointment, create_scheduled_work, delete_appointment, generate_recurring_appointments_for_customer, reschedule_appointment, update_appointment, update_appointment_status
+from app.services.admin_requests import archive_recurring_work, create_appointment, create_scheduled_work, delete_appointment, generate_recurring_appointments_for_customer, reschedule_appointment, sync_recurring_work_appointments, update_appointment, update_appointment_status
 
 
 def _get_service(name: str) -> ServiceOption:
@@ -105,6 +105,223 @@ def test_generate_recurring_appointments_for_customer(app):
 
         generated = db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).all()
         assert len(generated) == created_count
+
+
+def test_sync_recurring_work_appointments_updates_and_prunes_future_children(app):
+    with app.app_context():
+        app.config.update(ENABLE_SERVICES=True)
+        customer = Customer(primary_name="Test User", primary_email="test@example.com", primary_phone="555-1234", primary_city="Testville")
+        db.session.add(customer)
+        db.session.commit()
+
+        recurring_work = RecurringWork(
+            customer_id=customer.id,
+            title="Window Cleaning",
+            frequency="weekly",
+            day_of_week=date.today().weekday(),
+            starts_on=date.today(),
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status="active",
+        )
+        db.session.add(recurring_work)
+        db.session.commit()
+
+        created_count = generate_recurring_appointments_for_customer(customer.id, days_ahead=14)
+        assert created_count > 0
+
+        recurring_work.start_time = time(10, 0)
+        recurring_work.end_time = time(12, 0)
+        db.session.commit()
+
+        sync_result = sync_recurring_work_appointments(recurring_work.id, days_ahead=14)
+        assert sync_result.updated == created_count
+
+        generated = db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).all()
+        assert len(generated) == created_count
+        assert all(appointment.start_time == time(10, 0) for appointment in generated)
+        assert all(appointment.end_time == time(12, 0) for appointment in generated)
+        assert all([service.name for service in appointment.services] == ["Window Cleaning"] for appointment in generated)
+
+        recurring_work.status = "inactive"
+        db.session.commit()
+
+        delete_result = sync_recurring_work_appointments(recurring_work.id, days_ahead=14)
+        assert delete_result.deleted == created_count
+        assert db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).count() == 0
+
+
+def test_recurring_exception_prevents_sync_from_removing_child_event(app):
+    with app.app_context():
+        app.config.update(ENABLE_SERVICES=True)
+        customer = Customer(primary_name="Test User", primary_email="test@example.com", primary_phone="555-1234", primary_city="Testville")
+        db.session.add(customer)
+        db.session.commit()
+
+        recurring_work = RecurringWork(
+            customer_id=customer.id,
+            title="Window Cleaning",
+            frequency="weekly",
+            day_of_week=date.today().weekday(),
+            starts_on=date.today(),
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status="active",
+        )
+        db.session.add(recurring_work)
+        db.session.commit()
+
+        generate_recurring_appointments_for_customer(customer.id, days_ahead=14)
+        protected_appointment = (
+            db.session.query(Appointment)
+            .filter_by(recurring_work_id=recurring_work.id)
+            .order_by(Appointment.scheduled_date.asc(), Appointment.id.asc())
+            .first()
+        )
+        protected_appointment.recurring_exception = True
+        db.session.commit()
+
+        recurring_work.day_of_week = (date.today().weekday() + 1) % 7
+        db.session.commit()
+
+        sync_result = sync_recurring_work_appointments(recurring_work.id, days_ahead=14)
+        assert sync_result.deleted >= 1
+
+        preserved = db.session.get(Appointment, protected_appointment.id)
+        assert preserved is not None
+        assert preserved.recurring_exception is True
+        assert preserved.scheduled_date == protected_appointment.scheduled_date
+
+
+def test_archive_recurring_work_removes_future_managed_children_but_keeps_exceptions(app):
+    with app.app_context():
+        app.config.update(ENABLE_SERVICES=True)
+        customer = Customer(primary_name="Test User", primary_email="test@example.com", primary_phone="555-1234", primary_city="Testville")
+        db.session.add(customer)
+        db.session.commit()
+
+        recurring_work = RecurringWork(
+            customer_id=customer.id,
+            title="Window Cleaning",
+            frequency="weekly",
+            day_of_week=date.today().weekday(),
+            starts_on=date.today(),
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status="active",
+        )
+        db.session.add(recurring_work)
+        db.session.commit()
+
+        created_count = generate_recurring_appointments_for_customer(customer.id, days_ahead=14)
+        protected_appointment = (
+            db.session.query(Appointment)
+            .filter_by(recurring_work_id=recurring_work.id)
+            .order_by(Appointment.scheduled_date.asc(), Appointment.id.asc())
+            .first()
+        )
+        protected_appointment.recurring_exception = True
+        db.session.commit()
+
+        archive_result = archive_recurring_work(recurring_work.id)
+        assert archive_result.deleted == created_count - 1
+        assert recurring_work.status == "inactive"
+
+        remaining = db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).all()
+        assert len(remaining) == 1
+        assert remaining[0].id == protected_appointment.id
+        assert remaining[0].recurring_exception is True
+
+
+def test_generate_biweekly_recurring_appointments_for_customer(app):
+    with app.app_context():
+        customer = Customer(primary_name="Biweekly Customer", primary_email="test@example.com", primary_phone="555-1234", primary_city="Testville")
+        db.session.add(customer)
+        db.session.commit()
+
+        recurring_work = RecurringWork(
+            customer_id=customer.id,
+            title="Window Cleaning",
+            frequency="biweekly",
+            recurrence_config={"unit": "week", "interval": 2, "weekdays": [date.today().weekday()], "month_days": []},
+            day_of_week=date.today().weekday(),
+            starts_on=date.today(),
+            status="active",
+        )
+        db.session.add(recurring_work)
+        db.session.commit()
+
+        created_count = generate_recurring_appointments_for_customer(customer.id, days_ahead=30)
+        generated_dates = [
+            appointment.scheduled_date
+            for appointment in db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).order_by(Appointment.scheduled_date.asc()).all()
+        ]
+
+        assert created_count == len(generated_dates)
+        assert len(generated_dates) >= 2
+        assert all((generated_dates[index] - generated_dates[index - 1]).days == 14 for index in range(1, len(generated_dates)))
+
+
+def test_generate_semi_monthly_recurring_appointments_for_customer(app):
+    with app.app_context():
+        customer = Customer(primary_name="Semi Monthly Customer", primary_email="test@example.com", primary_phone="555-1234", primary_city="Testville")
+        db.session.add(customer)
+        db.session.commit()
+
+        today = date.today()
+        recurring_work = RecurringWork(
+            customer_id=customer.id,
+            title="Window Cleaning",
+            frequency="semi_monthly",
+            recurrence_config={"unit": "month", "interval": 1, "weekdays": [], "month_days": [1, 15]},
+            day_of_month=1,
+            starts_on=date(today.year, today.month, 1),
+            status="active",
+        )
+        db.session.add(recurring_work)
+        db.session.commit()
+
+        created_count = generate_recurring_appointments_for_customer(customer.id, days_ahead=40)
+        generated_dates = [
+            appointment.scheduled_date
+            for appointment in db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).order_by(Appointment.scheduled_date.asc()).all()
+        ]
+
+        assert created_count == len(generated_dates)
+        assert len(generated_dates) >= 2
+        assert all(generated_date.day in {1, 15} for generated_date in generated_dates)
+
+
+def test_generate_custom_twice_weekly_recurring_appointments(app):
+    with app.app_context():
+        customer = Customer(primary_name="Custom Weekly Customer", primary_email="test@example.com", primary_phone="555-1234", primary_city="Testville")
+        db.session.add(customer)
+        db.session.commit()
+
+        first_weekday = date.today().weekday()
+        second_weekday = (first_weekday + 2) % 7
+        recurring_work = RecurringWork(
+            customer_id=customer.id,
+            title="Window Cleaning",
+            frequency="custom",
+            recurrence_config={"unit": "week", "interval": 1, "weekdays": [first_weekday, second_weekday], "month_days": []},
+            day_of_week=first_weekday,
+            starts_on=date.today(),
+            status="active",
+        )
+        db.session.add(recurring_work)
+        db.session.commit()
+
+        created_count = generate_recurring_appointments_for_customer(customer.id, days_ahead=14)
+        generated_dates = [
+            appointment.scheduled_date
+            for appointment in db.session.query(Appointment).filter_by(recurring_work_id=recurring_work.id).order_by(Appointment.scheduled_date.asc()).all()
+        ]
+
+        assert created_count == len(generated_dates)
+        assert len(generated_dates) >= 4
+        assert {generated_date.weekday() for generated_date in generated_dates}.issubset({first_weekday, second_weekday})
+        assert {first_weekday, second_weekday}.issubset({generated_date.weekday() for generated_date in generated_dates})
 
 
 def test_rescheduled_recurring_work_keeps_recurring_work_id(app):

@@ -90,6 +90,11 @@
                 <div>
                   {% if appointment.recurring_work %}
                     <a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=appointment.recurring_work.id) }}">Recurring work #{{ appointment.recurring_work.id }}</a>
+                    {% if appointment.recurring_exception %}
+                      <p class="subtle-text">Marked as an exception and excluded from recurring sync updates.</p>
+                    {% elif appointment.is_recurring_sync_locked %}
+                      <p class="subtle-text">Currently protected from recurring sync by its status.</p>
+                    {% endif %}
                   {% else %}
                     <strong>None</strong>
                   {% endif %}
