@@ -449,8 +449,6 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
             "recurring-work-recurrence_unit": "week",
             "recurring-work-recurrence_interval": "1",
             "recurring-work-weekdays": [str(recurring_start.weekday())],
-            "recurring-work-month_day_primary": "0",
-            "recurring-work-month_day_secondary": "0",
             "recurring-work-starts_on": recurring_start.isoformat(),
             "recurring-work-ends_on": "",
             **_time_form_data("recurring-work", "start_time", 9),
@@ -717,8 +715,6 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
             "recurring-work-recurrence_unit": "week",
             "recurring-work-recurrence_interval": "1",
             "recurring-work-weekdays": [str(recurring_start.weekday())],
-            "recurring-work-month_day_primary": "0",
-            "recurring-work-month_day_secondary": "0",
             "recurring-work-starts_on": recurring_start.isoformat(),
             "recurring-work-ends_on": "",
             **_time_form_data("recurring-work", "start_time", 8),
@@ -736,10 +732,10 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
         client,
         recurring_detail_url,
         back_label="Back to Customer",
-        expected_text=("Schedule sync", "Window Cleaning"),
+        expected_text=("Synced Events", "Window Cleaning"),
     )
     assert f"Linked request #{request_id}" in recurring_detail_body
-    assert "View Generated Events" in recurring_detail_body
+    assert "View Synced Events" in recurring_detail_body
     assert "Back to Customer Record" not in recurring_detail_body
     assert "Calendar View" not in recurring_detail_body
     assert "List View" not in recurring_detail_body
@@ -756,7 +752,7 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
         client,
         f"/admin/recurring-work/{recurring_work_id}?source=customer&customer_id={customer_id}",
         back_label="Back to Customer",
-        expected_text=("Generated appointments",),
+        expected_text=("Synced Events",),
     )
     assert f"/admin/appointments/{appointment_id}?source=day" in generated_detail_body
 

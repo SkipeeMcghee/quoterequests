@@ -1494,6 +1494,7 @@ def update_recurring_work(
     billing_frequency: str | None = None,
     status: str = "active",
     notes: str | None = None,
+    customer_id: int | None = None,
 ) -> RecurringWork:
     recurring_work = get_recurring_work(recurring_work_id)
     values = _normalize_recurring_work_values(
@@ -1525,6 +1526,13 @@ def update_recurring_work(
     recurring_work.billing_frequency = values["billing_frequency"]
     recurring_work.status = values["status"]
     recurring_work.notes = values["notes"]
+
+    if customer_id is not None and recurring_work.customer_id != customer_id:
+        customer = get_customer(customer_id)
+        recurring_work.customer_id = customer.id
+        for appointment in recurring_work.appointments:
+            appointment.customer_id = customer.id
+
     db.session.commit()
     return recurring_work
 
@@ -1556,14 +1564,16 @@ def _resolve_recurring_work_service_options_for_title(title: str | None) -> list
     if not is_services_enabled():
         return None
 
-    cleaned_title = (title or "").strip()
-    if not cleaned_title:
+    cleaned_titles = [service_name.strip() for service_name in (title or "").split(",") if service_name.strip()]
+    if not cleaned_titles:
         return None
 
-    service = db.session.scalar(select(ServiceOption).where(ServiceOption.name == cleaned_title))
-    if service is None:
-        return None
-    return [service]
+    service_options = db.session.scalars(
+        select(ServiceOption)
+        .where(ServiceOption.name.in_(cleaned_titles))
+        .order_by(ServiceOption.display_order.asc(), ServiceOption.name.asc())
+    ).all()
+    return service_options or None
 
 
 def _normalize_recurrence_weekdays(raw_values) -> tuple[int, ...]:

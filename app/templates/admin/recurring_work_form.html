@@ -27,9 +27,16 @@
       <form method="post" action="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}" class="stacked-form" data-recurring-rule-form>
         {{ form.hidden_tag() }}
         <label class="form-field">
-          <span class="field-label-row">Service <span class="required-pill">Required</span></span>
-          {{ form.title(class_='select', required=true) }}
-          {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          <span class="field-label-row">Services <span class="required-pill">Required</span></span>
+          <div class="checkbox-list">
+            {% for option in form.service_ids %}
+              <label class="checkbox-option">
+                {{ option(class_='checkbox-input') }}
+                <span>{{ option.label.text }}</span>
+              </label>
+            {% endfor %}
+          </div>
+          {% for error in form.service_ids.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
 
         <section class="recurring-form-section recurring-form-section--rule">
@@ -76,21 +83,17 @@
           <div class="recurring-rule-panel" data-recurring-unit-target="month">
             <div>
               <strong>Month days</strong>
-              <p class="subtle-text">Use one monthly day for monthly or bimonthly setups, or add a second day for semi-monthly patterns.</p>
+              <p class="subtle-text">Select one or more day numbers to repeat on. Choose up to 31 days for custom monthly patterns.</p>
             </div>
-            <div class="form-grid recurring-choice-grid recurring-choice-grid--rule">
-              <label class="form-field">
-                <span>Primary monthly day</span>
-                {{ form.month_day_primary(class_='select') }}
-                {% for error in form.month_day_primary.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-              </label>
-              <label class="form-field">
-                <span>Second monthly day</span>
-                {{ form.month_day_secondary(class_='select') }}
-                <small class="field-help">Optional unless you want a semi-monthly pattern.</small>
-                {% for error in form.month_day_secondary.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-              </label>
+            <div class="recurring-monthday-picker">
+              {% for option in form.month_days %}
+                <label class="recurring-weekday-option">
+                  {{ option(class_='checkbox-input') }}
+                  <span>{{ option.label.text }}</span>
+                </label>
+              {% endfor %}
             </div>
+            {% for error in form.month_days.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </div>
         </section>
 
@@ -223,12 +226,18 @@
 
         var applyPreset = function () {
           var intervalInput = form.querySelector('input[name$="recurrence_interval"]');
-          var monthPrimaryInput = form.querySelector('select[name$="month_day_primary"]');
-          var monthSecondaryInput = form.querySelector('select[name$="month_day_secondary"]');
+          var monthDayInputs = form.querySelectorAll('input[name$="month_days"]');
           var defaultWeekday = String(getWeekdayDefault());
           var defaultMonthDay = String(getMonthDayDefault());
 
-          if (!intervalInput || !monthPrimaryInput || !monthSecondaryInput) {
+          var setMonthDaySelection = function (selectedValues) {
+            var selectedLookup = new Set(selectedValues.map(String));
+            monthDayInputs.forEach(function (input) {
+              input.checked = selectedLookup.has(input.value);
+            });
+          };
+
+          if (!intervalInput || !monthDayInputs.length) {
             updateVisibility();
             return;
           }
@@ -244,26 +253,15 @@
           } else if (presetInput.value === 'monthly') {
             unitInput.value = 'month';
             intervalInput.value = '1';
-            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
-              monthPrimaryInput.value = defaultMonthDay;
-            }
-            monthSecondaryInput.value = '0';
+            setMonthDaySelection([defaultMonthDay]);
           } else if (presetInput.value === 'semi_monthly') {
             unitInput.value = 'month';
             intervalInput.value = '1';
-            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
-              monthPrimaryInput.value = defaultMonthDay;
-            }
-            if (!monthSecondaryInput.value || monthSecondaryInput.value === '0' || monthSecondaryInput.value === monthPrimaryInput.value) {
-              monthSecondaryInput.value = monthPrimaryInput.value === '15' ? '1' : '15';
-            }
+            setMonthDaySelection([defaultMonthDay, defaultMonthDay === '15' ? '1' : '15']);
           } else if (presetInput.value === 'bimonthly') {
             unitInput.value = 'month';
             intervalInput.value = '2';
-            if (!monthPrimaryInput.value || monthPrimaryInput.value === '0') {
-              monthPrimaryInput.value = defaultMonthDay;
-            }
-            monthSecondaryInput.value = '0';
+            setMonthDaySelection([defaultMonthDay]);
           }
 
           updateVisibility();

@@ -403,8 +403,6 @@ def test_admin_can_create_recurring_work_from_customer_context(client, app, admi
             'recurring-work-recurrence_unit': 'week',
             'recurring-work-recurrence_interval': '1',
             'recurring-work-weekdays': ['4'],
-            'recurring-work-month_day_primary': '0',
-            'recurring-work-month_day_secondary': '0',
             'recurring-work-starts_on': '2026-05-01',
             'recurring-work-ends_on': '',
             'recurring-work-start_time_hour': '9',
@@ -434,6 +432,55 @@ def test_admin_can_create_recurring_work_from_customer_context(client, app, admi
         assert work.billing_amount == Decimal('125.00')
         assert work.billing_frequency == 'monthly'
         assert Appointment.query.filter_by(recurring_work_id=work.id).count() > 0
+
+
+def test_admin_can_create_monthly_recurring_work_with_multiple_month_days(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+        ENABLE_RECURRING_WORK=True,
+        ENABLE_SCHEDULING=True,
+        ENABLE_SERVICES=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='Monthly Days Customer', primary_city='City', primary_email='monthly@example.com')
+        db.session.add(customer)
+        db.session.commit()
+        customer_id = customer.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.post(
+        f'/admin/customers/{customer_id}/recurring-work/new',
+        data={
+            'recurring-work-title': 'Seasonal Maintenance',
+            'recurring-work-frequency': 'monthly',
+            'recurring-work-recurrence_unit': 'month',
+            'recurring-work-recurrence_interval': '1',
+            'recurring-work-month_days': ['1', '15', '30'],
+            'recurring-work-starts_on': '2026-05-01',
+            'recurring-work-ends_on': '',
+            'recurring-work-start_time_hour': '8',
+            'recurring-work-start_time_minute': '0',
+            'recurring-work-end_time_hour': '10',
+            'recurring-work-end_time_minute': '0',
+            'recurring-work-billing_amount': '',
+            'recurring-work-billing_frequency': '',
+            'recurring-work-status': 'active',
+            'recurring-work-notes': 'Three monthly checkpoints.',
+            'recurring-work-submit': 'Save Recurring Work',
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        work = RecurringWork.query.one()
+        assert work.recurrence_config == {'unit': 'month', 'interval': 1, 'weekdays': [], 'month_days': [1, 15, 30]}
+        assert work.day_of_month == 1
 
 
 def test_recurring_work_detail_shows_generation_links_and_customer_context(client, app, admin_user):
@@ -481,15 +528,14 @@ def test_recurring_work_detail_shows_generation_links_and_customer_context(clien
 
     body = response.get_data(as_text=True)
     assert 'Back to Customer' in body
-    assert 'View Generated Events' in body
+    assert 'View Synced Events' in body
     assert body.count('View Customer') == 1
     assert 'Schedule sync' in body
-    assert 'Future impact' in body
-    assert 'Sync Upcoming Events' in body
+    assert 'Update synced window' in body
     assert 'Archive Plan and Remove Future Managed Events' in body
     assert 'Mark Exception' in body
     assert 'Save Recurring Work' not in body
-    assert 'Generated appointments' in body
+    assert 'Synced Events' in body
     assert 'Back to Customer Record' not in body
     assert 'Calendar View' not in body
     assert 'List View' not in body
@@ -497,6 +543,53 @@ def test_recurring_work_detail_shows_generation_links_and_customer_context(clien
     assert f'/admin/appointments/{appointment_id}?source=day&amp;date={scheduled_date.isoformat()}&amp;year={scheduled_date.year}&amp;month={scheduled_date.month}&amp;day={scheduled_date.day}' in body
     assert f'/admin/calendar/{scheduled_date.year}/{scheduled_date.month}/{scheduled_date.day}' in body
     assert f'/admin/customers/{customer_id}#recurring-work' in body
+
+
+def test_recurring_work_detail_customer_combobox_renders_all_customers(client, app, admin_user):
+    app.config.update(
+        ENABLE_CUSTOMER_RECORDS=True,
+        ENABLE_RECURRING_WORK=True,
+        ENABLE_SCHEDULING=True,
+        ENABLE_SERVICES=True,
+    )
+    with app.app_context():
+        customer = Customer(primary_name='Recurring Flow Customer', primary_city='City', primary_email='customer@example.com')
+        other_customer = Customer(primary_name='Other Customer', primary_city='Town', primary_email='other@example.com')
+        db.session.add_all([customer, other_customer])
+        db.session.commit()
+        customer_id = customer.id
+        other_customer_id = other_customer.id
+        work = RecurringWork(
+            customer_id=customer_id,
+            title='Window Cleaning',
+            frequency='weekly',
+            day_of_week=4,
+            starts_on=date(2026, 5, 1),
+            start_time=time(9, 0),
+            end_time=time(11, 0),
+            status='active',
+        )
+        db.session.add(work)
+        db.session.commit()
+        work_id = work.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=True,
+    )
+
+    response = client.get(f'/admin/recurring-work/{work_id}')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+
+    assert 'data-customer-combobox' in body
+    assert 'data-customer-combobox-panel' in body
+    assert 'data-customer-combobox-input="true"' in body
+    assert f'data-customer-id="{customer_id}"' in body
+    assert f'data-customer-id="{other_customer_id}"' in body
+    assert 'Recurring Flow Customer' in body
+    assert 'Other Customer' in body
 
 
 def test_recurring_work_preview_endpoint_reports_pending_child_changes(client, app, admin_user):
@@ -564,8 +657,6 @@ def test_recurring_work_preview_endpoint_reports_pending_child_changes(client, a
             'recurring-work-recurrence_unit': 'week',
             'recurring-work-recurrence_interval': '1',
             'recurring-work-weekdays': [str(date.today().weekday())],
-            'recurring-work-month_day_primary': '0',
-            'recurring-work-month_day_secondary': '0',
             'recurring-work-starts_on': date.today().isoformat(),
             'recurring-work-ends_on': '',
             'recurring-work-start_time_hour': '10',
@@ -629,8 +720,6 @@ def test_recurring_work_edit_autosave_returns_json(client, app, admin_user):
             'recurring-work-recurrence_unit': 'week',
             'recurring-work-recurrence_interval': '2',
             'recurring-work-weekdays': [str(date.today().weekday())],
-            'recurring-work-month_day_primary': '0',
-            'recurring-work-month_day_secondary': '0',
             'recurring-work-starts_on': date.today().isoformat(),
             'recurring-work-ends_on': '',
             'recurring-work-start_time_hour': '10',

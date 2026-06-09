@@ -1496,6 +1496,18 @@ textarea {
   margin-top: 0.7rem;
 }
 
+.checkbox-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 .checkbox-card {
   display: flex;
   align-items: center;
@@ -3589,17 +3601,53 @@ thead th {
 
 .recurring-edit-context {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
-.recurring-edit-context article {
+.recurring-edit-context__customer {
   display: grid;
   gap: 0.3rem;
   padding: 0.9rem 1rem;
   border-radius: 18px;
   background: var(--card-solid);
   border: 1px solid var(--line);
+}
+
+.recurring-edit-context__customer strong {
+  font-size: 0.98rem;
+  letter-spacing: -0.01em;
+}
+
+.recurring-edit-context__customer .customer-combobox__input {
+  min-height: 3rem;
+}
+
+.recurring-edit-context__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  background: none;
+  border: none;
+}
+
+.recurring-edit-context__item strong {
+  color: var(--muted);
+  flex: 0 0 auto;
+  min-width: 11rem;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
+
+.recurring-edit-context__item span {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.35;
+  opacity: 0.95;
+}
+
+.recurring-edit-context__item a {
+  color: inherit;
 }
 
 .recurring-edit-context article p {
@@ -3632,21 +3680,26 @@ thead th {
   margin: 0;
 }
 
-.recurring-weekday-picker {
+.recurring-weekday-picker,
+.recurring-monthday-picker {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.65rem;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem 0.25rem;
+  justify-items: stretch;
+  align-items: stretch;
 }
 
 .recurring-weekday-option {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  min-height: 3rem;
-  padding: 0.65rem 0.8rem;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: var(--card-solid);
+  justify-content: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
 }
 
 .recurring-weekday-option span {
@@ -3688,13 +3741,46 @@ thead th {
   max-width: 1120px;
 }
 
+.recurring-generated-dialog .gallery-dialog__card {
+  position: relative;
+}
+
+.recurring-generated-dialog .gallery-dialog__header {
+  padding-right: 3rem;
+}
+
+.recurring-generated-dialog .gallery-dialog__close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
 .recurring-generated-dialog__summary p,
 .recurring-generated-dialog__footer {
   margin: 0;
 }
 
+.recurring-generated-dialog__metrics {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0.75rem;
+}
+
+.recurring-generated-dialog__metrics div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.recurring-generated-dialog__metrics strong {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .recurring-generated-dialog__body {
-  max-height: min(70vh, 760px);
+  max-height: none;
 }
 
 .recurring-plan-metrics {

@@ -85,6 +85,7 @@
     function selectCustomerOption(option) {
       customerLookupInput.value = customerOptionLabel(option);
       setCustomerIdValue(option.dataset.customerId || '');
+      customerIdInput.dispatchEvent(new Event('change', { bubbles: true }));
       customerLookupInput.setCustomValidity('');
       customerOptions.forEach(function (customerOption) {
         customerOption.setAttribute('aria-selected', customerOption === option ? 'true' : 'false');
@@ -139,7 +140,10 @@
       });
 
       if (exactMatch) {
-        setCustomerIdValue(exactMatch.dataset.customerId || '');
+        if (String(customerIdInput.value || '') !== String(exactMatch.dataset.customerId || '')) {
+          setCustomerIdValue(exactMatch.dataset.customerId || '');
+          customerIdInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         customerLookupInput.setCustomValidity('');
       } else {
         setCustomerIdValue('');

@@ -53,6 +53,15 @@ def _load_recurring_work_service_choices(selected_title: str | None = None) -> l
     return choices
 
 
+def _resolve_recurring_work_service_ids_for_title(title: str | None = None) -> list[int]:
+    cleaned_titles = [service_name.strip() for service_name in (title or "").split(",") if service_name.strip()]
+    if not cleaned_titles:
+        return []
+
+    services = ServiceOption.query.filter(ServiceOption.name.in_(cleaned_titles)).order_by(ServiceOption.display_order.asc(), ServiceOption.name.asc()).all()
+    return [service.id for service in services]
+
+
 def _normalize_weekday_selection(raw_values) -> list[int]:
     if raw_values in (None, ""):
         return []
@@ -522,7 +531,16 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
         "end_time": {"label": "default end time"},
     }
 
-    title = SelectField("Service", validators=[DataRequired(message="Choose a service.")])
+    title = HiddenField("Service title", validators=[Optional()])
+    service_ids = SelectMultipleField(
+        "Services",
+        coerce=int,
+        validators=[Optional()],
+        widget=ListWidget(prefix_label=False),
+        option_widget=CheckboxInputWithoutRequired(),
+    )
+    customer_id = HiddenField("Customer", validators=[Optional()])
+    customer_lookup = StringField("Customer", validators=[Optional()])
     frequency = SelectField(
         "Preset",
         choices=[
@@ -555,19 +573,12 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
         widget=ListWidget(prefix_label=False),
         option_widget=CheckboxInputWithoutRequired(),
     )
-    month_day_primary = SelectField(
-        "Primary monthly day",
-        choices=[(0, "Choose a day"), *[(day, str(day)) for day in range(1, 32)]],
+    month_days = SelectMultipleField(
+        "Month days",
         coerce=int,
-        default=0,
         validators=[Optional()],
-    )
-    month_day_secondary = SelectField(
-        "Second monthly day",
-        choices=[(0, "None"), *[(day, str(day)) for day in range(1, 32)]],
-        coerce=int,
-        default=0,
-        validators=[Optional()],
+        widget=ListWidget(prefix_label=False),
+        option_widget=CheckboxInputWithoutRequired(),
     )
     starts_on = DateField("Start date", validators=[DataRequired()])
     ends_on = DateField("End date", validators=[Optional()])
@@ -600,7 +611,15 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
         super().__init__(*args, **kwargs)
         selected_title = (getattr(source, "title", None) or "").strip() or None
         self.title.choices = _load_recurring_work_service_choices(selected_title=selected_title)
+        selected_service_ids = _resolve_recurring_work_service_ids_for_title(selected_title)
+        self.service_ids.validate_choice = False
+        self.service_ids.choices = _load_service_choices_with_selected(selected_service_ids)
+        self.service_ids.data = selected_service_ids
+        self.customer_id.data = getattr(source, "customer_id", None)
+        if getattr(source, "customer", None) is not None:
+            self.customer_lookup.data = getattr(source.customer, "primary_name", "") or ""
         self.weekdays.choices = [(index, day) for index, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])]
+        self.month_days.choices = [(day, str(day)) for day in range(1, 32)]
 
         schedule_defaults = _resolve_recurring_work_form_schedule_defaults(source)
         if selected_title and not self.title.data:
@@ -613,12 +632,8 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
             self.recurrence_interval.data = int(schedule_defaults["interval"])
         if not self.weekdays.data:
             self.weekdays.data = list(schedule_defaults["weekdays"])
-        if self.month_day_primary.data in (None, ""):
-            month_days = list(schedule_defaults["month_days"])
-            self.month_day_primary.data = month_days[0] if month_days else 0
-        if self.month_day_secondary.data in (None, ""):
-            month_days = list(schedule_defaults["month_days"])
-            self.month_day_secondary.data = month_days[1] if len(month_days) > 1 else 0
+        if not self.month_days.data:
+            self.month_days.data = list(schedule_defaults["month_days"])
         self._initialize_time_selects(source=source)
 
     def validate(self, extra_validators=None):
@@ -633,17 +648,31 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
             self.billing_amount.errors.append("Enter a billing amount.")
             valid = False
 
+        if self.service_ids.data:
+            services = ServiceOption.query.filter(ServiceOption.id.in_(self.service_ids.data)).order_by(ServiceOption.display_order.asc(), ServiceOption.name.asc()).all()
+            self.title.data = ", ".join([service.name for service in services])
+        elif self.title.data:
+            resolved_service_ids = _resolve_recurring_work_service_ids_for_title(self.title.data)
+            self.service_ids.data = resolved_service_ids
+            if resolved_service_ids:
+                services = ServiceOption.query.filter(ServiceOption.id.in_(resolved_service_ids)).order_by(ServiceOption.display_order.asc(), ServiceOption.name.asc()).all()
+                self.title.data = ", ".join([service.name for service in services])
+
+        if not self.service_ids.data and not self.title.data:
+            self.service_ids.errors.append("Choose at least one service.")
+            valid = False
+
         return self.validate_time_selects() and valid
 
 
 class RecurringWorkGenerationForm(FlaskForm):
     days_ahead = SelectField(
-        "Generate for",
+        "Keep synced for",
         choices=[("30", "Next 30 days"), ("60", "Next 60 days")],
         default="60",
         validators=[DataRequired()],
     )
-    submit = SubmitField("Sync Upcoming Events")
+    submit = SubmitField("Update synced window")
 
 
 class AppointmentForm(TimeSelectMixin, FlaskForm):

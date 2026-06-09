@@ -56,8 +56,8 @@
           <div class="manual-link-section">
             <form method="post" action="{{ url_for('admin.link_customer_route', request_id=quote_request.id) }}" class="stacked-form manual-link-form" data-scroll-anchor="customer-matching" data-request-detail-refresh="true">
               {{ link_customer_form.csrf_token }}
-              {{ link_customer_form.manual_customer_id(data_customer_id_input="true") }}
               <label class="form-field customer-combobox" data-customer-combobox>
+                {{ link_customer_form.manual_customer_id(data_customer_id_input="true") }}
                 {{ link_customer_form.manual_customer_lookup(
                   class_="input customer-combobox__input",
                   placeholder="Click here to manually link by searching for an existing customer.",

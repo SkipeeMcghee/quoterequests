@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, time
+import re
 from io import BytesIO
 from pathlib import Path
 
@@ -1603,10 +1604,67 @@ def test_request_detail_includes_scroll_restore_targets_for_inline_forms(client,
     assert 'data-scroll-anchor="customer-matching"' in body
     assert 'data-request-detail-refresh="true"' in body
     assert 'data-scroll-anchor="request-details"' in body
+
+
+def test_request_detail_manual_customer_combobox_renders_all_customer_options(client, app, admin_user):
+    app.config.update(ENABLE_CUSTOMER_RECORDS=True, ENABLE_SCHEDULING=True)
+    with app.app_context():
+        customer1 = Customer(primary_name='Charlie Customer', primary_city='City', primary_email='charlie@example.com')
+        customer2 = Customer(primary_name='Dana Customer', primary_city='Town', primary_email='dana@example.com')
+        quote_request = QuoteRequest(full_name='Test Request', phone='555-1234', city='123 Main St')
+        db.session.add_all([customer1, customer2, quote_request])
+        db.session.commit()
+        customer1_id = customer1.id
+        customer2_id = customer2.id
+        request_id = quote_request.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=False,
+    )
+
+    response = client.get(f'/admin/requests/{request_id}')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+
+    assert 'data-customer-combobox' in body
+    assert 'data-customer-combobox-panel' in body
+    assert 'data-customer-combobox-input="true"' in body
+    assert f'data-customer-id="{customer1_id}"' in body
+    assert f'data-customer-id="{customer2_id}"' in body
+    assert 'Charlie Customer' in body
+    assert 'Dana Customer' in body
     assert 'data-scroll-anchor="quotes"' in body
     assert 'data-scroll-anchor="notes"' in body
     assert "admin-request-detail-scroll" in body
     assert "request-detail-customer-panel" in body
+
+
+def test_request_detail_manual_customer_combobox_contains_hidden_id_input_within_combobox_label(client, app, admin_user):
+    app.config.update(ENABLE_CUSTOMER_RECORDS=True, ENABLE_SCHEDULING=True)
+    with app.app_context():
+        customer = Customer(primary_name='Elliot Example', primary_city='City', primary_email='elliot@example.com')
+        quote_request = QuoteRequest(full_name='Test Request', phone='555-1234', city='123 Main St')
+        db.session.add_all([customer, quote_request])
+        db.session.commit()
+        request_id = quote_request.id
+
+    client.post(
+        '/auth/login',
+        data={'email': admin_user, 'password': 'password123', 'remember_me': 'y'},
+        follow_redirects=False,
+    )
+
+    response = client.get(f'/admin/requests/{request_id}')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+
+    assert re.search(
+        r'<label[^>]*data-customer-combobox[^>]*>.*?data-customer-id-input="true".*?</label>',
+        body,
+        re.DOTALL,
+    )
 
 
 def test_login_page_renders(client):

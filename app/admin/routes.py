@@ -660,26 +660,18 @@ def _validate_recurring_work_form(form: RecurringWorkForm) -> tuple[dict[str, ob
             }
 
     if form.recurrence_unit.data == "month":
-        month_days = []
-        if form.month_day_primary.data:
-            month_days.append(int(form.month_day_primary.data))
-        if form.month_day_secondary.data:
-            month_days.append(int(form.month_day_secondary.data))
-
-        deduped_month_days = sorted(set(month_days))
-        if month_days and len(deduped_month_days) != len(month_days):
-            form.month_day_secondary.errors.append("Choose a different second monthly day.")
-            is_valid = False
-        if not deduped_month_days:
-            form.month_day_primary.errors.append("Choose at least one day of month for this recurring plan.")
+        month_days = [int(day) for day in (form.month_days.data or []) if isinstance(day, (int, str)) and str(day).isdigit()]
+        month_days = sorted(set(month_days))
+        if not month_days:
+            form.month_days.errors.append("Choose at least one day of month for this recurring plan.")
             is_valid = False
         else:
-            selected_day_of_month = deduped_month_days[0]
+            selected_day_of_month = month_days[0]
             recurrence_config = {
                 "unit": "month",
                 "interval": int(interval_value or 1),
                 "weekdays": [],
-                "month_days": deduped_month_days,
+                "month_days": month_days,
             }
 
     if form.ends_on.data and form.starts_on.data and form.ends_on.data < form.starts_on.data:
@@ -768,8 +760,10 @@ def _serialize_recurring_work_display_state(work) -> dict[str, object]:
         "cadence_summary": work.cadence_summary,
         "time_summary": time_summary,
         "billing_summary": billing_summary,
+        "starts_label": "Started" if work.starts_on and work.starts_on < today_value else "Starts",
         "starts_on_label": work.starts_on.strftime('%b %d, %Y') if work.starts_on else "",
-        "ends_on_label": work.ends_on.strftime('%b %d, %Y') if work.ends_on else "None",
+        "customer_id": work.customer.id if work.customer else None,
+        "customer_name": work.customer.primary_name if work.customer else None,
         "generated_count": len(generated_appointments),
         "upcoming_generated_count": sum(
             1
@@ -863,6 +857,9 @@ def _render_recurring_work_detail_page(
         for appointment in generated_appointments
     }
 
+    customer_options = _build_customer_options()
+    starts_label = "Started" if work.starts_on and work.starts_on < today_value else "Starts"
+
     return render_template(
         "admin/recurring_work_detail.html",
         work=work,
@@ -890,6 +887,8 @@ def _render_recurring_work_detail_page(
         recurring_exception_urls=recurring_exception_urls,
         edit_recurring_work_url=url_for("admin.edit_recurring_work_route", recurring_work_id=work.id, **recurring_source_args),
         generate_recurring_work_url=url_for("admin.generate_recurring_work_appointments_route", recurring_work_id=work.id, **recurring_source_args),
+        customer_options=customer_options,
+        starts_label=starts_label,
     )
 
 
@@ -2561,8 +2560,8 @@ def new_recurring_work(customer_id: int):
             form.starts_on.data = date.today()
         if not form.weekdays.data and form.starts_on.data is not None:
             form.weekdays.data = [form.starts_on.data.weekday()]
-        if not form.month_day_primary.data and form.starts_on.data is not None:
-            form.month_day_primary.data = form.starts_on.data.day
+        if not form.month_days.data and form.starts_on.data is not None:
+            form.month_days.data = [form.starts_on.data.day]
 
     if form.validate_on_submit():
         recurrence_config, selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(form)
@@ -2612,11 +2611,17 @@ def recurring_work_detail(recurring_work_id: int):
     if not current_app.config.get("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
     work = get_recurring_work(recurring_work_id)
+    generate_recurring_appointments_form = RecurringWorkGenerationForm(prefix="generate-recurring")
+    days_ahead = request.args.get("days_ahead")
+    if days_ahead in {choice[0] for choice in generate_recurring_appointments_form.days_ahead.choices}:
+        generate_recurring_appointments_form.days_ahead.data = days_ahead
+    else:
+        days_ahead = "60"
+
     if current_app.config.get("ENABLE_SCHEDULING"):
-        sync_recurring_work_appointments(work.id)
+        sync_recurring_work_appointments(work.id, days_ahead=int(days_ahead))
         work = get_recurring_work(recurring_work_id)
     recurring_work_form = RecurringWorkForm(prefix="recurring-work", obj=work)
-    generate_recurring_appointments_form = RecurringWorkGenerationForm(prefix="generate-recurring")
     return _render_recurring_work_detail_page(
         work=work,
         recurring_work_form=recurring_work_form,
@@ -2702,6 +2707,7 @@ def edit_recurring_work_route(recurring_work_id: int):
                     billing_frequency=recurring_work_form.billing_frequency.data,
                     status=recurring_work_form.status.data,
                     notes=recurring_work_form.notes.data,
+                    customer_id=int(recurring_work_form.customer_id.data) if recurring_work_form.customer_id.data else None,
                 )
                 if current_app.config.get("ENABLE_SCHEDULING"):
                     sync_recurring_work_appointments(recurring_work_id)
@@ -2769,6 +2775,7 @@ def generate_recurring_work_appointments_route(recurring_work_id: int):
     work = get_recurring_work(recurring_work_id)
     form = RecurringWorkGenerationForm(prefix="generate-recurring")
     recurring_source_args = _recurring_source_args_from_request()
+    days_ahead = request.form.get("generate-recurring-days_ahead") or "60"
     if form.validate_on_submit():
         try:
             sync_result = sync_recurring_work_appointments(recurring_work_id, days_ahead=int(form.days_ahead.data))
@@ -2796,6 +2803,7 @@ def generate_recurring_work_appointments_route(recurring_work_id: int):
             "admin.recurring_work_detail",
             recurring_work_id=recurring_work_id,
             _anchor="generated-appointments",
+            days_ahead=days_ahead,
             **recurring_source_args,
         )
     )
