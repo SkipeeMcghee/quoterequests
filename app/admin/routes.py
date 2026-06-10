@@ -753,6 +753,7 @@ def _serialize_recurring_work_display_state(work) -> dict[str, object]:
     return {
         "id": work.id,
         "title": work.title or "Service not set",
+        "display_title": work.display_title,
         "status": work.status,
         "status_label": work.status.capitalize(),
         "frequency": work.frequency,
@@ -2536,15 +2537,17 @@ def recurring_work_list():
     return render_template("admin/recurring_work_list.html", recurring_works=works)
 
 
+@bp.route("/recurring-work/new", methods=["GET", "POST"])
 @bp.route("/customers/<int:customer_id>/recurring-work/new", methods=["GET", "POST"])
 @login_required
-def new_recurring_work(customer_id: int):
+def new_recurring_work(customer_id: int | None = None):
     if not current_app.config.get("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
     if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
 
-    customer = get_customer(customer_id)
+    customer = get_customer(customer_id) if customer_id is not None else None
+    customer_options = _build_customer_options()
     form = RecurringWorkForm(prefix="recurring-work")
 
     if request.method == "GET":
@@ -2563,12 +2566,22 @@ def new_recurring_work(customer_id: int):
         if not form.month_days.data and form.starts_on.data is not None:
             form.month_days.data = [form.starts_on.data.day]
 
+    selected_customer = None
+    if form.customer_id.data:
+        try:
+            selected_customer = get_customer(int(form.customer_id.data))
+        except Exception:
+            form.customer_id.errors.append("Choose a valid customer.")
+
     if form.validate_on_submit():
         recurrence_config, selected_day_of_week, selected_day_of_month, has_valid_schedule = _validate_recurring_work_form(form)
+        if selected_customer is None:
+            form.customer_id.errors.append("Choose a customer.")
+            has_valid_schedule = False
         if has_valid_schedule:
             try:
                 work = create_recurring_work(
-                    customer.id,
+                    selected_customer.id,
                     title=form.title.data,
                     frequency=form.frequency.data,
                     recurrence_config=recurrence_config,
@@ -2590,7 +2603,7 @@ def new_recurring_work(customer_id: int):
                     url_for(
                         "admin.recurring_work_detail",
                         recurring_work_id=work.id,
-                        **_build_recurring_source_args(source="customer", customer_id=customer.id),
+                        **_build_recurring_source_args(source="customer", customer_id=selected_customer.id),
                     )
                 )
             except Exception as exc:
@@ -2599,9 +2612,10 @@ def new_recurring_work(customer_id: int):
     return render_template(
         "admin/recurring_work_form.html",
         customer=customer,
+        customer_options=customer_options,
         form=form,
-        source_return_url=url_for("admin.customer_detail", customer_id=customer.id, _anchor="recurring-work"),
-        source_return_label="Back to Customer",
+        source_return_url=(url_for("admin.customer_detail", customer_id=customer.id, _anchor="recurring-work") if customer is not None else url_for("admin.recurring_work_list")),
+        source_return_label=("Back to Customer" if customer is not None else "Back to Recurring Work"),
     )
 
 

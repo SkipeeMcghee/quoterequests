@@ -259,8 +259,10 @@
                 <tr>
                   <td>
                     <div class="customer-table-meta">
-                      <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">Event #{{ appointment.id }}</a>
-                      <span class="subtle-text">{{ appointment.display_title }}</span>
+                      <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id) }}">{{ appointment.display_title }}</a>
+                      {% if appointment.scheduled_date %}
+                        <span class="subtle-text">{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</span>
+                      {% endif %}
                     </div>
                   </td>
                   <td>
@@ -332,7 +334,7 @@
               <article class="customer-recurring-item">
                 <div class="customer-recurring-item__body">
                   <div class="customer-recurring-item__header">
-                    <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id, source='customer', customer_id=customer.id) }}">{{ recurring_work.title or 'Recurring work' }}</a></strong>
+                    <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id, source='customer', customer_id=customer.id) }}">{{ recurring_work.display_title }}</a></strong>
                     <span class="status-badge">{{ recurring_work.status|capitalize }}</span>
                   </div>
                   <div class="subtle-text">
@@ -602,7 +604,7 @@
             {% for recurring_work in customer.billed_recurring_works %}
               <article class="customer-billing-plan">
                 <div class="customer-billing-plan__content">
-                  <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id, source='customer', customer_id=customer.id) }}">{{ recurring_work.title or 'Recurring work' }}</a></strong>
+                  <strong><a href="{{ url_for('admin.recurring_work_detail', recurring_work_id=recurring_work.id, source='customer', customer_id=customer.id) }}">{{ recurring_work.display_title }}</a></strong>
                   <span class="subtle-text">{{ recurring_work.status|capitalize }}{% if recurring_work.starts_on %} · starts {{ recurring_work.starts_on.strftime('%b %d, %Y') }}{% endif %}</span>
                 </div>
                 <div class="customer-billing-plan__amount">

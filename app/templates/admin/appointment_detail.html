@@ -3,13 +3,13 @@
 {% from "admin/page_header.html" import render_admin_page_header with context %}
 {% from "admin/_staff_assignment_picker.html" import render_staff_assignment_picker %}
 
-{% block title %}Appointment #{{ appointment.id }}{% endblock %}
+{% block title %}Scheduled Event{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
   {% set location = appointment.quote_request.city if appointment.quote_request and appointment.quote_request.city else appointment.customer.primary_city if appointment.customer and appointment.customer.primary_city else None %}
   {% call render_admin_page_header(
-    title='Event #' ~ appointment.id,
+    title=appointment.display_title,
     description=None,
     nav_mode='sub',
     return_url=appointment_return_url,
@@ -30,7 +30,7 @@
         {{ appointment_form.hidden_tag() }}
         <div class="appointment-editor-card__header">
           <div>
-            <h2>Event #{{ appointment.id }}</h2>
+            <h2>{{ appointment.display_title }}</h2>
             <p class="subtle-text">Keep the current event details and editable fields on one card so the record stays easy to scan and easy to update.</p>
           </div>
           <div class="appointment-editor-card__header-actions">

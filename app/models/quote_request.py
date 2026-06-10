@@ -143,7 +143,8 @@ class QuoteRequest(db.Model):
 
     @property
     def display_request_number(self) -> int:
-        return self.request_number or self.id
+        request_number = self.request_number if self.request_number is not None else self.id
+        return (request_number or 0) + 1000
 
     @property
     def display_request_type(self) -> str:
@@ -258,8 +259,14 @@ class Appointment(db.Model):
 
     @property
     def display_title(self) -> str:
-        if self.id is not None:
-            return f"Event #{self.id}"
+        service_names = [s.name for s in self.services] if self.services else []
+        if not service_names and self.title:
+            service_names = [p.strip() for p in self.title.split(",") if p.strip()]
+        if service_names:
+            extra = len(service_names) - 1
+            return service_names[0] + (f" +{extra}" if extra > 0 else "")
+        if self.scheduled_date:
+            return self.scheduled_date.strftime("%b %d, %Y")
         return "Scheduled event"
 
     @property
@@ -321,6 +328,10 @@ class RequestQuote(db.Model):
     @property
     def formatted_amount(self) -> str:
         return f"${self.amount:,.2f}"
+
+    @property
+    def quote_id(self) -> int:
+        return (self.id or 0) + 1000
 
     def __repr__(self) -> str:
         return (

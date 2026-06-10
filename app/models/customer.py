@@ -261,6 +261,18 @@ class RecurringWork(db.Model):
         order_by="Appointment.scheduled_date.desc()",
     )
 
+    @property
+    def plan_id(self) -> int:
+        return 1000 + self.id
+
+    @property
+    def display_title(self) -> str:
+        parts = [p.strip() for p in (self.title or "").split(",") if p.strip()]
+        if parts:
+            extra = len(parts) - 1
+            return parts[0] + (f" +{extra}" if extra > 0 else "")
+        return "Service not set"
+
     @staticmethod
     def _normalize_weekdays(raw_values) -> list[int]:
         if raw_values in (None, ""):

@@ -13,6 +13,7 @@
     return_label='Back to Content',
     actions_class='dashboard-metrics'
   ) %}
+      <button type="button" class="btn btn-secondary btn-small" data-archived-services-open="archived-services-dialog">Archive</button>
       <article class="metric-card">
         <strong>{{ active_service_count }}</strong>
         <span>Active services</span>
@@ -66,10 +67,11 @@
     </div>
 
     <div class="service-management-list">
-      {% for service in services %}
+      {% set active_services = services | selectattr('is_active', 'equalto', true) | list %}
+      {% for service in active_services %}
         {% set form = service_forms[service.id] %}
         {% set status_form = status_forms[service.id] %}
-        <article class="service-management-card{% if not service.is_active %} service-management-card--inactive{% endif %}">
+        <article class="service-management-card">
           <div class="section-bar compact-bar">
             <div>
               <h2>{{ service.name }}</h2>
@@ -100,7 +102,7 @@
             </div>
           </form>
 
-          <form method="post" action="{{ url_for('admin.toggle_service_status_route', service_id=service.id) }}" class="form-actions service-management-toggle-form">
+          <form method="post" action="{{ url_for('admin.toggle_service_status_route', service_id=service.id) }}" class="form-actions service-management-toggle-form" data-save-scroll-on-submit>
             {{ status_form.hidden_tag() }}
             {% if service.is_active %}
               <button type="submit" class="btn btn-danger btn-small">Archive</button>
@@ -112,12 +114,58 @@
           </form>
         </article>
       {% else %}
-        <p class="empty-state">No services have been added yet.</p>
+        <p class="empty-state">
+          {% if archived_service_count %}
+            No active services remain. Archived services are available from the Archive button above.
+          {% else %}
+            No services have been added yet.
+          {% endif %}
+        </p>
       {% endfor %}
     </div>
   </section>
 
   {% if services %}
+    <dialog class="gallery-dialog" id="archived-services-dialog" data-archived-services-dialog>
+      <div class="gallery-dialog__card" role="dialog" aria-modal="true" aria-labelledby="archived-services-title">
+        <header class="gallery-dialog__header">
+          <div class="gallery-dialog__copy">
+            <h2 id="archived-services-title">Archived services</h2>
+            <p class="subtle-text">Archived services are hidden from public request forms but remain attached to older requests, schedules, and customer history.</p>
+          </div>
+          <button type="button" class="inline-remove-button inline-remove-button--bare gallery-dialog__close gallery-dialog__close--danger gallery-dialog__close--corner" data-archived-services-close aria-label="Close archived services dialog">&times;</button>
+        </header>
+
+        {% set archived_services = services | selectattr('is_active', 'equalto', false) | list %}
+        {% if archived_services %}
+          <div class="service-management-list">
+            {% for service in archived_services %}
+              {% set status_form = status_forms[service.id] %}
+              <article class="service-management-card service-management-card--inactive">
+                <div class="section-bar compact-bar">
+                  <div>
+                    <h2>{{ service.name }}</h2>
+                    <p class="subtle-text">Hidden from customer-facing request forms.</p>
+                  </div>
+                  <span class="status-badge service-management-status service-management-status--inactive">Inactive</span>
+                </div>
+
+                <div class="form-actions service-management-toggle-form">
+                  <form method="post" action="{{ url_for('admin.toggle_service_status_route', service_id=service.id) }}">
+                    {{ status_form.hidden_tag() }}
+                    <button type="submit" class="btn btn-secondary btn-small">Reactivate</button>
+                    <span class="subtle-text">Reactivated services return to the active list.</span>
+                  </form>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="empty-state">No archived services yet.</p>
+        {% endif %}
+      </div>
+    </dialog>
+
     <dialog class="gallery-dialog" id="service-order-dialog" data-service-order-dialog>
       <div class="gallery-dialog__card" role="dialog" aria-modal="true" aria-labelledby="service-order-title">
         <header class="gallery-dialog__header">
@@ -170,39 +218,102 @@
 {% block scripts %}
 <script>
 (function () {
-  const dialog = document.querySelector('[data-service-order-dialog]');
+  const orderDialog = document.querySelector('[data-service-order-dialog]');
+  const archivedDialog = document.querySelector('[data-archived-services-dialog]');
   const orderList = document.querySelector('[data-service-order-list]');
+  const scrollStorageKey = 'admin-services-scroll-position';
 
   function syncPageScrollLock() {
-    document.body.classList.toggle('gallery-popup-open', Boolean(dialog && dialog.hasAttribute('open')));
+    const hasOpenDialog = Boolean(
+      (orderDialog && orderDialog.hasAttribute('open')) ||
+      (archivedDialog && archivedDialog.hasAttribute('open'))
+    );
+
+    document.body.classList.toggle('gallery-popup-open', hasOpenDialog);
   }
 
   function openDialog() {
-    if (!dialog) {
+    if (!orderDialog) {
       return;
     }
 
-    if (typeof dialog.showModal === 'function') {
-      dialog.showModal();
+    if (typeof orderDialog.showModal === 'function') {
+      orderDialog.showModal();
     } else {
-      dialog.setAttribute('open', 'open');
+      orderDialog.setAttribute('open', 'open');
     }
 
     syncPageScrollLock();
   }
 
   function closeDialog() {
-    if (!dialog) {
+    if (!orderDialog) {
       return;
     }
 
-    if (dialog.open && typeof dialog.close === 'function') {
-      dialog.close();
+    if (orderDialog.open && typeof orderDialog.close === 'function') {
+      orderDialog.close();
     } else {
-      dialog.removeAttribute('open');
+      orderDialog.removeAttribute('open');
     }
 
     syncPageScrollLock();
+  }
+
+  function openArchivedDialog() {
+    if (!archivedDialog) {
+      return;
+    }
+
+    if (typeof archivedDialog.showModal === 'function') {
+      archivedDialog.showModal();
+    } else {
+      archivedDialog.setAttribute('open', 'open');
+    }
+
+    syncPageScrollLock();
+  }
+
+  function closeArchivedDialog() {
+    if (!archivedDialog) {
+      return;
+    }
+
+    if (archivedDialog.open && typeof archivedDialog.close === 'function') {
+      archivedDialog.close();
+    } else {
+      archivedDialog.removeAttribute('open');
+    }
+
+    syncPageScrollLock();
+  }
+
+  function restoreScrollPosition() {
+    if (!window.sessionStorage) {
+      return;
+    }
+
+    const saved = window.sessionStorage.getItem(scrollStorageKey);
+    if (!saved) {
+      return;
+    }
+
+    const position = Number(saved);
+    if (!Number.isNaN(position)) {
+      window.requestAnimationFrame(function () {
+        window.scrollTo(0, position);
+      });
+    }
+
+    window.sessionStorage.removeItem(scrollStorageKey);
+  }
+
+  function saveScrollPosition() {
+    if (!window.sessionStorage) {
+      return;
+    }
+
+    window.sessionStorage.setItem(scrollStorageKey, String(window.scrollY || window.pageYOffset || 0));
   }
 
   function refreshOrderList() {
@@ -234,23 +345,52 @@
     button.addEventListener('click', openDialog);
   });
 
-  if (dialog) {
-    dialog.querySelectorAll('[data-service-order-close]').forEach(function (button) {
+  document.querySelectorAll('[data-archived-services-open]').forEach(function (button) {
+    button.addEventListener('click', openArchivedDialog);
+  });
+
+  document.querySelectorAll('[data-save-scroll-on-submit]').forEach(function (form) {
+    form.addEventListener('submit', saveScrollPosition);
+  });
+
+  restoreScrollPosition();
+
+  if (orderDialog) {
+    orderDialog.querySelectorAll('[data-service-order-close]').forEach(function (button) {
       button.addEventListener('click', closeDialog);
     });
 
-    dialog.addEventListener('click', function (event) {
-      if (event.target === dialog) {
+    orderDialog.addEventListener('click', function (event) {
+      if (event.target === orderDialog) {
         closeDialog();
       }
     });
 
-    dialog.addEventListener('cancel', function (event) {
+    orderDialog.addEventListener('cancel', function (event) {
       event.preventDefault();
       closeDialog();
     });
 
-    dialog.addEventListener('close', syncPageScrollLock);
+    orderDialog.addEventListener('close', syncPageScrollLock);
+  }
+
+  if (archivedDialog) {
+    archivedDialog.querySelectorAll('[data-archived-services-close]').forEach(function (button) {
+      button.addEventListener('click', closeArchivedDialog);
+    });
+
+    archivedDialog.addEventListener('click', function (event) {
+      if (event.target === archivedDialog) {
+        closeArchivedDialog();
+      }
+    });
+
+    archivedDialog.addEventListener('cancel', function (event) {
+      event.preventDefault();
+      closeArchivedDialog();
+    });
+
+    archivedDialog.addEventListener('close', syncPageScrollLock);
   }
 
   if (orderList) {

@@ -614,10 +614,11 @@ class RecurringWorkForm(TimeSelectMixin, FlaskForm):
         selected_service_ids = _resolve_recurring_work_service_ids_for_title(selected_title)
         self.service_ids.validate_choice = False
         self.service_ids.choices = _load_service_choices_with_selected(selected_service_ids)
-        self.service_ids.data = selected_service_ids
-        self.customer_id.data = getattr(source, "customer_id", None)
-        if getattr(source, "customer", None) is not None:
-            self.customer_lookup.data = getattr(source.customer, "primary_name", "") or ""
+        if source is not None:
+            self.service_ids.data = selected_service_ids
+            self.customer_id.data = getattr(source, "customer_id", None)
+            if getattr(source, "customer", None) is not None:
+                self.customer_lookup.data = getattr(source.customer, "primary_name", "") or ""
         self.weekdays.choices = [(index, day) for index, day in enumerate(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])]
         self.month_days.choices = [(day, str(day)) for day in range(1, 32)]
 

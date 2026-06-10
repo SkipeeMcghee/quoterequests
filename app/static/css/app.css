@@ -4785,9 +4785,25 @@ thead th {
   padding: 0;
   border: 0;
   background: transparent;
-  max-height: calc(100dvh - 1rem);
-  overflow-y: auto;
+  max-height: 100dvh;
+  overflow: hidden;
   overscroll-behavior: contain;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gallery-dialog__card {
+  position: relative;
+  display: grid;
+  gap: 1rem;
+  padding: 1.15rem;
+  border-radius: 28px;
+  background: var(--card-solid);
+  border: 1px solid #000;
+  box-shadow: 0 16px 36px rgba(var(--theme-accent-rgb), 0.1);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
 }
 
 .gallery-dialog::backdrop {
@@ -4798,14 +4814,11 @@ thead th {
   background: rgba(var(--theme-background-rgb), 0.78);
 }
 
-.gallery-dialog__card {
-  display: grid;
-  gap: 1rem;
-  padding: 1.15rem;
-  border-radius: 28px;
-  background: var(--card-solid);
-  border: 1px solid #000;
-  box-shadow: 0 16px 36px rgba(var(--theme-accent-rgb), 0.1);
+.gallery-dialog__close--corner {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  padding: 0.5rem;
 }
 
 .gallery-dialog--order .gallery-dialog__card {
@@ -4845,6 +4858,16 @@ thead th {
   background: var(--surface-brand-soft);
   color: var(--accent-strong);
   outline: 0;
+}
+
+.gallery-dialog__close--danger {
+  color: #c22;
+}
+
+.gallery-dialog__close--danger:hover,
+.gallery-dialog__close--danger:focus-visible {
+  background: rgba(194, 34, 34, 0.08);
+  color: #a00;
 }
 
 .gallery-dialog__form,

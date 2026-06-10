@@ -117,7 +117,7 @@
             <dd>{{ quote_request.full_name }}</dd>
           </div>
           <div>
-            <dt>Request ID</dt>
+            <dt>{{ 'Quote ID' if quote_request.request_type == 'Quote request' else 'Request ID' }}</dt>
             <dd>#{{ quote_request.display_request_number }}</dd>
           </div>
           <div>
@@ -354,6 +354,7 @@
               <div class="request-quote-item__header">
                 <div class="request-quote-item__summary">
                   <strong>{{ request_quote.formatted_amount }}</strong>
+                  <div class="subtle-text">Quote ID #{{ request_quote.quote_id }}</div>
                   <div class="subtle-text">Added {{ request_quote.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
                   <div class="subtle-text">Billing frequency: {{ request_quote.billing_frequency or 'Not set' }}</div>
                 </div>
@@ -470,7 +471,7 @@
               <div>
                 <dt>Appointment</dt>
                   <dd>
-                    <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">View scheduled event #{{ appointment.id }}</a>
+                    <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">View scheduled event</a>
                     {% if appointment.scheduled_date %}
                     <div><a href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open day agenda</a></div>
                     {% endif %}

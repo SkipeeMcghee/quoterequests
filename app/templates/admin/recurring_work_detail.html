@@ -2,21 +2,17 @@
 {% from "_time_selects.html" import render_time_select %}
 {% from "admin/page_header.html" import render_admin_page_header with context %}
 
-{% block title %}Recurring work #{{ work.id }}{% endblock %}
+{% block title %}Recurring work #{{ work.plan_id }}{% endblock %}
 
 {% block content %}
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
-    title='Recurring Work',
+    title='Recurring Work Details',
     description='Edit this repeating service plan and keep its scheduled events aligned automatically.',
     nav_mode='sub',
     return_url=recurring_return_url,
-    return_label=recurring_return_label,
-    meta='#' ~ work.id ~ ((' · ' ~ (work.customer.primary_name or 'Unnamed customer')) if work.customer else '')
+    return_label=recurring_return_label
   ) %}
-      {% if work.customer %}
-        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">View Customer</a>
-      {% endif %}
       <button type="button" class="btn btn-secondary" data-recurring-generated-open="recurring-generated-dialog">Synced Events</button>
   {% endcall %}
 
@@ -24,13 +20,15 @@
     <div class="recurring-plan-overview__header">
       <div>
         <p class="eyebrow">Recurring plan</p>
-        <h2 data-recurring-summary-title>{{ work.title or 'Service not set' }}</h2>
+        <h2 data-recurring-summary-title>{{ work.display_title }}</h2>
         <p class="subtle-text">
-          {% if work.customer %}
-            <a href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}" data-recurring-summary-customer-link>{{ work.customer.primary_name or 'Customer' }}</a>
-          {% else %}
-            No linked customer
-          {% endif %}
+          <span data-recurring-summary-customer-link>
+            {% if work.customer %}
+              <a href="{{ url_for('admin.customer_detail', customer_id=work.customer.id) }}">{{ work.customer.primary_name or 'Customer' }}</a>
+            {% else %}
+              No linked customer
+            {% endif %}
+          </span>
         </p>
       </div>
       <div class="recurring-plan-overview__status">
@@ -58,18 +56,13 @@
   <section class="summary-card" id="recurring-edit">
     <div class="section-bar compact-bar">
       <div>
-        <h2>Recurring plan details</h2>
-        <p class="subtle-text">This page saves automatically. The fields below now serve as both the live display and the editing surface for the plan.</p>
+        <h2>Plan details</h2>
+        <p class="subtle-text">This page saves automatically. The fields below serve as both the live display and the editing surface for the plan.</p>
       </div>
       <p class="subtle-text recurring-autosave-status" data-recurring-autosave-status aria-live="polite"></p>
     </div>
     <form method="post" action="{{ edit_recurring_work_url }}" class="stacked-form" data-recurring-frequency-form data-recurring-edit-form>
-      {{ recurring_work_form.hidden_tag() }}
       <section class="recurring-form-section recurring-form-section--context">
-        <div>
-          <h3>Plan context</h3>
-          <p class="subtle-text">These linked records and counts update as the recurring rule changes and autosaves.</p>
-        </div>
         <div class="recurring-edit-context">
           <article class="recurring-edit-context__customer">
             <strong>Customer</strong>
@@ -106,6 +99,11 @@
             {% for error in recurring_work_form.customer_lookup.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
             {% for error in recurring_work_form.customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </article>
+          {{ recurring_work_form.hidden_tag() }}
+          <div class="recurring-edit-context__item">
+            <strong>Plan ID</strong>
+            <span>#{{ work.plan_id }}</span>
+          </div>
           <div class="recurring-edit-context__item">
             <strong>Linked request</strong>
             <span data-recurring-summary-request>
@@ -130,10 +128,6 @@
       </section>
 
       <section class="recurring-form-section">
-        <div>
-          <h3>Service and cadence</h3>
-          <p class="subtle-text">Pick one or more services, start from a preset if it helps, then define the actual repeating rule that should govern future child events.</p>
-        </div>
         <label class="form-field">
           <span class="field-label-row">Services <span class="required-pill">Required</span></span>
           <div class="checkbox-list">
@@ -201,9 +195,8 @@
       <section class="recurring-form-section">
         <div>
           <h3>Active window and timing</h3>
-          <p class="subtle-text">These fields decide when the recurring rule is allowed to place or refresh child events.</p>
         </div>
-        <div class="form-grid recurring-choice-grid">
+        <div>
           <label class="form-field">
             <span class="field-label-row">Start date <span class="required-pill">Required</span></span>
             {{ recurring_work_form.starts_on(class_='input', required=true) }}
@@ -227,10 +220,6 @@
       </section>
 
       <section class="recurring-form-section">
-        <div>
-          <h3>Billing and notes</h3>
-          <p class="subtle-text">Keep recurring pricing and any field instructions together so operators can scan them quickly.</p>
-        </div>
         <div class="form-grid recurring-choice-grid">
           <label class="form-field">
             <span>Billing amount</span>
@@ -337,8 +326,10 @@
               <tr class="clickable-row" tabindex="0" onclick="window.location.href='{{ appointment_detail_url }}'">
                 <td>
                   <div class="customer-table-meta">
-                    <a class="recurring-generated-link" href="{{ appointment_detail_url }}">Event #{{ appointment.id }}</a>
-                    <span class="subtle-text">{{ appointment.display_title }}</span>
+                    <a class="recurring-generated-link" href="{{ appointment_detail_url }}">{{ appointment.display_title }}</a>
+                    {% if appointment.scheduled_date %}
+                      <span class="subtle-text">{{ appointment.scheduled_date.strftime('%b %d, %Y') }}</span>
+                    {% endif %}
                     {% if appointment.recurring_exception %}
                       <span class="recurring-sync-pill recurring-sync-pill--exception">Exception</span>
                     {% elif appointment.is_recurring_sync_locked %}
@@ -419,8 +410,9 @@
       var editForm = document.querySelector('[data-recurring-edit-form]');
       var autosaveForm = document.querySelector('[data-recurring-edit-form]');
       var autosaveStatus = autosaveForm ? autosaveForm.closest('.summary-card').querySelector('[data-recurring-autosave-status]') : null;
+      var summaryCustomerLink = document.querySelector('[data-recurring-summary-customer-link]');
 
-      function setAutosaveStatus(message, isError) {
+      function setAutosaveStatus(message, isError, state) {
         if (!autosaveStatus) {
           return;
         }
@@ -431,9 +423,9 @@
         }
 
         autosaveStatus.textContent = message || '';
-        autosaveStatus.dataset.state = message ? (isError ? 'error' : 'saved') : '';
+        autosaveStatus.dataset.state = message ? (isError ? 'error' : state || 'saved') : '';
 
-        if (message && !isError && autosaveForm) {
+        if (message && !isError && state !== 'saving' && autosaveForm) {
           autosaveForm._recurringAutosaveTimer = window.setTimeout(function () {
             autosaveStatus.textContent = '';
             autosaveStatus.dataset.state = '';
@@ -461,7 +453,7 @@
         var summaryBilling = document.querySelector('[data-recurring-summary-billing]');
 
         if (summaryTitle) {
-          summaryTitle.textContent = work.title;
+          summaryTitle.textContent = work.display_title || work.title || 'Service not set';
         }
         if (summaryStatus) {
           summaryStatus.textContent = work.status_label;
@@ -483,11 +475,9 @@
         }
         if (summaryCustomerLink) {
           if (work.customer_id) {
-            summaryCustomerLink.textContent = work.customer_name || 'Customer';
-            summaryCustomerLink.setAttribute('href', '/admin/customers/' + work.customer_id);
+            summaryCustomerLink.innerHTML = '<a href="/admin/customers/' + work.customer_id + '">' + (work.customer_name || 'Customer') + '</a>';
           } else {
             summaryCustomerLink.textContent = 'No linked customer';
-            summaryCustomerLink.removeAttribute('href');
           }
         }
         if (summaryManaged) {
@@ -513,7 +503,7 @@
 
         form.dataset.isSubmitting = 'true';
         form.dataset.pendingSave = 'false';
-        setAutosaveStatus('Saving...', false);
+        setAutosaveStatus('Saving recurring work...', false, 'saving');
 
         form._recurringAutosavePromise = fetch(form.action, {
           method: 'POST',
@@ -532,6 +522,7 @@
           });
         }).then(function (payload) {
           applyRecurringAutosavePayload(payload);
+          isRecurringFormDirty = false;
           setAutosaveStatus(payload.message || 'Saved', false);
           return payload;
         }).catch(function (error) {
@@ -684,6 +675,61 @@
 
       if (autosaveForm) {
         var autosaveDebounceTimer = null;
+        var serviceTitleInput = autosaveForm.querySelector('input[name$="title"]');
+        var serviceCheckboxes = Array.from(autosaveForm.querySelectorAll('input[type="checkbox"][name$="service_ids"]'));
+        var formSummaryTitle = document.querySelector('[data-recurring-summary-title]');
+
+        function getServiceLabel(checkbox) {
+          var label = checkbox.closest('label');
+          if (label) {
+            return label.textContent.trim();
+          }
+          return checkbox.value;
+        }
+
+        function getSelectedServiceNames() {
+          return serviceCheckboxes.filter(function (checkbox) {
+            return checkbox.checked;
+          }).map(function (checkbox) {
+            return getServiceLabel(checkbox);
+          });
+        }
+
+        function updateServiceTitleFromSelection() {
+          var selectedNames = getSelectedServiceNames();
+          if (selectedNames.length === 0) {
+            return;
+          }
+          var title = selectedNames.join(', ');
+          if (serviceTitleInput) {
+            serviceTitleInput.value = title;
+          }
+          if (formSummaryTitle) {
+            formSummaryTitle.textContent = title;
+          }
+        }
+
+        serviceCheckboxes.forEach(function (checkbox) {
+          checkbox.addEventListener('click', function (event) {
+            var checkedBoxes = serviceCheckboxes.filter(function (box) {
+              return box.checked;
+            });
+            if (checkbox.checked && checkedBoxes.length === 1) {
+              event.preventDefault();
+              setAutosaveStatus('Choose at least one service.', true, 'error');
+            }
+          });
+
+          checkbox.addEventListener('change', function () {
+            var selectedNames = getSelectedServiceNames();
+            if (selectedNames.length === 0) {
+              checkbox.checked = true;
+              setAutosaveStatus('Choose at least one service.', true, 'error');
+              return;
+            }
+            updateServiceTitleFromSelection();
+          });
+        });
 
         autosaveForm.addEventListener('submit', function (event) {
           event.preventDefault();
@@ -696,6 +742,9 @@
             return;
           }
 
+          if (event.target.name && event.target.name.endsWith('customer_lookup')) {
+            return;
+          }
           if (event.target.type === 'checkbox' || event.target.type === 'hidden') {
             return;
           }
@@ -711,6 +760,9 @@
             return;
           }
 
+          if (event.target.name && event.target.name.endsWith('customer_lookup')) {
+            return;
+          }
           if (event.target.type === 'checkbox' || event.target.type === 'hidden') {
             return;
           }
@@ -726,12 +778,38 @@
             return;
           }
 
+          if (event.target.type === 'hidden' && event.target.name && event.target.name.endsWith('customer_id')) {
+            updateCustomerSummaryLink(event.target.value, autosaveForm.querySelector('input[name$="customer_lookup"]').value);
+            window.clearTimeout(autosaveDebounceTimer);
+            submitRecurringAutosave(autosaveForm);
+            return;
+          }
+
           if (!(event.target.type === 'checkbox' || event.target.tagName === 'SELECT')) {
             return;
           }
 
           window.clearTimeout(autosaveDebounceTimer);
           submitRecurringAutosave(autosaveForm);
+        });
+
+        function updateCustomerSummaryLink(customerId, customerName) {
+          if (!summaryCustomerLink) {
+            return;
+          }
+
+          if (customerId) {
+            summaryCustomerLink.innerHTML = '<a href="/admin/customers/' + customerId + '">' + (customerName || 'Customer') + '</a>';
+          } else {
+            summaryCustomerLink.textContent = 'No linked customer';
+          }
+        }
+
+        window.addEventListener('beforeunload', function (event) {
+          if (autosaveForm.dataset.isSubmitting === 'true' || autosaveForm.dataset.pendingSave === 'true' || isRecurringFormDirty) {
+            event.preventDefault();
+            event.returnValue = '';
+          }
         });
       }
 

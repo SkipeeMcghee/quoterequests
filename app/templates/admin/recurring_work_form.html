@@ -13,91 +13,161 @@
     return_url=source_return_url,
     return_label=source_return_label
   ) %}
-      <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">View Customer</a>
+      {% if customer %}
+        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">View Customer</a>
+      {% endif %}
   {% endcall %}
 
-  <section class="summary-grid recurring-work-builder">
-    <article class="summary-card recurring-work-form-card">
+  <form method="post" action="{{ url_for('admin.new_recurring_work', customer_id=customer.id) if customer else url_for('admin.new_recurring_work') }}" class="stacked-form" data-recurring-rule-form>
+
+    <section class="summary-card recurring-work-context-card">
+      <div class="section-bar compact-bar">
+        <div>
+          <h2>Customer context</h2>
+          <p class="subtle-text">This recurring plan belongs to the selected customer and stays visible while you set up the cadence.</p>
+        </div>
+      </div>
+      {% if customer %}
+        <div class="recurring-context-list">
+          <article>
+            <strong>Customer</strong>
+            <p><a href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">{{ customer.primary_name or 'Customer' }}</a></p>
+            <p class="subtle-text">
+              {% if customer.primary_email %}{{ customer.primary_email }}{% endif %}
+              {% if customer.primary_email and customer.primary_phone %} · {% endif %}
+              {% if customer.primary_phone %}{{ customer.primary_phone }}{% endif %}
+              {% if (customer.primary_email or customer.primary_phone) and customer.primary_city %} · {% endif %}
+              {% if customer.primary_city %}{{ customer.primary_city }}{% endif %}
+            </p>
+          </article>
+          <article>
+            <strong>Existing recurring plans</strong>
+            <p>{{ customer.recurring_works|length }}</p>
+            <p class="subtle-text">After save, open the recurring plan detail page to refine it and review the synced events.</p>
+          </article>
+        </div>
+      {% else %}
+        <section class="customer-link-panel">
+          <label class="form-field customer-combobox" data-customer-combobox>
+            {{ form.customer_id(data_customer_id_input="true") }}
+            {{ form.customer_lookup(
+              class_="input customer-combobox__input",
+              placeholder="Click here to manually link by searching for an existing customer.",
+              autocomplete="off",
+              spellcheck="false",
+              data_customer_combobox_input="true",
+              role="combobox",
+              aria_autocomplete="list",
+              aria_expanded="false",
+              aria_controls="recurring-work-customer-options",
+              aria_haspopup="listbox"
+            ) }}
+            <div class="customer-combobox__panel" id="recurring-work-customer-options" data-customer-combobox-panel role="listbox" hidden>
+              {% for customer_id, customer_label in customer_options %}
+                <button
+                  type="button"
+                  class="customer-combobox__option"
+                  id="recurring-work-customer-option-{{ customer_id }}"
+                  data-customer-option
+                  data-customer-id="{{ customer_id }}"
+                  data-customer-label="{{ customer_label }}"
+                  role="option"
+                  aria-selected="false"
+                >{{ customer_label }}</button>
+              {% endfor %}
+              <div class="customer-combobox__empty subtle-text" data-customer-combobox-empty hidden>No matching customers found.</div>
+            </div>
+          </label>
+          {% for error in form.customer_lookup.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          {% for error in form.customer_id.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </section>
+      {% endif %}
+    </section>
+    {{ form.hidden_tag() }}
+
+    <section class="summary-card recurring-work-form-card">
       <div class="section-bar compact-bar">
         <div>
           <h2>Recurring work details</h2>
           <p class="subtle-text">Choose the service, start from a preset if it helps, then shape the actual repeating rule below. Upcoming events will sync from that rule automatically.</p>
         </div>
       </div>
-      <form method="post" action="{{ url_for('admin.new_recurring_work', customer_id=customer.id) }}" class="stacked-form" data-recurring-rule-form>
-        {{ form.hidden_tag() }}
+      <label class="form-field">
+        <span class="field-label-row">Services <span class="required-pill">Required</span></span>
+        <div class="checkbox-list">
+          {% for option in form.service_ids %}
+            <label class="checkbox-option">
+              {{ option(class_='checkbox-input') }}
+              <span>{{ option.label.text }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        {% for error in form.service_ids.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <section class="recurring-form-section recurring-form-section--rule">
+        <div>
+          <h3>Preset and custom rule</h3>
+          <p class="subtle-text">Presets fill the builder below. After that, the repeat rule underneath is what actually gets saved.</p>
+        </div>
         <label class="form-field">
-          <span class="field-label-row">Services <span class="required-pill">Required</span></span>
-          <div class="checkbox-list">
-            {% for option in form.service_ids %}
-              <label class="checkbox-option">
+          <span class="field-label-row">Preset <span class="required-pill">Required</span></span>
+          {{ form.frequency(class_='select', **{'data-recurring-preset-input': 'true'}) }}
+          <small class="field-help">Use a preset as a shortcut, or leave it on custom and build the cadence directly.</small>
+          {% for error in form.frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+
+        <div class="form-grid recurring-choice-grid recurring-choice-grid--rule">
+          <label class="form-field">
+            <span class="field-label-row">Repeat every <span class="required-pill">Required</span></span>
+            {{ form.recurrence_interval(class_='input', required=true) }}
+            {% for error in form.recurrence_interval.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          <label class="form-field">
+            <span class="field-label-row">Repeat by <span class="required-pill">Required</span></span>
+            {{ form.recurrence_unit(class_='select', **{'data-recurring-unit-input': 'true'}) }}
+            {% for error in form.recurrence_unit.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+        </div>
+
+        <div class="recurring-rule-panel" data-recurring-unit-target="week">
+          <div>
+            <strong>Weekdays</strong>
+            <p class="subtle-text">Select one day for weekly or biweekly routes, or multiple days for custom patterns like twice a week.</p>
+          </div>
+          <div class="recurring-weekday-picker">
+            {% for option in form.weekdays %}
+              <label class="recurring-weekday-option">
                 {{ option(class_='checkbox-input') }}
                 <span>{{ option.label.text }}</span>
               </label>
             {% endfor %}
           </div>
-          {% for error in form.service_ids.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-        </label>
+          {% for error in form.weekdays.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
 
-        <section class="recurring-form-section recurring-form-section--rule">
+        <div class="recurring-rule-panel" data-recurring-unit-target="month">
           <div>
-            <h3>Preset and custom rule</h3>
-            <p class="subtle-text">Presets fill the builder below. After that, the repeat rule underneath is what actually gets saved.</p>
+            <strong>Month days</strong>
+            <p class="subtle-text">Select one or more day numbers to repeat on. Choose up to 31 days for custom monthly patterns.</p>
           </div>
-          <label class="form-field">
-            <span class="field-label-row">Preset <span class="required-pill">Required</span></span>
-            {{ form.frequency(class_='select', **{'data-recurring-preset-input': 'true'}) }}
-            <small class="field-help">Use a preset as a shortcut, or leave it on custom and build the cadence directly.</small>
-            {% for error in form.frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </label>
-
-          <div class="form-grid recurring-choice-grid recurring-choice-grid--rule">
-            <label class="form-field">
-              <span class="field-label-row">Repeat every <span class="required-pill">Required</span></span>
-              {{ form.recurrence_interval(class_='input', required=true) }}
-              {% for error in form.recurrence_interval.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-            <label class="form-field">
-              <span class="field-label-row">Repeat by <span class="required-pill">Required</span></span>
-              {{ form.recurrence_unit(class_='select', **{'data-recurring-unit-input': 'true'}) }}
-              {% for error in form.recurrence_unit.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
+          <div class="recurring-monthday-picker">
+            {% for option in form.month_days %}
+              <label class="recurring-weekday-option">
+                {{ option(class_='checkbox-input') }}
+                <span>{{ option.label.text }}</span>
+              </label>
+            {% endfor %}
           </div>
+          {% for error in form.month_days.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </div>
+      </section>
 
-          <div class="recurring-rule-panel" data-recurring-unit-target="week">
-            <div>
-              <strong>Weekdays</strong>
-              <p class="subtle-text">Select one day for weekly or biweekly routes, or multiple days for custom patterns like twice a week.</p>
-            </div>
-            <div class="recurring-weekday-picker">
-              {% for option in form.weekdays %}
-                <label class="recurring-weekday-option">
-                  {{ option(class_='checkbox-input') }}
-                  <span>{{ option.label.text }}</span>
-                </label>
-              {% endfor %}
-            </div>
-            {% for error in form.weekdays.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </div>
-
-          <div class="recurring-rule-panel" data-recurring-unit-target="month">
-            <div>
-              <strong>Month days</strong>
-              <p class="subtle-text">Select one or more day numbers to repeat on. Choose up to 31 days for custom monthly patterns.</p>
-            </div>
-            <div class="recurring-monthday-picker">
-              {% for option in form.month_days %}
-                <label class="recurring-weekday-option">
-                  {{ option(class_='checkbox-input') }}
-                  <span>{{ option.label.text }}</span>
-                </label>
-              {% endfor %}
-            </div>
-            {% for error in form.month_days.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-          </div>
-        </section>
-
-        <div class="form-grid recurring-choice-grid">
+      <section class="recurring-form-section">
+        <div>
+          <h3>Active window and timing</h3>
+        </div>
+        <div>
           <label class="form-field">
             <span class="field-label-row">Start date <span class="required-pill">Required</span></span>
             {{ form.starts_on(class_='input', required=true) }}
@@ -114,12 +184,13 @@
             {% for error in form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
         </div>
-
         <div class="form-grid recurring-choice-grid">
           {{ render_time_select(form.start_time_hour, form.start_time_minute, "Default start time") }}
           {{ render_time_select(form.end_time_hour, form.end_time_minute, "Default end time") }}
         </div>
+      </section>
 
+      <section class="recurring-form-section">
         <div class="form-grid recurring-choice-grid">
           <label class="form-field">
             <span>Billing amount</span>
@@ -132,7 +203,6 @@
             {% for error in form.billing_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
         </div>
-
         <label class="form-field">
           <span>Notes</span>
           {{ form.notes(class_='textarea') }}
@@ -140,41 +210,15 @@
         </label>
 
         {{ form.submit(class_='btn btn-primary') }}
-      </form>
-    </article>
-
-    <article class="summary-card recurring-work-context-card">
-      <div class="section-bar compact-bar">
-        <div>
-          <h2>Customer context</h2>
-          <p class="subtle-text">This recurring plan belongs to the current customer record, so the customer stays visible while you set up the cadence.</p>
-        </div>
-      </div>
-      <div class="recurring-context-list">
-        <article>
-          <strong>Customer</strong>
-          <p>{{ customer.primary_name or 'Customer' }}</p>
-          <p class="subtle-text">
-            {% if customer.primary_phone %}{{ customer.primary_phone }}{% endif %}
-            {% if customer.primary_phone and customer.primary_email %} · {% endif %}
-            {% if customer.primary_email %}{{ customer.primary_email }}{% endif %}
-            {% if (customer.primary_phone or customer.primary_email) and customer.primary_city %} · {% endif %}
-            {% if customer.primary_city %}{{ customer.primary_city }}{% endif %}
-          </p>
-        </article>
-        <article>
-          <strong>Existing recurring plans</strong>
-          <p>{{ customer.recurring_works|length }}</p>
-          <p class="subtle-text">After save, open the recurring plan detail page to refine it and review the synced events.</p>
-        </article>
-      </div>
-    </article>
-  </section>
+      </section>
+    </section>
+  </form>
 </main>
 {% endblock %}
 
 {% block scripts %}
   {{ super() }}
+  {% include "admin/_customer_combobox_script.html" %}
   <script>
     (function () {
       var forms = document.querySelectorAll('[data-recurring-rule-form]');

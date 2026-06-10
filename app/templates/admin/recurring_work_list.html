@@ -5,17 +5,22 @@
 
 {% block content %}
 <main class="shell dashboard-shell">
-  {{ render_admin_page_header(
+  {% call render_admin_page_header(
     title='Recurring Work',
     description='Review repeat service plans by customer and keep future scheduled events aligned automatically.',
     nav_mode='main'
-  ) }}
+  ) %}
+      <a class="btn btn-primary" href="{{ url_for('admin.new_recurring_work') }}">Add Recurring Work</a>
+  {% endcall %}
 
   <section class="table-card">
     <div class="section-bar compact-bar">
       <div>
         <h2>Recurring plans</h2>
         <p class="subtle-text">Each plan keeps service, cadence, billing, and upcoming event sync in one place.</p>
+      </div>
+      <div class="section-bar-actions">
+        <a class="btn btn-primary btn-small" href="{{ url_for('admin.new_recurring_work') }}">Add</a>
       </div>
     </div>
     <div class="table-scroll">
@@ -48,8 +53,8 @@
               </td>
               <td>
                 <div class="customer-table-meta">
-                  <strong>{{ work.title or 'Service not set' }}</strong>
-                  <span class="subtle-text">Plan #{{ work.id }}</span>
+                  <strong>{{ work.display_title }}</strong>
+                  <span class="subtle-text">Plan #{{ work.plan_id }}</span>
                 </div>
               </td>
               <td>
