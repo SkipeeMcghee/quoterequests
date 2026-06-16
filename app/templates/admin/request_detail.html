@@ -14,9 +14,16 @@
     return_url=url_for('admin.dashboard'),
     return_label='Back to Requests'
   ) %}
-      <div class="status-form request-status-display">
-        <span class="status-label subtle-text">Request status</span>
-        <span class="status-badge status-{{ quote_request.status|lower|replace(' ', '-') }}">{{ quote_request.status }}</span>
+      <div class="request-detail-header-tools">
+        <div class="status-form request-status-display">
+          <span class="status-label subtle-text">Request status</span>
+          <span class="status-badge status-{{ quote_request.status|lower|replace(' ', '-') }}">{{ quote_request.status }}</span>
+        </div>
+        {% if enable_scheduling %}
+          <button type="button" class="btn btn-secondary btn-small request-detail-scheduling-open" data-request-scheduling-open aria-haspopup="dialog" aria-controls="request-scheduling-dialog">
+            {{ 'Manage scheduling' if quote_request.current_appointment else 'Schedule request' }}
+          </button>
+        {% endif %}
       </div>
   {% endcall %}
 
@@ -106,8 +113,7 @@
   </div>
 
   <section class="summary-grid">
-    <div class="detail-grid">
-      <article class="detail-card" id="request-details">
+    <article class="detail-card" id="request-details">
         <div class="section-bar compact-bar">
           <h2>Request details</h2>
         </div>
@@ -169,20 +175,6 @@
             <dt>Additional notes</dt>
             <dd>{{ quote_request.additional_notes or 'None' }}</dd>
           </div>
-          <div>
-            <dt>Last contacted on</dt>
-            <dd>
-              <form method="post" action="{{ url_for('admin.update_last_contacted_on_route', request_id=quote_request.id) }}" class="stacked-form" id="last-contacted-form" data-scroll-anchor="request-details">
-                {{ last_contacted_form.hidden_tag() }}
-                <label class="form-field">
-                  {{ last_contacted_form.last_contacted_on(class_="input compact-input", id="last-contacted-on") }}
-                  {% for error in last_contacted_form.last_contacted_on.errors %}
-                    <small class="field-error">{{ error }}</small>
-                  {% endfor %}
-                </label>
-              </form>
-            </dd>
-          </div>
           {% if enable_services %}
             <div>
               <dt>Services</dt>
@@ -200,6 +192,82 @@
             </div>
           {% endif %}
         </dl>
+
+        <section class="detail-card__section" id="quotes">
+          <div class="section-bar compact-bar request-quote-tracking__header">
+            <div>
+              <h2>Quote tracking</h2>
+              <p class="subtle-text">Request status now updates automatically from review, contact, quote, acceptance, rejection, and scheduling activity.</p>
+            </div>
+            <form method="post" action="{{ url_for('admin.update_last_contacted_on_route', request_id=quote_request.id) }}" class="request-quote-tracking__contact-form" id="last-contacted-form" data-scroll-anchor="quotes">
+              {{ last_contacted_form.hidden_tag() }}
+              <label class="form-field">
+                <span>Last contacted on</span>
+                {{ last_contacted_form.last_contacted_on(class_="input compact-input", id="last-contacted-on") }}
+                {% for error in last_contacted_form.last_contacted_on.errors %}
+                  <small class="field-error">{{ error }}</small>
+                {% endfor %}
+              </label>
+            </form>
+          </div>
+
+          <form method="post" action="{{ url_for('admin.create_request_quote_route', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="quotes">
+            {{ request_quote_form.hidden_tag() }}
+            <div class="form-grid">
+              <label class="form-field">
+                <span>Quote amount</span>
+                {{ request_quote_form.amount(class_="input") }}
+                {% for error in request_quote_form.amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+              <label class="form-field">
+                <span>Billing frequency</span>
+                {{ request_quote_form.billing_frequency(class_="input") }}
+                {% for error in request_quote_form.billing_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+              <label class="form-field field-span-2">
+                <span>Quote details</span>
+                {{ request_quote_form.description(class_="input", placeholder="Optional: scope, option, or package name") }}
+                {% for error in request_quote_form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+            </div>
+            {{ request_quote_form.submit(class_="btn btn-primary") }}
+          </form>
+
+          <div class="request-quote-list">
+            {% for request_quote in quote_request.quotes %}
+              <article class="request-quote-item">
+                <form method="post" action="{{ url_for('admin.delete_request_quote_route', quote_id=request_quote.id) }}" class="inline-form request-quote-item__delete" data-scroll-anchor="quotes">
+                  {{ delete_quote_forms[request_quote.id].hidden_tag() }}
+                  <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete quote">x</button>
+                </form>
+                <div class="request-quote-item__header">
+                  <div class="request-quote-item__summary">
+                    <strong>{{ request_quote.formatted_amount }}</strong>
+                    <div class="subtle-text">Quote ID #{{ request_quote.quote_id }}</div>
+                    <div class="subtle-text">Added {{ request_quote.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
+                    <div class="subtle-text">Billing frequency: {{ request_quote.billing_frequency or 'Not set' }}</div>
+                  </div>
+                </div>
+                {% if request_quote.description %}
+                  <p class="request-quote-item__description">{{ request_quote.description }}</p>
+                {% endif %}
+                <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id) }}" class="request-quote-item__status-form" data-scroll-anchor="quotes">
+                  {{ quote_decision_forms[request_quote.id].hidden_tag() }}
+                  <label class="form-field request-quote-item__status-field">
+                    <span>Status</span>
+                    {{ quote_decision_forms[request_quote.id].decision(class_="input", data_auto_submit_on_change="true", data_previous_value=request_quote.decision) }}
+                  </label>
+                  <span class="subtle-text request-quote-item__status-feedback" aria-live="polite"></span>
+                  <noscript>
+                    {{ quote_decision_forms[request_quote.id].submit(class_="btn btn-secondary btn-small") }}
+                  </noscript>
+                </form>
+              </article>
+            {% else %}
+              <div class="empty-state">No quotes have been recorded for this request yet.</div>
+            {% endfor %}
+          </div>
+        </section>
 
         <section class="detail-card__section" id="notes">
           <div class="section-bar compact-bar">
@@ -254,9 +322,9 @@
             {% endfor %}
           </div>
         </section>
-      </article>
+    </article>
 
-      <article class="summary-card request-photo-gallery-card" id="photos">
+    <article class="summary-card request-photo-gallery-card" id="photos">
         <div class="section-bar compact-bar">
           <div>
             <h2>Photo gallery</h2>
@@ -309,101 +377,38 @@
         {% else %}
           <div class="empty-state">No photos were uploaded for this request.</div>
         {% endif %}
-      </article>
+    </article>
+  </section>
 
-    </div>
-
-    <div class="detail-grid">
-      <article class="summary-card" id="quotes">
-        <div class="section-bar compact-bar">
-          <div>
-            <h2>Quote tracking</h2>
-            <p class="subtle-text">Request status now updates automatically from review, contact, quote, acceptance, rejection, and scheduling activity.</p>
-          </div>
-        </div>
-
-        <form method="post" action="{{ url_for('admin.create_request_quote_route', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="quotes">
-          {{ request_quote_form.hidden_tag() }}
-          <div class="form-grid">
-            <label class="form-field">
-              <span>Quote amount</span>
-              {{ request_quote_form.amount(class_="input") }}
-              {% for error in request_quote_form.amount.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-            <label class="form-field">
-              <span>Billing frequency</span>
-              {{ request_quote_form.billing_frequency(class_="input") }}
-              {% for error in request_quote_form.billing_frequency.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-            <label class="form-field field-span-2">
-              <span>Quote details</span>
-              {{ request_quote_form.description(class_="input", placeholder="Optional: scope, option, or package name") }}
-              {% for error in request_quote_form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-          </div>
-          {{ request_quote_form.submit(class_="btn btn-primary") }}
-        </form>
-
-        <div class="request-quote-list">
-          {% for request_quote in quote_request.quotes %}
-            <article class="request-quote-item">
-              <form method="post" action="{{ url_for('admin.delete_request_quote_route', quote_id=request_quote.id) }}" class="inline-form request-quote-item__delete" data-scroll-anchor="quotes">
-                {{ delete_quote_forms[request_quote.id].hidden_tag() }}
-                <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete quote">x</button>
-              </form>
-              <div class="request-quote-item__header">
-                <div class="request-quote-item__summary">
-                  <strong>{{ request_quote.formatted_amount }}</strong>
-                  <div class="subtle-text">Quote ID #{{ request_quote.quote_id }}</div>
-                  <div class="subtle-text">Added {{ request_quote.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
-                  <div class="subtle-text">Billing frequency: {{ request_quote.billing_frequency or 'Not set' }}</div>
-                </div>
-              </div>
-              {% if request_quote.description %}
-                <p class="request-quote-item__description">{{ request_quote.description }}</p>
+  <div id="request-detail-scheduling-region">
+  {% if enable_scheduling %}
+    {% set appointment = quote_request.current_appointment %}
+    {% set show_schedule_optional_section = appointment_form and appointment_form.internal_notes.data %}
+    <dialog class="request-scheduling-dialog" id="request-scheduling-dialog" aria-labelledby="request-scheduling-title">
+      <div class="request-scheduling-dialog__card">
+        <div class="request-scheduling-dialog__header">
+          <div class="request-scheduling-dialog__copy">
+            <h2 id="request-scheduling-title">Scheduling</h2>
+            <p class="subtle-text">
+              {% if appointment %}
+                Keep the scheduled event current here and open the full event page only when you need deeper tools.
+              {% else %}
+                Schedule this request here without leaving the review workflow.
               {% endif %}
-              <form method="post" action="{{ url_for('admin.update_request_quote_decision_route', quote_id=request_quote.id) }}" class="request-quote-item__status-form" data-scroll-anchor="quotes">
-                {{ quote_decision_forms[request_quote.id].hidden_tag() }}
-                <label class="form-field request-quote-item__status-field">
-                  <span>Status</span>
-                  {{ quote_decision_forms[request_quote.id].decision(class_="input", data_auto_submit_on_change="true", data_previous_value=request_quote.decision) }}
-                </label>
-                <span class="subtle-text request-quote-item__status-feedback" aria-live="polite"></span>
-                <noscript>
-                  {{ quote_decision_forms[request_quote.id].submit(class_="btn btn-secondary btn-small") }}
-                </noscript>
-              </form>
-            </article>
-          {% else %}
-            <div class="empty-state">No quotes have been recorded for this request yet.</div>
-          {% endfor %}
-        </div>
-      </article>
-
-      <div id="request-detail-scheduling-region">
-      {% if enable_scheduling %}
-        <article class="summary-card" id="scheduling">
-          {% set appointment = quote_request.current_appointment %}
-          {% set show_schedule_optional_section = appointment_form and appointment_form.internal_notes.data %}
-          <div class="section-bar compact-bar">
-            <div>
-              <h2>Scheduling</h2>
-              <p class="subtle-text">
-                {% if appointment %}
-                  Keep the scheduled event current here and open the full event page only when you need deeper tools.
-                {% else %}
-                  Schedule this request here without leaving the review workflow.
-                {% endif %}
-              </p>
-            </div>
+            </p>
+          </div>
+          <div class="request-scheduling-dialog__header-actions">
             {% if appointment and appointment_delete_form %}
-              <form method="post" action="{{ url_for('admin.delete_appointment_route', appointment_id=appointment.id, return_to='request') }}" class="inline-form" data-scroll-anchor="scheduling" data-confirm-text="Delete {{ appointment.display_title }}?">
+              <form method="post" action="{{ url_for('admin.delete_appointment_route', appointment_id=appointment.id, return_to='request') }}" class="inline-form" data-scroll-anchor="scheduling" data-confirm-text="Delete Event #{{ appointment.id }}?">
                 {{ appointment_delete_form.hidden_tag() }}
                 <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete scheduled event">x</button>
               </form>
             {% endif %}
+            <button type="button" class="request-scheduling-dialog__close" data-request-scheduling-close aria-label="Close scheduling dialog">&times;</button>
           </div>
+        </div>
 
+        <article class="request-scheduling-dialog__body" id="scheduling">
           {% if appointment %}
             <dl class="detail-list vertical-list">
               <div>
@@ -470,12 +475,12 @@
               {% endif %}
               <div>
                 <dt>Appointment</dt>
-                  <dd>
-                    <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">View scheduled event</a>
-                    {% if appointment.scheduled_date %}
-                    <div><a href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open day agenda</a></div>
-                    {% endif %}
-                  </dd>
+                <dd>
+                  <a href="{{ url_for('admin.appointment_detail', appointment_id=appointment.id, source='request', request_id=quote_request.id, date=appointment.scheduled_date.isoformat() if appointment.scheduled_date else None) }}">View scheduled event #{{ appointment.id }}</a>
+                  {% if appointment.scheduled_date %}
+                  <div><a href="{{ url_for('admin.calendar_day_view', year=appointment.scheduled_date.year, month=appointment.scheduled_date.month, day=appointment.scheduled_date.day) }}">Open day agenda</a></div>
+                  {% endif %}
+                </dd>
               </div>
             </dl>
 
@@ -613,11 +618,10 @@
             </form>
           {% endif %}
         </article>
-      {% endif %}
       </div>
-
-    </div>
-  </section>
+    </dialog>
+  {% endif %}
+  </div>
 </main>
 {% endblock %}
 {% block scripts %}
@@ -631,6 +635,96 @@
     'request-detail-customer-field',
     'request-detail-scheduling-region'
   ];
+  const scheduleDialogId = 'request-scheduling-dialog';
+
+  function getScheduleDialog() {
+    return document.getElementById(scheduleDialogId);
+  }
+
+  function openScheduleDialog() {
+    const dialog = getScheduleDialog();
+    if (!dialog) {
+      return;
+    }
+
+    if (typeof dialog.showModal === 'function') {
+      if (!dialog.open) {
+        dialog.showModal();
+      }
+      return;
+    }
+
+    dialog.setAttribute('open', 'open');
+  }
+
+  function closeScheduleDialog(options) {
+    const dialog = getScheduleDialog();
+    const closeOptions = options || {};
+    if (dialog) {
+      if (typeof dialog.close === 'function' && dialog.open) {
+        dialog.close();
+      } else {
+        dialog.removeAttribute('open');
+      }
+    }
+
+    if (!closeOptions.preserveHash && window.location.hash === '#scheduling' && window.history && typeof window.history.replaceState === 'function') {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }
+
+  function initializeScheduleDialog(root) {
+    root.querySelectorAll('#' + scheduleDialogId).forEach(function (dialog) {
+      if (dialog.dataset.requestScheduleBound === 'true') {
+        return;
+      }
+
+      dialog.dataset.requestScheduleBound = 'true';
+      dialog.addEventListener('click', function (event) {
+        if (event.target === dialog) {
+          closeScheduleDialog();
+        }
+      });
+
+      dialog.addEventListener('close', function () {
+        if (window.location.hash === '#scheduling' && window.history && typeof window.history.replaceState === 'function') {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+      });
+    });
+  }
+
+  function initializeScheduleDialogTriggers(root) {
+    if (root.dataset.requestScheduleTriggerBound === 'true') {
+      return;
+    }
+
+    root.dataset.requestScheduleTriggerBound = 'true';
+    root.addEventListener('click', function (event) {
+      if (!(event.target instanceof Element)) {
+        return;
+      }
+
+      const openTrigger = event.target.closest('[data-request-scheduling-open]');
+      if (openTrigger) {
+        event.preventDefault();
+        openScheduleDialog();
+        return;
+      }
+
+      const closeTrigger = event.target.closest('[data-request-scheduling-close]');
+      if (closeTrigger) {
+        event.preventDefault();
+        closeScheduleDialog();
+      }
+    });
+  }
+
+  function openScheduleDialogFromHash() {
+    if (window.location.hash === '#scheduling') {
+      openScheduleDialog();
+    }
+  }
 
   function initializeScrollAnchorForms(root) {
     root.querySelectorAll('form[data-scroll-anchor]').forEach(function (form) {
@@ -685,6 +779,9 @@
   }
 
   function replaceRequestDetailRefreshRegions(nextDocument) {
+    const scheduleDialog = getScheduleDialog();
+    const shouldReopenScheduleDialog = !!(scheduleDialog && scheduleDialog.open);
+
     requestDetailRefreshRegionIds.forEach(function (regionId) {
       const currentRegion = document.getElementById(regionId);
       const nextRegion = nextDocument.getElementById(regionId);
@@ -694,6 +791,35 @@
       }
 
       currentRegion.replaceWith(nextRegion.cloneNode(true));
+    });
+
+    return shouldReopenScheduleDialog;
+  }
+
+  function initializeRequestDetailAutosubmitForms(root) {
+    root.querySelectorAll('form[data-auto-submit-request-detail="true"]').forEach(function (form) {
+      if (form.dataset.autoSubmitRequestDetailBound === 'true') {
+        return;
+      }
+
+      form.dataset.autoSubmitRequestDetailBound = 'true';
+      form.addEventListener('change', function (event) {
+        const target = event.target;
+        if (!target || !target.matches('input[type="checkbox"], input[type="radio"], select')) {
+          return;
+        }
+
+        if (form.dataset.isSubmitting === 'true') {
+          return;
+        }
+
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit();
+          return;
+        }
+
+        HTMLFormElement.prototype.submit.call(form);
+      });
     });
   }
 
@@ -705,36 +831,9 @@
 
       form.dataset.requestDetailRefreshBound = 'true';
       form.addEventListener('submit', function (event) {
-    function initializeRequestDetailAutosubmitForms(root) {
-      root.querySelectorAll('form[data-auto-submit-request-detail="true"]').forEach(function (form) {
-        if (form.dataset.autoSubmitRequestDetailBound === 'true') {
-          return;
-        }
-
-        form.dataset.autoSubmitRequestDetailBound = 'true';
-        form.addEventListener('change', function (event) {
-          const target = event.target;
-          if (!target || !target.matches('input[type="checkbox"], input[type="radio"], select')) {
-            return;
-          }
-
-          if (form.dataset.isSubmitting === 'true') {
-            return;
-          }
-
-          if (typeof form.requestSubmit === 'function') {
-            form.requestSubmit();
-            return;
-          }
-
-          HTMLFormElement.prototype.submit.call(form);
-        });
-      });
-    }
         if (form.dataset.forceSyncSubmit === 'true') {
           form.dataset.forceSyncSubmit = 'false';
           return;
-    initializeRequestDetailAutosubmitForms(document);
         }
 
         if (!window.fetch || !window.DOMParser) {
@@ -770,13 +869,20 @@
           }
 
           replaceFlashStack(nextDocument);
-          replaceRequestDetailRefreshRegions(nextDocument);
+          const shouldReopenScheduleDialog = replaceRequestDetailRefreshRegions(nextDocument);
           initializeScrollAnchorForms(document);
           initializeRequestDetailRefreshForms(document);
           initializeRequestDetailAutosubmitForms(document);
+          initializeScheduleDialog(document);
 
           if (window.initializeCustomerComboboxes) {
             window.initializeCustomerComboboxes(document);
+          }
+
+          if (shouldReopenScheduleDialog) {
+            requestAnimationFrame(function () {
+              openScheduleDialog();
+            });
           }
 
           window.scrollTo(0, preservedScrollY);
@@ -795,6 +901,22 @@
 
   initializeScrollAnchorForms(document);
   initializeRequestDetailRefreshForms(document);
+  initializeRequestDetailAutosubmitForms(document);
+  initializeScheduleDialog(document);
+  initializeScheduleDialogTriggers(document);
+  openScheduleDialogFromHash();
+
+  window.addEventListener('hashchange', function () {
+    if (window.location.hash === '#scheduling') {
+      openScheduleDialog();
+      return;
+    }
+
+    const scheduleDialog = getScheduleDialog();
+    if (scheduleDialog && scheduleDialog.open) {
+      closeScheduleDialog({preserveHash: true});
+    }
+  });
 
   try {
     const savedScrollState = sessionStorage.getItem(requestDetailScrollKey);

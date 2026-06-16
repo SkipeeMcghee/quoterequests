@@ -28,6 +28,18 @@
         <h2>Request queue</h2>
         <p class="subtle-text">Newest submissions appear first so the team can respond quickly.</p>
       </div>
+      <div class="rq-filter-bar">
+        <div id="rq-filter-indicator" class="rq-filter-indicator" hidden>
+          <span class="rq-filter-indicator__label">Filter applied</span>
+          <button type="button" class="rq-filter-indicator__clear" id="rq-filter-clear" aria-label="Clear all filters and sorting">&#xD7;</button>
+        </div>
+        <button type="button" class="btn btn-secondary btn-small rq-filter-btn" id="rq-filter-open" aria-haspopup="dialog" aria-controls="rq-filter-modal">
+          <svg width="13" height="11" viewBox="0 0 13 11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+            <path d="M1 1.5h11M3.5 5.5h6M6 9.5h1"/>
+          </svg>
+          Filter
+        </button>
+      </div>
     </div>
     <div class="table-scroll">
       <table class="request-queue-table">
@@ -42,13 +54,31 @@
         </colgroup>
         <thead>
           <tr>
-            <th>Customer</th>
+            <th class="rq-th-sortable">
+              <span class="rq-th-content">Customer
+                <button type="button" class="rq-sort-btn" data-sort-field="customer" aria-label="Sort by customer name" aria-pressed="false">
+                  <svg class="rq-sort-icon" width="10" height="12" viewBox="0 0 10 12" aria-hidden="true">
+                    <path class="rq-sort-icon__up" d="M5 1L9.33 5H0.67L5 1Z" fill="currentColor"/>
+                    <path class="rq-sort-icon__down" d="M5 11L0.67 7H9.33L5 11Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </span>
+            </th>
             {% if enable_services %}
               <th>Services</th>
             {% endif %}
             <th>Contact</th>
             <th>Status</th>
-            <th>Submitted</th>
+            <th class="rq-th-sortable">
+              <span class="rq-th-content">Submitted
+                <button type="button" class="rq-sort-btn" data-sort-field="submitted" aria-label="Sort by submitted date" aria-pressed="false">
+                  <svg class="rq-sort-icon" width="10" height="12" viewBox="0 0 10 12" aria-hidden="true">
+                    <path class="rq-sort-icon__up" d="M5 1L9.33 5H0.67L5 1Z" fill="currentColor"/>
+                    <path class="rq-sort-icon__down" d="M5 11L0.67 7H9.33L5 11Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -64,7 +94,17 @@
             {% elif item.status == 'Rejected' %}
               {% set request_status_tone = 'brand' %}
             {% endif %}
-            <tr class="clickable-row request-queue-row request-queue-row--{{ request_status_tone }}" tabindex="0" data-row-href="{{ url_for('admin.request_detail', request_id=item.id) }}">
+            <tr class="clickable-row request-queue-row request-queue-row--{{ request_status_tone }}" tabindex="0"
+              data-row-href="{{ url_for('admin.request_detail', request_id=item.id) }}"
+              data-original-index="{{ loop.index0 }}"
+              data-filter-status="{{ item.status }}"
+              data-filter-type="{{ normalized_request_type }}"
+              data-filter-name="{{ item.full_name | lower }}"
+              data-filter-submitted="{{ item.created_at.strftime('%Y-%m-%d') }}"
+              data-filter-services="{{ item.service_names | tojson | forceescape }}"
+              data-sort-customer="{{ item.full_name | lower }}"
+              data-sort-submitted="{{ item.created_at.isoformat() }}"
+              data-sort-status="{{ item.status | lower }}">
               <td>
                 <strong class="row-title">{{ item.full_name }}</strong>
                 <div class="subtle-text">{{ item.city }}</div>
@@ -129,6 +169,78 @@
       </table>
     </div>
   </section>
+
+  <dialog class="rq-filter-modal" id="rq-filter-modal" aria-modal="true" aria-labelledby="rq-filter-modal-title">
+    <div class="rq-filter-modal__card">
+      <div class="rq-filter-modal__header">
+        <h3 class="rq-filter-modal__title" id="rq-filter-modal-title">Filter &amp; Sort</h3>
+        <button type="button" class="rq-filter-modal__close" id="rq-filter-modal-close" aria-label="Close filter panel">&#xD7;</button>
+      </div>
+      <form class="rq-filter-modal__form" id="rq-filter-form" novalidate>
+        <fieldset class="rq-filter-group">
+          <legend class="rq-filter-group__legend">Status</legend>
+          <div class="rq-filter-group__checks">
+            {% for st in ['New', 'Viewed', 'Contacted', 'Quoted', 'Accepted', 'Scheduled', 'Rejected'] %}
+              <label class="rq-filter-check">
+                <input type="checkbox" name="status" value="{{ st }}">&#xA0;{{ st }}
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <fieldset class="rq-filter-group">
+          <legend class="rq-filter-group__legend">Request Type</legend>
+          <div class="rq-filter-group__checks">
+            <label class="rq-filter-check"><input type="checkbox" name="type" value="Quote request">&#xA0;Lead (Quote request)</label>
+            <label class="rq-filter-check"><input type="checkbox" name="type" value="Work request">&#xA0;Work request</label>
+          </div>
+        </fieldset>
+        <div class="rq-filter-text-field">
+          <label for="rq-name-input" class="rq-filter-text-field__label">Customer name</label>
+          <input type="text" id="rq-name-input" name="rq-name" class="rq-filter-text-field__input" placeholder="Search by name&hellip;" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="rq-filter-dates">
+          <div class="rq-filter-text-field">
+            <label for="rq-date-from-input" class="rq-filter-text-field__label">Submitted from</label>
+            <input type="date" id="rq-date-from-input" name="rq-date-from" class="rq-filter-text-field__input">
+          </div>
+          <div class="rq-filter-text-field">
+            <label for="rq-date-to-input" class="rq-filter-text-field__label">Submitted to</label>
+            <input type="date" id="rq-date-to-input" name="rq-date-to" class="rq-filter-text-field__input">
+          </div>
+        </div>
+        {% if enable_services %}
+          <fieldset class="rq-filter-group" id="rq-filter-services-group">
+            <legend class="rq-filter-group__legend">Services</legend>
+            <div class="rq-filter-group__checks" id="rq-filter-services-checks">
+              {# Populated by JavaScript from row data attributes #}
+            </div>
+          </fieldset>
+        {% endif %}
+        <div class="rq-filter-sort-row">
+          <div class="rq-filter-text-field">
+            <label for="rq-sort-field" class="rq-filter-text-field__label">Sort by</label>
+            <select id="rq-sort-field" name="rq-sort-field" class="rq-filter-text-field__select">
+              <option value="">Default order</option>
+              <option value="customer">Customer name</option>
+              <option value="submitted">Submitted date</option>
+              <option value="status">Status</option>
+            </select>
+          </div>
+          <div class="rq-filter-text-field">
+            <label for="rq-sort-dir" class="rq-filter-text-field__label">Direction</label>
+            <select id="rq-sort-dir" name="rq-sort-dir" class="rq-filter-text-field__select">
+              <option value="desc">Descending (Z&rarr;A / Newest)</option>
+              <option value="asc">Ascending (A&rarr;Z / Oldest)</option>
+            </select>
+          </div>
+        </div>
+        <div class="rq-filter-modal__footer">
+          <button type="button" class="btn btn-secondary btn-small" id="rq-filter-reset">Reset all</button>
+          <button type="submit" class="btn btn-primary btn-small">Apply filters</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
 </main>
 {% endblock %}
 {% block scripts %}
@@ -262,5 +374,335 @@
 
   window.addEventListener('resize', refreshSummaries);
 })();
+</script>
+<script>
+(function () {
+  'use strict';
+
+  var table = document.querySelector('.request-queue-table');
+  var tbody = table ? table.querySelector('tbody') : null;
+  if (!tbody) return;
+
+  // Collect data rows (excludes server-rendered empty-state row)
+  var originalRows = Array.from(tbody.querySelectorAll('tr[data-filter-status]'));
+  if (!originalRows.length) {
+    var fb = document.querySelector('.rq-filter-bar');
+    if (fb) fb.hidden = true;
+    return;
+  }
+
+  var filterModal = document.getElementById('rq-filter-modal');
+  var filterOpenBtn = document.getElementById('rq-filter-open');
+  var filterCloseBtn = document.getElementById('rq-filter-modal-close');
+  var filterForm = document.getElementById('rq-filter-form');
+  var filterResetBtn = document.getElementById('rq-filter-reset');
+  var filterIndicator = document.getElementById('rq-filter-indicator');
+  var filterClearBtn = document.getElementById('rq-filter-clear');
+  var sortBtns = Array.from(document.querySelectorAll('.rq-sort-btn[data-sort-field]'));
+  var colCount = table.querySelectorAll('colgroup col').length || 5;
+
+  // Preserve the server-rendered order so reset restores it exactly.
+  var originalData = originalRows.slice();
+  var quickSortCycles = {
+    customer: ['asc', 'desc', null],
+    submitted: ['desc', 'asc', null]
+  };
+
+  var state = {
+    originalData: originalData,
+    activeFilters: {
+      statuses: new Set(),
+      types: new Set(),
+      name: '',
+      dateFrom: '',
+      dateTo: '',
+      services: new Set()
+    },
+    activeSort: {
+      field: null,
+      direction: null
+    },
+    isModified: false
+  };
+
+  // ── Populate services checkboxes from row data ───────────────────────
+  (function () {
+    var container = document.getElementById('rq-filter-services-checks');
+    if (!container) return;
+    var seen = new Set();
+    var list = [];
+    state.originalData.forEach(function (row) {
+      var svcs = [];
+      try { svcs = JSON.parse(row.dataset.filterServices || '[]'); } catch (e) {}
+      svcs.forEach(function (s) { if (!seen.has(s)) { seen.add(s); list.push(s); } });
+    });
+    list.sort();
+    if (!list.length) {
+      var grp = document.getElementById('rq-filter-services-group');
+      if (grp) grp.hidden = true;
+      return;
+    }
+    list.forEach(function (svc) {
+      var lbl = document.createElement('label');
+      lbl.className = 'rq-filter-check';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.name = 'service'; cb.value = svc;
+      lbl.appendChild(cb);
+      lbl.appendChild(document.createTextNode('\u00a0' + svc));
+      container.appendChild(lbl);
+    });
+  }());
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+  function isModifiedState() {
+    return state.isModified;
+  }
+
+  function hasActiveSort() {
+    return !!state.activeSort.field && !!state.activeSort.direction;
+  }
+
+  function matchesOriginalView(rows) {
+    if (rows.length !== state.originalData.length) {
+      return false;
+    }
+
+    return rows.every(function (row, index) {
+      return row === state.originalData[index];
+    });
+  }
+
+  function collectFromForm() {
+    if (!filterForm) return;
+    state.activeFilters.statuses = new Set(
+      Array.from(filterForm.querySelectorAll('input[name="status"]:checked')).map(function (i) { return i.value; })
+    );
+    state.activeFilters.types = new Set(
+      Array.from(filterForm.querySelectorAll('input[name="type"]:checked')).map(function (i) { return i.value; })
+    );
+    var nameEl = document.getElementById('rq-name-input');
+    state.activeFilters.name = nameEl ? nameEl.value : '';
+    var dfi = document.getElementById('rq-date-from-input');
+    state.activeFilters.dateFrom = dfi ? dfi.value : '';
+    var dti = document.getElementById('rq-date-to-input');
+    state.activeFilters.dateTo = dti ? dti.value : '';
+    state.activeFilters.services = new Set(
+      Array.from(filterForm.querySelectorAll('input[name="service"]:checked')).map(function (i) { return i.value; })
+    );
+    var sfEl = document.getElementById('rq-sort-field');
+    var sdEl = document.getElementById('rq-sort-dir');
+    state.activeSort.field = sfEl ? (sfEl.value || null) : null;
+    state.activeSort.direction = state.activeSort.field ? (sdEl ? (sdEl.value || 'desc') : 'desc') : null;
+  }
+
+  function syncToForm() {
+    if (!filterForm) return;
+    filterForm.querySelectorAll('input[name="status"]').forEach(function (cb) {
+      cb.checked = state.activeFilters.statuses.has(cb.value);
+    });
+    filterForm.querySelectorAll('input[name="type"]').forEach(function (cb) {
+      cb.checked = state.activeFilters.types.has(cb.value);
+    });
+    var nameEl = document.getElementById('rq-name-input');
+    if (nameEl) nameEl.value = state.activeFilters.name;
+    var dfi = document.getElementById('rq-date-from-input');
+    if (dfi) dfi.value = state.activeFilters.dateFrom;
+    var dti = document.getElementById('rq-date-to-input');
+    if (dti) dti.value = state.activeFilters.dateTo;
+    filterForm.querySelectorAll('input[name="service"]').forEach(function (cb) {
+      cb.checked = state.activeFilters.services.has(cb.value);
+    });
+    var sfEl = document.getElementById('rq-sort-field');
+    if (sfEl) sfEl.value = state.activeSort.field || '';
+    var sdEl = document.getElementById('rq-sort-dir');
+    if (sdEl) sdEl.value = state.activeSort.direction || 'desc';
+  }
+
+  function getSortValue(row, field) {
+    if (field === 'customer') {
+      return row.dataset.sortCustomer || '';
+    }
+    if (field === 'submitted') {
+      return row.dataset.sortSubmitted || '';
+    }
+    if (field === 'status') {
+      return row.dataset.sortStatus || '';
+    }
+    return '';
+  }
+
+  function getOriginalIndex(row) {
+    return Number(row.dataset.originalIndex || '0');
+  }
+
+  function getNextQuickSortState(field) {
+    var cycle = quickSortCycles[field] || ['asc', 'desc', null];
+    if (state.activeSort.field !== field) {
+      return {
+        field: field,
+        direction: cycle[0]
+      };
+    }
+
+    var currentIndex = cycle.indexOf(state.activeSort.direction);
+    var nextDirection = cycle[(currentIndex + 1) % cycle.length];
+    return {
+      field: nextDirection ? field : null,
+      direction: nextDirection
+    };
+  }
+
+  function render() {
+    var filters = state.activeFilters;
+    var activeSort = state.activeSort;
+    var rows = state.originalData.slice();
+
+    if (filters.statuses.size > 0) {
+      rows = rows.filter(function (r) { return filters.statuses.has(r.dataset.filterStatus); });
+    }
+    if (filters.types.size > 0) {
+      rows = rows.filter(function (r) { return filters.types.has(r.dataset.filterType); });
+    }
+    if (filters.name.trim()) {
+      var q = filters.name.trim().toLowerCase();
+      rows = rows.filter(function (r) { return (r.dataset.filterName || '').indexOf(q) !== -1; });
+    }
+    if (filters.dateFrom) {
+      rows = rows.filter(function (r) { return (r.dataset.filterSubmitted || '') >= filters.dateFrom; });
+    }
+    if (filters.dateTo) {
+      rows = rows.filter(function (r) { return (r.dataset.filterSubmitted || '') <= filters.dateTo; });
+    }
+    if (filters.services.size > 0) {
+      rows = rows.filter(function (r) {
+        var svcs = [];
+        try { svcs = JSON.parse(r.dataset.filterServices || '[]'); } catch (e) {}
+        return svcs.some(function (s) { return filters.services.has(s); });
+      });
+    }
+
+    if (hasActiveSort()) {
+      var dir = activeSort.direction === 'asc' ? 1 : -1;
+      var sf = activeSort.field;
+      rows = rows.slice().sort(function (a, b) {
+        var av = getSortValue(a, sf);
+        var bv = getSortValue(b, sf);
+        if (av < bv) {
+          return -dir;
+        }
+        if (av > bv) {
+          return dir;
+        }
+        return getOriginalIndex(a) - getOriginalIndex(b);
+      });
+    }
+
+    state.isModified = !matchesOriginalView(rows);
+
+    while (tbody.firstChild) { tbody.removeChild(tbody.firstChild); }
+
+    if (rows.length === 0) {
+      var eRow = document.createElement('tr');
+      var eCell = document.createElement('td');
+      eCell.setAttribute('colspan', String(colCount));
+      eCell.className = 'empty-state';
+      eCell.textContent = 'No requests match the active filters.';
+      eRow.appendChild(eCell);
+      tbody.appendChild(eRow);
+    } else {
+      rows.forEach(function (r) { tbody.appendChild(r); });
+    }
+
+    if (filterIndicator) {
+      filterIndicator.hidden = !isModifiedState();
+    }
+
+    sortBtns.forEach(function (btn) {
+      var field = btn.dataset.sortField;
+      var header = btn.closest('th');
+      if (activeSort.field === field && activeSort.direction) {
+        btn.dataset.sortActive = activeSort.direction;
+        btn.setAttribute('aria-pressed', 'true');
+        if (header) {
+          header.setAttribute('aria-sort', activeSort.direction === 'asc' ? 'ascending' : 'descending');
+        }
+      } else {
+        delete btn.dataset.sortActive;
+        btn.setAttribute('aria-pressed', 'false');
+        if (header) {
+          header.setAttribute('aria-sort', 'none');
+        }
+      }
+    });
+  }
+
+  function resetAll() {
+    state.activeFilters.statuses = new Set();
+    state.activeFilters.types = new Set();
+    state.activeFilters.name = '';
+    state.activeFilters.dateFrom = '';
+    state.activeFilters.dateTo = '';
+    state.activeFilters.services = new Set();
+    state.activeSort.field = null;
+    state.activeSort.direction = null;
+    syncToForm();
+    render();
+  }
+
+  // Customer: unsorted -> asc -> desc -> off. Submitted: unsorted -> desc -> asc -> off.
+  sortBtns.forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var nextSort = getNextQuickSortState(btn.dataset.sortField);
+      state.activeSort.field = nextSort.field;
+      state.activeSort.direction = nextSort.direction;
+      syncToForm();
+      render();
+    });
+  });
+
+  // ── Modal open ───────────────────────────────────────────────────────
+  if (filterOpenBtn && filterModal && typeof filterModal.showModal === 'function') {
+    filterOpenBtn.addEventListener('click', function () {
+      syncToForm();
+      filterModal.showModal();
+    });
+  }
+
+  // ── Modal close ──────────────────────────────────────────────────────
+  function closeModal() {
+    if (filterModal && filterModal.open) filterModal.close();
+  }
+  if (filterCloseBtn) filterCloseBtn.addEventListener('click', closeModal);
+  if (filterModal) {
+    filterModal.addEventListener('click', function (e) {
+      if (e.target === filterModal) closeModal();
+    });
+  }
+
+  // ── Form submit (Apply filters) ──────────────────────────────────────
+  if (filterForm) {
+    filterForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      collectFromForm();
+      render();
+      closeModal();
+    });
+  }
+
+  // ── Modal reset ──────────────────────────────────────────────────────
+  if (filterResetBtn) {
+    filterResetBtn.addEventListener('click', function () {
+      resetAll();
+      closeModal();
+    });
+  }
+
+  // ── Clear indicator (reset from badge) ───────────────────────────────
+  if (filterClearBtn) filterClearBtn.addEventListener('click', resetAll);
+
+  render();
+
+}());
 </script>
 {% endblock %}

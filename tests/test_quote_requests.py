@@ -246,6 +246,7 @@ def test_admin_request_detail_shows_automatic_status_and_marks_request_viewed(cl
     assert "name=\"status\"" not in body
     assert "Viewed" in body
     assert "Quote tracking" in body
+    assert body.index("Quote tracking") < body.index("Internal notes")
     assert "Request type" in body
     assert "Quote request" in body
 
@@ -276,8 +277,9 @@ def test_admin_request_detail_shows_last_contacted_field(client, app, admin_user
     response = client.get("/admin/requests/1")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Last contacted on" in body
-    assert "name=\"last_contacted_on\"" in body
+    quote_tracking_section = body.split('id="quotes"', 1)[1].split('id="notes"', 1)[0]
+    assert "Last contacted on" in quote_tracking_section
+    assert "name=\"last_contacted_on\"" in quote_tracking_section
 
 
 def test_request_detail_scheduling_minute_dropdowns_default_to_00(client, app, admin_user):
@@ -334,6 +336,7 @@ def test_last_contacted_date_updates_request_status_to_contacted(client, app, ad
     )
 
     assert response.status_code == 302
+    assert response.headers["Location"].endswith("/admin/requests/1#quotes")
 
     with app.app_context():
         quote_request = QuoteRequest.query.one()
@@ -493,6 +496,8 @@ def test_admin_request_detail_routes_scheduling_into_shared_scheduled_work_flow(
     response = client.get(f"/admin/requests/{request_id}")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
+    assert 'data-request-scheduling-open' in body
+    assert 'id="request-scheduling-dialog"' in body
     assert "Schedule this request here without leaving the review workflow." in body
     assert f'action="/admin/requests/{request_id}/appointments"' in body
     assert f"/admin/scheduled-work/new?request_id={request_id}&amp;source=request" not in body
@@ -569,6 +574,7 @@ def test_request_detail_inline_scheduler_defaults_minutes_to_00_and_uses_event_n
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
+    assert 'id="request-scheduling-dialog"' in body
     scheduling_section = body.split('id="scheduling"', 1)[1].split('</article>', 1)[0]
     assert 'id="create-start_time_minute" name="create-start_time_minute"><option value="">Minute</option><option selected value="0">00</option>' in body
     assert 'id="create-end_time_minute" name="create-end_time_minute"><option value="">Minute</option><option selected value="0">00</option>' in body
@@ -1229,6 +1235,7 @@ def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_u
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert "Photo gallery" in body
+    assert body.index("Internal notes") < body.index("Photo gallery")
     assert "Browse each uploaded image in place" in body
     assert 'data-photo-gallery' in body
     assert 'data-gallery-stage' in body
@@ -1267,6 +1274,38 @@ def test_dashboard_lists_quote_requests(client, admin_user):
     assert "Request queue" in body
     assert "Jamie Cole" in body
     assert "Flooring" in body
+
+
+def test_dashboard_renders_filter_sort_state_controls(client, admin_user):
+    client.application.config["ENABLE_SERVICES"] = True
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Morgan Lane",
+            "phone": "555-111-0003",
+            "services": ["Flooring"],
+            "city": "27 Walnut Way",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'id="rq-filter-open"' in body
+    assert 'id="rq-filter-indicator" class="rq-filter-indicator" hidden' in body
+    assert 'data-sort-field="customer"' in body
+    assert 'data-sort-field="submitted"' in body
+    assert 'id="rq-filter-modal"' in body
+    assert 'id="rq-filter-form"' in body
+    assert 'data-original-index="0"' in body
 
 
 def test_dashboard_renders_compact_service_summary_markup(client, admin_user):
@@ -1603,7 +1642,7 @@ def test_request_detail_includes_scroll_restore_targets_for_inline_forms(client,
     assert "Existing customer matches were found for this request. Confirm a link or select another record." not in body
     assert 'data-scroll-anchor="customer-matching"' in body
     assert 'data-request-detail-refresh="true"' in body
-    assert 'data-scroll-anchor="request-details"' in body
+    assert 'data-scroll-anchor="quotes"' in body
 
 
 def test_request_detail_manual_customer_combobox_renders_all_customer_options(client, app, admin_user):

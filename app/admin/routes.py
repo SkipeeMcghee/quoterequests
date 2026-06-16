@@ -2052,7 +2052,7 @@ def update_last_contacted_on_route(request_id: int):
     else:
         flash("Enter a valid date or clear the field.", "error")
 
-    return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="request-details"))
+    return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="quotes"))
 
 
 @bp.post("/requests/<int:request_id>/appointments")
