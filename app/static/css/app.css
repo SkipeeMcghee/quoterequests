@@ -1321,6 +1321,41 @@ textarea {
   margin-top: 1rem;
 }
 
+.request-autosave-feedback {
+  display: block;
+  min-height: 1.1rem;
+  margin-top: 0.2rem;
+}
+
+.request-quote-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.request-internal-note {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.request-internal-note__toggle {
+  justify-self: start;
+}
+
+.request-internal-note__meta {
+  margin: 0;
+}
+
+.request-internal-note__editor[hidden] {
+  display: none;
+}
+
+.request-internal-note__actions {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .request-quote-tracking__header {
   align-items: end;
 }
@@ -1341,6 +1376,40 @@ textarea {
 
 .request-quote-tracking__contact-form .input {
   margin-top: 0.3rem;
+}
+
+.last-contacted-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.last-contacted-clear-button {
+  width: 1.1rem;
+  height: 1.1rem;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s ease;
+}
+
+.last-contacted-clear-button:hover,
+.last-contacted-clear-button:focus-visible {
+  opacity: 0.75;
+}
+
+.last-contacted-clear-button[hidden] {
+  display: none;
 }
 
 .request-quote-item {
@@ -1587,6 +1656,66 @@ textarea {
 .dashboard-metrics article strong {
   display: block;
   font-size: 1.8rem;
+}
+
+.dashboard-header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  align-self: end;
+}
+
+.dashboard-header-actions .dashboard-metrics {
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 0.65rem;
+  order: 1;
+}
+
+.dashboard-header-actions .metric-card {
+  min-width: auto;
+}
+
+.dashboard-header-actions .rq-filter-bar {
+  justify-content: flex-end;
+  width: auto;
+  order: 2;
+}
+
+.dashboard-shell .admin-page-header__body.split-intro {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+}
+
+.dashboard-shell .admin-page-header__description {
+  white-space: nowrap;
+}
+
+.dashboard-queue {
+  margin-inline: -2.2rem;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-shell .admin-page-header__body.split-intro {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-shell .admin-page-header__description {
+    white-space: normal;
+  }
+
+  .dashboard-header-actions .dashboard-metrics {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 860px) {
+  .dashboard-queue {
+    margin-inline: -1.25rem;
+  }
 }
 
 .metric-card {
@@ -2211,10 +2340,17 @@ thead th {
 
 .request-queue-datetime {
   display: grid;
-  gap: 0.15rem;
-  min-height: calc(2 * 1.35em);
-  line-height: 1.35;
+  gap: 0.08rem;
+  min-height: calc(3 * 1.12em);
+  font-size: 0.78rem;
+  line-height: 1.12;
   white-space: nowrap;
+}
+
+.request-queue-datetime__id {
+  font-size: 0.68rem;
+  line-height: 1.05;
+  opacity: 0.72;
 }
 
 .status-badge {
@@ -4724,11 +4860,18 @@ thead th {
 
 .request-photo-gallery__thumbs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: 6.5rem;
+  justify-content: start;
   gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.15rem;
 }
 
 .request-photo-gallery__thumb {
+  width: 6.5rem;
+  min-width: 6.5rem;
+  height: 5.1rem;
   padding: 0.35rem;
   border-radius: 18px;
   border: 1px solid var(--line);
@@ -4751,8 +4894,8 @@ thead th {
 .request-photo-gallery__thumb img {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
+  height: 100%;
+  object-fit: contain;
   border-radius: 14px;
 }
 
@@ -5638,6 +5781,13 @@ body.gallery-popup-open {
 @media (max-width: 640px) {
   .import-progress__heading-row {
     align-items: start;
+  }
+
+  .dashboard-header-actions,
+  .dashboard-header-actions .dashboard-metrics,
+  .dashboard-header-actions .rq-filter-bar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
 

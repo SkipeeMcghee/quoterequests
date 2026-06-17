@@ -128,6 +128,7 @@ from app.services.admin_requests import (
     upload_customer_photos,
     update_last_contacted_on,
     update_request_note,
+    update_request_quote_draft,
     unlink_quote_request_from_customer,
 )
 
@@ -1816,6 +1817,26 @@ def request_detail(request_id: int):
     quote_request = mark_quote_request_viewed(request_id)
     note_form = NoteForm()
     request_quote_form = RequestQuoteForm(prefix="request-quote")
+    latest_quote = quote_request.quotes[0] if quote_request.quotes else None
+    has_quote_draft = any(
+        value is not None
+        for value in (
+            quote_request.draft_quote_amount,
+            quote_request.draft_quote_billing_frequency,
+            quote_request.draft_quote_description,
+        )
+    )
+    if has_quote_draft:
+        request_quote_form.amount.data = quote_request.draft_quote_amount
+        request_quote_form.billing_frequency.data = quote_request.draft_quote_billing_frequency or "Monthly"
+        request_quote_form.description.data = quote_request.draft_quote_description or ""
+    elif latest_quote is not None:
+        request_quote_form.amount.data = latest_quote.amount
+        request_quote_form.billing_frequency.data = latest_quote.billing_frequency or "Monthly"
+        request_quote_form.description.data = latest_quote.description or ""
+    main_note = quote_request.notes[0] if quote_request.notes else None
+    if main_note is not None:
+        note_form.note_text.data = main_note.note_text
     quote_decision_forms = {}
     delete_quote_forms = {}
     for quote in quote_request.quotes:
@@ -1886,16 +1907,6 @@ def request_detail(request_id: int):
                 schedule_matching_staff_info = staffing_context["matching_staff_info"]
                 schedule_other_staff_info = staffing_context["other_staff_info"]
 
-    edit_note_forms = {
-        note.id: NoteForm(prefix=f"edit-note-{note.id}", obj=note)
-        for note in quote_request.notes
-        if note.created_by == current_user.id
-    }
-    delete_note_forms = {
-        note.id: DeleteNoteForm(prefix=f"delete-note-{note.id}")
-        for note in quote_request.notes
-        if note.created_by == current_user.id
-    }
     unlink_customer_form = ActionForm(prefix="unlink-customer")
     link_customer_form = LinkCustomerForm(prefix="link-customer")
     manual_customer_options = _build_customer_options()
@@ -1914,11 +1925,11 @@ def request_detail(request_id: int):
         "admin/request_detail.html",
         quote_request=quote_request,
         note_form=note_form,
+        main_note=main_note,
         request_quote_form=request_quote_form,
+        latest_quote=latest_quote,
         quote_decision_forms=quote_decision_forms,
         delete_quote_forms=delete_quote_forms,
-        delete_note_forms=delete_note_forms,
-        edit_note_forms=edit_note_forms,
         unlink_customer_form=unlink_customer_form,
         last_contacted_form=last_contacted_form,
         appointment_form=appointment_form,
@@ -1945,18 +1956,61 @@ def create_request_quote_route(request_id: int):
     form = RequestQuoteForm(prefix="request-quote")
     if form.validate_on_submit():
         try:
-            create_request_quote(
+            created_quote = create_request_quote(
                 request_id,
                 form.amount.data,
                 form.billing_frequency.data,
                 form.description.data,
             )
+            if _is_ajax_request():
+                return jsonify(
+                    {
+                        "ok": True,
+                        "quoteId": created_quote.id,
+                        "formattedAmount": created_quote.formatted_amount,
+                    }
+                )
             flash("Quote added.", "success")
         except Exception as exc:
+            if _is_ajax_request():
+                return jsonify({"ok": False, "error": str(exc)}), 400
             flash(str(exc), "error")
     else:
+        if _is_ajax_request():
+            return jsonify({"ok": False, "error": "Enter a valid quote amount and billing frequency before saving."}), 400
         flash("Enter a valid quote amount and billing frequency before saving.", "error")
 
+    return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="quotes"))
+
+
+@bp.post("/requests/<int:request_id>/quote-draft")
+@login_required
+def update_request_quote_draft_route(request_id: int):
+    try:
+        quote_request = update_request_quote_draft(
+            request_id,
+            request.form.get("request-quote-amount"),
+            request.form.get("request-quote-billing_frequency"),
+            request.form.get("request-quote-description"),
+        )
+    except Exception as exc:
+        if _is_ajax_request():
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        flash(str(exc), "error")
+        return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="quotes"))
+
+    if _is_ajax_request():
+        has_draft = any(
+            value is not None
+            for value in (
+                quote_request.draft_quote_amount,
+                quote_request.draft_quote_billing_frequency,
+                quote_request.draft_quote_description,
+            )
+        )
+        return jsonify({"ok": True, "hasDraft": has_draft})
+
+    flash("Quote draft saved.", "success")
     return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="quotes"))
 
 
@@ -3265,9 +3319,18 @@ def reschedule_appointment_route(appointment_id: int):
 def create_note(request_id: int):
     form = NoteForm()
     if form.validate_on_submit():
-        add_request_note(request_id, form.note_text.data, current_user)
-        flash("Note added.", "success")
+        saved_note = add_request_note(request_id, form.note_text.data, current_user)
+        if _is_ajax_request():
+            return jsonify(
+                {
+                    "ok": True,
+                    "noteId": saved_note.id,
+                }
+            )
+        flash("Internal note saved.", "success")
     else:
+        if _is_ajax_request():
+            return jsonify({"ok": False, "error": "Enter a note before saving."}), 400
         flash("Enter a note before saving.", "error")
 
     return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="notes"))

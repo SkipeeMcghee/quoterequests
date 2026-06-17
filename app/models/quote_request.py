@@ -93,6 +93,10 @@ class QuoteRequest(db.Model):
     request_type = db.Column(db.String(32), nullable=False, default="Quote request")
     additional_notes = db.Column(db.Text, nullable=True)
     last_contacted_on = db.Column(db.Date, nullable=True)
+    draft_quote_amount = db.Column(db.Numeric(10, 2), nullable=True)
+    draft_quote_billing_frequency = db.Column(db.String(16), nullable=True)
+    draft_quote_description = db.Column(db.String(255), nullable=True)
+    draft_quote_updated_at = db.Column(db.DateTime(timezone=True), nullable=True)
     first_viewed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     customer_id = db.Column(db.Integer, db.ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -143,8 +147,8 @@ class QuoteRequest(db.Model):
 
     @property
     def display_request_number(self) -> int:
-        request_number = self.request_number if self.request_number is not None else self.id
-        return (request_number or 0) + 1000
+        # Centralized request ID shared by quote/work requests.
+        return (self.id or 0) + 1000
 
     @property
     def display_request_type(self) -> str:

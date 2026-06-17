@@ -2218,6 +2218,44 @@ def create_request_quote(
     return request_quote
 
 
+def update_request_quote_draft(
+    request_id: int,
+    amount,
+    billing_frequency: str | None,
+    description: str | None,
+) -> QuoteRequest:
+    quote_request = get_quote_request(request_id)
+
+    raw_amount = (str(amount) if amount is not None else "").strip()
+    normalized_amount = None
+    if raw_amount:
+        try:
+            normalized_amount = Decimal(raw_amount)
+        except (InvalidOperation, ValueError):
+            raise BadRequest("Enter a valid quote amount.")
+        if normalized_amount < 0:
+            raise BadRequest("Quote amount cannot be negative.")
+
+    normalized_billing_frequency = (billing_frequency or "").strip().title() or None
+    if normalized_billing_frequency and normalized_billing_frequency not in RequestQuote.BILLING_FREQUENCIES:
+        raise BadRequest("Choose a valid billing frequency.")
+
+    normalized_description = (description or "").strip() or None
+
+    has_draft_values = (
+        normalized_amount is not None
+        or normalized_billing_frequency is not None
+        or normalized_description is not None
+    )
+
+    quote_request.draft_quote_amount = normalized_amount
+    quote_request.draft_quote_billing_frequency = normalized_billing_frequency
+    quote_request.draft_quote_description = normalized_description
+    quote_request.draft_quote_updated_at = datetime.now(timezone.utc) if has_draft_values else None
+    db.session.commit()
+    return quote_request
+
+
 def update_request_quote_decision(quote_id: int, decision: str) -> RequestQuote:
     normalized_decision = (decision or "").strip().capitalize()
     if normalized_decision not in RequestQuote.DECISIONS:
@@ -2261,8 +2299,17 @@ def add_request_note(request_id: int, note_text: str, user: User) -> RequestNote
         raise BadRequest("Enter a note before saving.")
 
     quote_request = get_quote_request(request_id)
-    note = RequestNote(note_text=cleaned_note, author=user)
-    quote_request.notes.append(note)
+    # Keep exactly one internal note per request; updates overwrite the existing record.
+    existing_note = quote_request.notes[0] if quote_request.notes else None
+    for stale_note in quote_request.notes[1:]:
+        db.session.delete(stale_note)
+    if existing_note is not None:
+        existing_note.note_text = cleaned_note
+        existing_note.created_by = user.id
+        note = existing_note
+    else:
+        note = RequestNote(note_text=cleaned_note, author=user)
+        quote_request.notes.append(note)
     db.session.commit()
     return note
 

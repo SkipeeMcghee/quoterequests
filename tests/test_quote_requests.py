@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, time
+from decimal import Decimal
 import re
 from io import BytesIO
 from pathlib import Path
@@ -179,7 +180,7 @@ def test_schedule_work_submission_records_work_request_type(client, app):
         assert quote_request.request_type == "Work request"
 
 
-def test_quote_and_work_requests_get_separate_request_numbers(client, app):
+def test_quote_and_work_requests_share_global_request_id_space(client, app):
     app.config["ENABLE_SCHEDULING"] = True
 
     quote_response = client.post(
@@ -214,10 +215,11 @@ def test_quote_and_work_requests_get_separate_request_numbers(client, app):
         quote_request = next(request for request in quote_requests if request.request_type == "Quote request")
         work_request = next(request for request in quote_requests if request.request_type == "Work request")
 
-        assert quote_request.request_number == 1
-        assert work_request.request_number == 1
-        assert quote_request.request_reference == "Quote Request #1"
-        assert work_request.request_reference == "Work Request #1"
+        assert quote_request.display_request_number != work_request.display_request_number
+        assert quote_request.display_request_number == quote_request.id + 1000
+        assert work_request.display_request_number == work_request.id + 1000
+        assert quote_request.request_reference == f"Quote Request #{quote_request.display_request_number}"
+        assert work_request.request_reference == f"Work Request #{work_request.display_request_number}"
 
 
 def test_admin_request_detail_shows_automatic_status_and_marks_request_viewed(client, app, admin_user):
@@ -946,7 +948,7 @@ def test_admin_day_agenda_and_appointment_detail_preserve_schedule_navigation(cl
     assert "Day View" in body
 
 
-def test_admin_can_edit_and_delete_own_internal_note(client, app, admin_user):
+def test_admin_internal_note_is_single_record_and_overwrites_on_save(client, app, admin_user):
     with app.app_context():
         quote_request = QuoteRequest(
             full_name="Casey Blake",
@@ -969,39 +971,28 @@ def test_admin_can_edit_and_delete_own_internal_note(client, app, admin_user):
         follow_redirects=False,
     )
 
-    with app.app_context():
-        note = RequestNote.query.one()
-        note_id = note.id
-
     response = client.get(f"/admin/requests/{request_id}")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert 'class="note-action-link note-edit-toggle"' in body
-    assert 'aria-label="Delete note"' in body
-    assert 'inline-remove-button inline-remove-button--bare' in body
-    assert 'btn btn-secondary btn-small note-edit-toggle' not in body
-    assert '>Delete</button>' not in body
+    assert 'data-internal-note' in body
+    assert 'data-internal-note-toggle' in body
+    assert 'id="internal-note-editor"' in body
+    assert 'Main internal note' in body
+    assert 'Expand internal note' in body
+    assert 'Delete note' not in body
+    assert 'note-edit-toggle' not in body
 
     response = client.post(
-        f"/admin/notes/{note_id}/edit",
-        data={f"edit-note-{note_id}-note_text": "Updated internal note."},
+        f"/admin/requests/{request_id}/notes",
+        data={"note_text": "Updated internal note."},
         follow_redirects=False,
     )
     assert response.status_code == 302
 
     with app.app_context():
+        assert RequestNote.query.count() == 1
         note = RequestNote.query.one()
         assert note.note_text == "Updated internal note."
-
-    response = client.post(
-        f"/admin/notes/{note_id}/delete",
-        data={},
-        follow_redirects=False,
-    )
-    assert response.status_code == 302
-
-    with app.app_context():
-        assert RequestNote.query.count() == 0
 
 
 def test_quote_request_validation_errors_do_not_save_request(client, app):
@@ -1236,7 +1227,6 @@ def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_u
     body = response.get_data(as_text=True)
     assert "Photo gallery" in body
     assert body.index("Internal notes") < body.index("Photo gallery")
-    assert "Browse each uploaded image in place" in body
     assert 'data-photo-gallery' in body
     assert 'data-gallery-stage' in body
     assert 'data-gallery-prev' in body
@@ -1271,7 +1261,7 @@ def test_dashboard_lists_quote_requests(client, admin_user):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "Request queue" in body
+    assert "Requests" in body
     assert "Jamie Cole" in body
     assert "Flooring" in body
 
@@ -1819,7 +1809,7 @@ def test_admin_can_add_quote_and_note(client, app, admin_user):
             "request-quote-amount": "2450.00",
             "request-quote-billing_frequency": "Weekly",
             "request-quote-description": "Exterior repaint option",
-            "request-quote-submit": "Add Quote",
+            "request-quote-submit": "Send",
         },
         follow_redirects=False,
     )
@@ -1866,7 +1856,7 @@ def test_quote_status_dropdown_updates_request_status(client, app, admin_user):
             "request-quote-amount": "1850.00",
             "request-quote-billing_frequency": "Monthly",
             "request-quote-description": "Interior repaint option",
-            "request-quote-submit": "Add Quote",
+            "request-quote-submit": "Send",
         },
         follow_redirects=False,
     )
@@ -1931,7 +1921,7 @@ def test_quote_status_update_route_returns_json_for_ajax_requests(client, app, a
             "request-quote-amount": "1850.00",
             "request-quote-billing_frequency": "Monthly",
             "request-quote-description": "Interior repaint option",
-            "request-quote-submit": "Add Quote",
+            "request-quote-submit": "Send",
         },
         follow_redirects=False,
     )
@@ -1983,7 +1973,7 @@ def test_quote_delete_action_removes_quote_from_request(client, app, admin_user)
             "request-quote-amount": "1850.00",
             "request-quote-billing_frequency": "Monthly",
             "request-quote-description": "Interior repaint option",
-            "request-quote-submit": "Add Quote",
+            "request-quote-submit": "Send",
         },
         follow_redirects=False,
     )
@@ -2030,7 +2020,7 @@ def test_admin_request_detail_shows_billing_frequency_in_quote_tracking(client, 
             "request-quote-amount": "950.00",
             "request-quote-billing_frequency": "Biweekly",
             "request-quote-description": "Touch-up package",
-            "request-quote-submit": "Add Quote",
+            "request-quote-submit": "Send",
         },
         follow_redirects=False,
     )
@@ -2044,6 +2034,99 @@ def test_admin_request_detail_shows_billing_frequency_in_quote_tracking(client, 
     assert "Delete quote" in body
     assert 'data-auto-submit-on-change="true"' in body
     assert 'request-quote-item__status-feedback' in body
+
+
+def test_quote_draft_autosave_route_persists_primed_fields(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    response = client.post(
+        "/admin/requests/1/quote-draft",
+        data={
+            "request-quote-amount": "3210.50",
+            "request-quote-billing_frequency": "Weekly",
+            "request-quote-description": "Primed quote draft",
+        },
+        headers={"X-Requested-With": "XMLHttpRequest"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert response.is_json
+    assert response.get_json() == {"ok": True, "hasDraft": True}
+
+    with app.app_context():
+        quote_request = QuoteRequest.query.one()
+        assert quote_request.draft_quote_amount == Decimal("3210.50")
+        assert quote_request.draft_quote_billing_frequency == "Weekly"
+        assert quote_request.draft_quote_description == "Primed quote draft"
+        assert quote_request.draft_quote_updated_at is not None
+
+
+def test_request_detail_prefers_draft_values_over_latest_quote(client, app, admin_user):
+    client.post(
+        "/quote-request",
+        data={
+            "full_name": "Casey Blake",
+            "phone": "555-444-9999",
+            "services": ["Painting"],
+            "city": "77 Market St",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/auth/login",
+        data={"email": admin_user, "password": "password123", "remember_me": "y"},
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/admin/requests/1/quotes",
+        data={
+            "request-quote-amount": "900.00",
+            "request-quote-billing_frequency": "Monthly",
+            "request-quote-description": "Latest sent quote",
+            "request-quote-submit": "Send",
+        },
+        follow_redirects=False,
+    )
+
+    client.post(
+        "/admin/requests/1/quote-draft",
+        data={
+            "request-quote-amount": "1110.75",
+            "request-quote-billing_frequency": "Weekly",
+            "request-quote-description": "Draft should win",
+        },
+        headers={"X-Requested-With": "XMLHttpRequest"},
+        follow_redirects=False,
+    )
+
+    response = client.get("/admin/requests/1")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'id="request-quote-form"' in body
+    assert 'data-draft-action="/admin/requests/1/quote-draft"' in body
+    assert 'id="request-quote-draft-feedback"' in body
+    assert 'value="1110.75"' in body
+    assert '>Weekly</option>' in body
+    assert 'value="Draft should win"' in body
 
 
 def test_invalid_csrf_redirects_back_with_message(client, app):

@@ -123,7 +123,7 @@
             <dd>{{ quote_request.full_name }}</dd>
           </div>
           <div>
-            <dt>{{ 'Quote ID' if quote_request.request_type == 'Quote request' else 'Request ID' }}</dt>
+            <dt>Request ID</dt>
             <dd>#{{ quote_request.display_request_number }}</dd>
           </div>
           <div>
@@ -197,13 +197,15 @@
           <div class="section-bar compact-bar request-quote-tracking__header">
             <div>
               <h2>Quote tracking</h2>
-              <p class="subtle-text">Request status now updates automatically from review, contact, quote, acceptance, rejection, and scheduling activity.</p>
             </div>
             <form method="post" action="{{ url_for('admin.update_last_contacted_on_route', request_id=quote_request.id) }}" class="request-quote-tracking__contact-form" id="last-contacted-form" data-scroll-anchor="quotes">
               {{ last_contacted_form.hidden_tag() }}
               <label class="form-field">
                 <span>Last contacted on</span>
-                {{ last_contacted_form.last_contacted_on(class_="input compact-input", id="last-contacted-on") }}
+                <div class="last-contacted-input-row">
+                  {{ last_contacted_form.last_contacted_on(class_="input compact-input", id="last-contacted-on") }}
+                  <button type="button" class="last-contacted-clear-button" id="last-contacted-clear" aria-label="Clear last contacted date" hidden>&times;</button>
+                </div>
                 {% for error in last_contacted_form.last_contacted_on.errors %}
                   <small class="field-error">{{ error }}</small>
                 {% endfor %}
@@ -211,7 +213,7 @@
             </form>
           </div>
 
-          <form method="post" action="{{ url_for('admin.create_request_quote_route', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="quotes">
+          <form method="post" action="{{ url_for('admin.create_request_quote_route', request_id=quote_request.id) }}" class="stacked-form" id="request-quote-form" data-scroll-anchor="quotes" data-draft-action="{{ url_for('admin.update_request_quote_draft_route', request_id=quote_request.id) }}" novalidate>
             {{ request_quote_form.hidden_tag() }}
             <div class="form-grid">
               <label class="form-field">
@@ -230,7 +232,17 @@
                 {% for error in request_quote_form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
               </label>
             </div>
-            {{ request_quote_form.submit(class_="btn btn-primary") }}
+            <div class="request-quote-form__actions">
+              {{ request_quote_form.submit(class_="btn btn-primary", value="Send") }}
+              <span class="subtle-text request-autosave-feedback" id="request-quote-draft-feedback" aria-live="polite"></span>
+              <span class="subtle-text">
+                {% if latest_quote %}
+                  Latest saved Quote ID #{{ latest_quote.quote_id }}
+                {% else %}
+                  No quote has been sent for this request yet.
+                {% endif %}
+              </span>
+            </div>
           </form>
 
           <div class="request-quote-list">
@@ -273,53 +285,26 @@
           <div class="section-bar compact-bar">
             <h2>Internal notes</h2>
           </div>
-          <form method="post" action="{{ url_for('admin.create_note', request_id=quote_request.id) }}" class="stacked-form" data-scroll-anchor="notes">
-            {{ note_form.hidden_tag() }}
-            <label class="form-field">
-              <span>Add note</span>
-              {{ note_form.note_text(class_="textarea") }}
-              {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-            </label>
-            {{ note_form.submit(class_="btn btn-primary") }}
-          </form>
-
-          <div class="notes-list">
-            {% for note in quote_request.notes %}
-              <article class="note-item">
-                <div class="note-header">
-                  <div>
-                    <strong>{{ note.author.email }}</strong>
-                    <div class="subtle-text">{{ note.created_at.strftime('%b %d, %Y %I:%M %p') }}</div>
-                  </div>
-                  {% if note.created_by == current_user.id %}
-                    <div class="note-actions">
-                      <button type="button" class="note-action-link note-edit-toggle" data-note-id="{{ note.id }}" aria-expanded="false" aria-controls="note-edit-panel-{{ note.id }}">Edit</button>
-                      <form method="post" action="{{ url_for('admin.delete_note_route', note_id=note.id) }}" class="inline-form" data-scroll-anchor="notes">
-                        {{ delete_note_forms[note.id].hidden_tag() }}
-                        <button type="submit" class="inline-remove-button inline-remove-button--bare" aria-label="Delete note">&times;</button>
-                      </form>
-                    </div>
-                  {% endif %}
-                </div>
-                <p>{{ note.note_text }}</p>
-                {% if note.created_by == current_user.id %}
-                  <div id="note-edit-panel-{{ note.id }}" class="note-edit-panel hidden">
-                    <form method="post" action="{{ url_for('admin.edit_note_route', note_id=note.id) }}" class="stacked-form" data-scroll-anchor="notes">
-                      {{ edit_note_forms[note.id].hidden_tag() }}
-                      <label class="form-field">
-                        {{ edit_note_forms[note.id].note_text(class_="textarea textarea--small") }}
-                        {% for error in edit_note_forms[note.id].note_text.errors %}
-                          <small class="field-error">{{ error }}</small>
-                        {% endfor %}
-                      </label>
-                      {{ edit_note_forms[note.id].submit(class_="btn btn-primary btn-small") }}
-                    </form>
-                  </div>
-                {% endif %}
-              </article>
-            {% else %}
-              <div class="empty-state">No internal notes yet.</div>
-            {% endfor %}
+          <div class="request-internal-note" data-internal-note>
+            <button type="button" class="note-action-link request-internal-note__toggle" data-internal-note-toggle aria-expanded="false" aria-controls="internal-note-editor">
+              {{ 'Expand internal note' if main_note else 'Add internal note' }}
+            </button>
+            {% if main_note %}
+              <div class="subtle-text request-internal-note__meta">Last saved {{ main_note.created_at.strftime('%b %d, %Y %I:%M %p') }} by {{ main_note.author.email if main_note.author else 'staff' }}</div>
+            {% endif %}
+            <form method="post" action="{{ url_for('admin.create_note', request_id=quote_request.id) }}" class="stacked-form request-internal-note__editor" id="internal-note-editor" data-scroll-anchor="notes" novalidate hidden>
+              {{ note_form.hidden_tag() }}
+              <label class="form-field">
+                <span>Main internal note</span>
+                {{ note_form.note_text(class_="textarea", placeholder="Add internal context for this request.") }}
+                {% for error in note_form.note_text.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+              </label>
+              <div class="request-internal-note__actions">
+                {{ note_form.submit(class_="btn btn-primary btn-small", value="Save note") }}
+                <span class="subtle-text request-autosave-feedback" id="request-note-feedback" aria-live="polite"></span>
+                <span class="subtle-text">This request keeps one internal note. Saving overwrites the current note.</span>
+              </div>
+            </form>
           </div>
         </section>
     </article>
@@ -328,7 +313,6 @@
         <div class="section-bar compact-bar">
           <div>
             <h2>Photo gallery</h2>
-            <p class="subtle-text">Browse each uploaded image in place and use the queue to move through the set.</p>
           </div>
         </div>
 
@@ -346,7 +330,6 @@
               </div>
               <div class="request-photo-gallery__stage-meta">
                 <span class="subtle-text" data-gallery-count aria-live="polite">1 of {{ quote_request.photos|length }}</span>
-                <span class="subtle-text">Original upload scaled to fit this panel.</span>
               </div>
             </div>
 
@@ -630,6 +613,7 @@
   const requestDetailScrollKey = 'admin-request-detail-scroll';
   const lastContactedForm = document.getElementById('last-contacted-form');
   const lastContactedInput = document.getElementById('last-contacted-on');
+  const lastContactedClearButton = document.getElementById('last-contacted-clear');
   const requestDetailRefreshRegionIds = [
     'request-detail-customer-panel',
     'request-detail-customer-field',
@@ -695,11 +679,16 @@
   }
 
   function initializeScheduleDialogTriggers(root) {
-    if (root.dataset.requestScheduleTriggerBound === 'true') {
+    const bindingHost = root.documentElement || root;
+    if (!bindingHost || !bindingHost.dataset) {
       return;
     }
 
-    root.dataset.requestScheduleTriggerBound = 'true';
+    if (bindingHost.dataset.requestScheduleTriggerBound === 'true') {
+      return;
+    }
+
+    bindingHost.dataset.requestScheduleTriggerBound = 'true';
     root.addEventListener('click', function (event) {
       if (!(event.target instanceof Element)) {
         return;
@@ -939,10 +928,41 @@
     sessionStorage.removeItem(requestDetailScrollKey);
   }
 
+  function updateLastContactedClearVisibility() {
+    if (!lastContactedInput || !lastContactedClearButton) {
+      return;
+    }
+
+    lastContactedClearButton.hidden = !lastContactedInput.value;
+  }
+
   if (lastContactedForm && lastContactedInput) {
+    updateLastContactedClearVisibility();
+
+    lastContactedInput.addEventListener('input', updateLastContactedClearVisibility);
     lastContactedInput.addEventListener('change', function () {
+      updateLastContactedClearVisibility();
       lastContactedForm.submit();
     });
+
+    if (lastContactedClearButton) {
+      lastContactedClearButton.addEventListener('click', function () {
+        if (!lastContactedInput.value) {
+          updateLastContactedClearVisibility();
+          return;
+        }
+
+        lastContactedInput.value = '';
+        updateLastContactedClearVisibility();
+
+        if (typeof lastContactedForm.requestSubmit === 'function') {
+          lastContactedForm.requestSubmit();
+          return;
+        }
+
+        lastContactedForm.submit();
+      });
+    }
   }
 
   document.querySelectorAll('[data-auto-submit-on-change]').forEach(function (input) {
@@ -998,35 +1018,249 @@
     });
   });
 
-  document.querySelectorAll('.note-edit-toggle').forEach(function (toggle) {
+  document.querySelectorAll('[data-internal-note]').forEach(function (container) {
+    const toggle = container.querySelector('[data-internal-note-toggle]');
+    const editor = container.querySelector('#internal-note-editor');
+    if (!toggle || !editor) {
+      return;
+    }
+
     toggle.addEventListener('click', function () {
-      const noteId = toggle.dataset.noteId;
-      const panel = document.getElementById('note-edit-panel-' + noteId);
-      if (!panel) {
+      const willExpand = editor.hidden;
+      editor.hidden = !willExpand;
+      toggle.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+      toggle.textContent = willExpand ? 'Collapse internal note' : 'Expand internal note';
+      if (willExpand) {
+        const noteField = editor.querySelector('textarea[name="note_text"]');
+        if (noteField) {
+          noteField.focus();
+        }
+      }
+    });
+  });
+
+  function initializeQuoteDraftAutosave() {
+    const quoteForm = document.getElementById('request-quote-form');
+    const feedback = document.getElementById('request-quote-draft-feedback');
+    const amountInput = quoteForm ? quoteForm.querySelector('input[name="request-quote-amount"]') : null;
+    const billingSelect = quoteForm ? quoteForm.querySelector('select[name="request-quote-billing_frequency"]') : null;
+    const descriptionInput = quoteForm ? quoteForm.querySelector('input[name="request-quote-description"]') : null;
+    const draftAction = quoteForm ? quoteForm.dataset.draftAction : '';
+
+    if (!quoteForm || !feedback || !amountInput || !billingSelect || !descriptionInput || !draftAction) {
+      return;
+    }
+
+    let debounceTimer = null;
+    let inFlight = false;
+    let formSubmitting = false;
+    let lastFingerprint = [
+      (amountInput.value || '').trim(),
+      billingSelect.value || '',
+      (descriptionInput.value || '').trim(),
+    ].join('|');
+
+    quoteForm.addEventListener('submit', function () {
+      formSubmitting = true;
+    });
+
+    function setFeedback(state, message) {
+      if (state === 'saving') {
+        feedback.textContent = 'saving';
         return;
       }
 
-      const willExpand = panel.classList.contains('hidden');
-      panel.classList.toggle('hidden');
-      toggle.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+      if (state === 'saved') {
+        feedback.textContent = 'saved';
+        window.setTimeout(function () {
+          if (feedback.textContent === 'saved') {
+            feedback.textContent = '';
+          }
+        }, 1800);
+        return;
+      }
+
+      if (state === 'error') {
+        feedback.textContent = message || 'Unable to save draft right now.';
+        return;
+      }
+
+      feedback.textContent = '';
+    }
+
+    function saveDraftNow() {
+      if (formSubmitting || inFlight) {
+        return;
+      }
+
+      const nextFingerprint = [
+        (amountInput.value || '').trim(),
+        billingSelect.value || '',
+        (descriptionInput.value || '').trim(),
+      ].join('|');
+
+      if (nextFingerprint === lastFingerprint) {
+        return;
+      }
+
+      inFlight = true;
+      setFeedback('saving');
+
+      fetch(draftAction, {
+        method: 'POST',
+        body: new FormData(quoteForm),
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      }).then(function (response) {
+        return response.json().catch(function () {
+          return {ok: false, error: 'Unable to save draft right now.'};
+        }).then(function (payload) {
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || 'Unable to save draft right now.');
+          }
+          return payload;
+        });
+      }).then(function () {
+        lastFingerprint = nextFingerprint;
+        setFeedback('saved');
+      }).catch(function (error) {
+        setFeedback('error', error.message);
+      }).finally(function () {
+        inFlight = false;
+      });
+    }
+
+    [amountInput, billingSelect, descriptionInput].forEach(function (input) {
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', function () {
+        if (debounceTimer) {
+          window.clearTimeout(debounceTimer);
+        }
+        debounceTimer = window.setTimeout(saveDraftNow, 700);
+      });
     });
-  });
+  }
+
+  initializeQuoteDraftAutosave();
+
+  function initializeInternalNoteAutosave() {
+    const noteForm = document.getElementById('internal-note-editor');
+    const noteInput = noteForm ? noteForm.querySelector('textarea[name="note_text"]') : null;
+    const noteFeedback = document.getElementById('request-note-feedback');
+
+    if (!noteForm || !noteInput || !noteFeedback) {
+      return;
+    }
+
+    let debounceTimer = null;
+    let inFlight = false;
+    let lastFingerprint = (noteInput.value || '').trim();
+
+    function setNoteFeedback(state, message) {
+      if (state === 'saving') {
+        noteFeedback.textContent = 'saving';
+        return;
+      }
+
+      if (state === 'saved') {
+        noteFeedback.textContent = 'saved';
+        window.setTimeout(function () {
+          if (noteFeedback.textContent === 'saved') {
+            noteFeedback.textContent = '';
+          }
+        }, 1800);
+        return;
+      }
+
+      if (state === 'error') {
+        noteFeedback.textContent = message || 'Unable to save right now.';
+        return;
+      }
+
+      noteFeedback.textContent = '';
+    }
+
+    function saveNow() {
+      if (inFlight) {
+        return;
+      }
+
+      const nextFingerprint = (noteInput.value || '').trim();
+      if (!nextFingerprint || nextFingerprint === lastFingerprint) {
+        return;
+      }
+
+      inFlight = true;
+      setNoteFeedback('saving');
+
+      fetch(noteForm.action, {
+        method: 'POST',
+        body: new FormData(noteForm),
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      }).then(function (response) {
+        return response.json().catch(function () {
+          return {ok: false, error: 'Unable to save right now.'};
+        }).then(function (payload) {
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || 'Unable to save right now.');
+          }
+          return payload;
+        });
+      }).then(function () {
+        lastFingerprint = nextFingerprint;
+        setNoteFeedback('saved');
+      }).catch(function (error) {
+        setNoteFeedback('error', error.message);
+      }).finally(function () {
+        inFlight = false;
+      });
+    }
+
+    noteForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      saveNow();
+    });
+
+    noteInput.addEventListener('input', function () {
+      if (debounceTimer) {
+        window.clearTimeout(debounceTimer);
+      }
+      debounceTimer = window.setTimeout(saveNow, 700);
+    });
+  }
+
+  initializeInternalNoteAutosave();
 
   document.querySelectorAll('[data-photo-gallery]').forEach(function (gallery) {
     const stageImage = gallery.querySelector('[data-gallery-stage]');
     const stageCount = gallery.querySelector('[data-gallery-count]');
     const prevButton = gallery.querySelector('[data-gallery-prev]');
     const nextButton = gallery.querySelector('[data-gallery-next]');
+    const thumbsContainer = gallery.querySelector('.request-photo-gallery__thumbs');
     const thumbButtons = Array.from(gallery.querySelectorAll('[data-gallery-thumb]'));
     let activeIndex = 0;
     let windowStart = 0;
 
-    if (!stageImage || !thumbButtons.length) {
+    if (!stageImage || !thumbButtons.length || !thumbsContainer) {
       return;
     }
 
     function getVisibleCount() {
-      return window.matchMedia('(max-width: 640px)').matches ? 3 : 5;
+      const containerWidth = thumbsContainer.getBoundingClientRect().width;
+      const sampleButton = thumbButtons[0];
+      const sampleWidth = sampleButton.getBoundingClientRect().width || parseFloat(window.getComputedStyle(sampleButton).width || '0');
+      const styles = window.getComputedStyle(thumbsContainer);
+      const gap = parseFloat(styles.columnGap || styles.gap || '0');
+      const itemSpan = Math.max(sampleWidth + gap, 1);
+      const fittedCount = Math.floor((containerWidth + gap) / itemSpan);
+
+      if (!Number.isFinite(fittedCount) || fittedCount < 1) {
+        return Math.min(thumbButtons.length, 5);
+      }
+
+      return Math.max(1, Math.min(thumbButtons.length, fittedCount));
     }
 
     function clampWindowStart(nextStart, visibleCount) {

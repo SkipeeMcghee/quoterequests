@@ -10,24 +10,8 @@
     title='Requests',
     description='Review incoming quote and work requests.',
     nav_mode='main',
-    actions_class='dashboard-metrics'
+    actions_class='dashboard-header-actions'
   ) %}
-      <article class="metric-card">
-        <strong>{{ quote_requests|length }}</strong>
-        <span>Total requests</span>
-      </article>
-      <article class="metric-card">
-        <strong>{{ quote_requests | selectattr('status', 'equalto', 'New') | list | length }}</strong>
-        <span>Need first response</span>
-      </article>
-  {% endcall %}
-
-  <section class="table-card">
-    <div class="section-bar">
-      <div>
-        <h2>Request queue</h2>
-        <p class="subtle-text">Newest submissions appear first so the team can respond quickly.</p>
-      </div>
       <div class="rq-filter-bar">
         <div id="rq-filter-indicator" class="rq-filter-indicator" hidden>
           <span class="rq-filter-indicator__label">Filter applied</span>
@@ -40,7 +24,19 @@
           Filter
         </button>
       </div>
-    </div>
+      <div class="dashboard-metrics">
+        <article class="metric-card">
+          <strong>{{ quote_requests|length }}</strong>
+          <span>Total requests</span>
+        </article>
+        <article class="metric-card">
+          <strong>{{ quote_requests | selectattr('status', 'equalto', 'New') | list | length }}</strong>
+          <span>Need first response</span>
+        </article>
+      </div>
+  {% endcall %}
+
+  <section class="dashboard-queue">
     <div class="table-scroll">
       <table class="request-queue-table">
         <colgroup>
@@ -157,6 +153,7 @@
                 <div class="request-queue-datetime">
                   <span>{{ item.created_at.strftime('%b %d, %Y') }}</span>
                   <span class="subtle-text">{{ item.created_at.strftime('%I:%M %p') }}</span>
+                  <span class="subtle-text request-queue-datetime__id">#{{ item.display_request_number }}</span>
                 </div>
               </td>
             </tr>
