@@ -132,6 +132,7 @@
               </td>
               <td>
                 <strong class="row-title">{{ appointment.display_title }}</strong>
+                <div class="subtle-text">Event #{{ appointment.id }}</div>
                 {% if appointment.quote_request and appointment.quote_request.service_list_display and appointment.quote_request.service_list_display != appointment.display_title %}
                   <div class="subtle-text">{{ appointment.quote_request.service_list_display }}</div>
                 {% elif appointment.quote_request and appointment.quote_request.service_list_display %}

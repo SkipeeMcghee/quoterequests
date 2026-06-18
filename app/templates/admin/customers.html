@@ -8,48 +8,107 @@
 <main class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Customers',
-    description='Scan customer records quickly, then move into notes, history, billing, or scheduling.',
-    nav_mode='main'
+    description=(customers|length ~ ' customer record' ~ ('s' if customers|length != 1 else '')),
+    nav_mode='main',
+    actions_class='dashboard-header-actions customer-list-header-actions'
   ) %}
       {{ render_import_button('customer-import-modal') }}
-  {% endcall %}
-
-  <section class="table-card">
-    <div class="section-bar customer-list-toolbar">
-      <div>
-        <h2>Customer directory</h2>
-        <p class="subtle-text">Search by name, phone, email, city, or billing text to narrow the list without leaving the page.</p>
+      <div class="rq-filter-bar">
+        <div id="customer-filter-indicator" class="rq-filter-indicator" hidden>
+          <span class="rq-filter-indicator__label">Filter applied</span>
+          <button type="button" class="rq-filter-indicator__clear" id="customer-filter-clear" aria-label="Clear customer filters and sorting">&#xD7;</button>
+        </div>
+        <button type="button" class="btn btn-secondary btn-small rq-filter-btn" id="customer-filter-open" aria-haspopup="dialog" aria-controls="customer-filter-modal">
+          <svg width="13" height="11" viewBox="0 0 13 11" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+            <path d="M1 1.5h11M3.5 5.5h6M6 9.5h1"/>
+          </svg>
+          Filter
+        </button>
       </div>
-      <div class="customer-list-filter">
+      <div class="customer-list-filter customer-list-filter--header">
         <label class="form-field">
           <span>Search customers</span>
           <input class="input" id="customer-filter-input" type="search" placeholder="Search name, phone, email, city, billing" autocomplete="off">
         </label>
-        <p class="subtle-text customer-list-count" id="customer-filter-count">{{ customers|length }} customer record{% if customers|length != 1 %}s{% endif %}</p>
       </div>
-    </div>
+  {% endcall %}
 
+  <section class="customer-list-full-bleed">
     <div class="table-scroll">
-      <table>
+      <table class="customer-list-table">
         <thead>
           <tr>
-            <th>Customer</th>
-            <th>Primary contact</th>
-            <th>Billing</th>
+            <th class="rq-th-sortable">
+              <span class="rq-th-content">Customer
+                <button type="button" class="rq-sort-btn" data-sort-field="customer" aria-label="Sort by customer name" aria-pressed="false">
+                  <svg class="rq-sort-icon" width="10" height="12" viewBox="0 0 10 12" aria-hidden="true">
+                    <path class="rq-sort-icon__up" d="M5 1L9.33 5H0.67L5 1Z" fill="currentColor"/>
+                    <path class="rq-sort-icon__down" d="M5 11L0.67 7H9.33L5 11Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </span>
+            </th>
+            <th class="rq-th-sortable">
+              <span class="rq-th-content">Phone
+                <button type="button" class="rq-sort-btn" data-sort-field="phone" aria-label="Sort by primary phone" aria-pressed="false">
+                  <svg class="rq-sort-icon" width="10" height="12" viewBox="0 0 10 12" aria-hidden="true">
+                    <path class="rq-sort-icon__up" d="M5 1L9.33 5H0.67L5 1Z" fill="currentColor"/>
+                    <path class="rq-sort-icon__down" d="M5 11L0.67 7H9.33L5 11Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </span>
+            </th>
+            <th class="rq-th-sortable">
+              <span class="rq-th-content">email
+                <button type="button" class="rq-sort-btn" data-sort-field="email" aria-label="Sort by primary email" aria-pressed="false">
+                  <svg class="rq-sort-icon" width="10" height="12" viewBox="0 0 10 12" aria-hidden="true">
+                    <path class="rq-sort-icon__up" d="M5 1L9.33 5H0.67L5 1Z" fill="currentColor"/>
+                    <path class="rq-sort-icon__down" d="M5 11L0.67 7H9.33L5 11Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </span>
+            </th>
+            <th class="rq-th-sortable">
+              <span class="rq-th-content">Billing
+                <button type="button" class="rq-sort-btn" data-sort-field="billing" aria-label="Sort by billing total" aria-pressed="false">
+                  <svg class="rq-sort-icon" width="10" height="12" viewBox="0 0 10 12" aria-hidden="true">
+                    <path class="rq-sort-icon__up" d="M5 1L9.33 5H0.67L5 1Z" fill="currentColor"/>
+                    <path class="rq-sort-icon__down" d="M5 11L0.67 7H9.33L5 11Z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody>
           {% for customer in customers %}
-            <tr class="clickable-row" data-customer-row tabindex="0" onclick="window.location.href='{{ url_for('admin.customer_detail', customer_id=customer.id) }}'" onkeydown="if (event.key === 'Enter') window.location.href='{{ url_for('admin.customer_detail', customer_id=customer.id) }}'">
+            <tr
+              class="clickable-row"
+              data-customer-row
+              data-row-href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}"
+              data-original-index="{{ loop.index0 }}"
+              data-filter-name="{{ customer.primary_name|default('', true)|lower }}"
+              data-filter-city="{{ customer.primary_city|default('', true)|lower }}"
+              data-filter-phone="{{ customer.primary_phone|default('', true)|lower }}"
+              data-filter-email="{{ customer.primary_email|default('', true)|lower }}"
+              data-filter-has-phone="{{ '1' if customer.primary_phone else '0' }}"
+              data-filter-has-email="{{ '1' if customer.primary_email else '0' }}"
+              data-filter-has-billing="{{ '1' if customer.recurring_billing_total is not none else '0' }}"
+              data-sort-customer="{{ customer.primary_name|default('', true)|lower }}"
+              data-sort-phone="{{ customer.primary_phone|default('', true)|replace(' ', '')|replace('-', '')|replace('(', '')|replace(')', '')|replace('.', '') }}"
+              data-sort-email="{{ customer.primary_email|default('', true)|lower }}"
+              data-sort-billing="{{ customer.recurring_billing_total if customer.recurring_billing_total is not none else -1 }}"
+              tabindex="0"
+            >
               <td>
                 <strong class="row-title">{{ customer.primary_name or 'Unnamed' }}</strong>
                 <div class="subtle-text">{{ customer.primary_city or 'No city on file' }}</div>
               </td>
               <td>
-                <div class="contact-block">
-                  <div class="contact-row"><span class="contact-label">Phone:</span> <span>{{ customer.primary_phone or '—' }}</span></div>
-                  <div class="contact-row"><span class="contact-label">Email:</span> <span>{{ customer.primary_email or '—' }}</span></div>
-                </div>
+                {{ customer.primary_phone or '—' }}
+              </td>
+              <td>
+                {{ customer.primary_email or '—' }}
               </td>
               <td>
                 {% if customer.recurring_billing_total is not none %}
@@ -66,16 +125,62 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="3" class="empty-state">No customers created yet.</td>
+              <td colspan="4" class="empty-state">No customers created yet.</td>
             </tr>
           {% endfor %}
           <tr id="customer-filter-empty" hidden>
-            <td colspan="3" class="empty-state">No customers match the current search.</td>
+            <td colspan="4" class="empty-state">No customers match the active filters.</td>
           </tr>
         </tbody>
       </table>
     </div>
   </section>
+
+  <dialog class="rq-filter-modal" id="customer-filter-modal" aria-modal="true" aria-labelledby="customer-filter-modal-title">
+    <div class="rq-filter-modal__card">
+      <div class="rq-filter-modal__header">
+        <h3 class="rq-filter-modal__title" id="customer-filter-modal-title">Filter &amp; Sort</h3>
+        <button type="button" class="rq-filter-modal__close" id="customer-filter-modal-close" aria-label="Close customer filter panel">&#xD7;</button>
+      </div>
+      <form class="rq-filter-modal__form" id="customer-filter-form" novalidate>
+        <fieldset class="rq-filter-group">
+          <legend class="rq-filter-group__legend">Details</legend>
+          <div class="rq-filter-group__checks">
+            <label class="rq-filter-check"><input type="checkbox" name="has-phone" value="1">&#xA0;Has phone</label>
+            <label class="rq-filter-check"><input type="checkbox" name="has-email" value="1">&#xA0;Has email</label>
+            <label class="rq-filter-check"><input type="checkbox" name="has-billing" value="1">&#xA0;Has billing</label>
+          </div>
+        </fieldset>
+        <div class="rq-filter-text-field">
+          <label for="customer-city-input" class="rq-filter-text-field__label">City</label>
+          <input type="text" id="customer-city-input" name="customer-city" class="rq-filter-text-field__input" placeholder="Filter by city..." autocomplete="off" spellcheck="false">
+        </div>
+        <div class="rq-filter-sort-row">
+          <div class="rq-filter-text-field">
+            <label for="customer-sort-field" class="rq-filter-text-field__label">Sort by</label>
+            <select id="customer-sort-field" name="customer-sort-field" class="rq-filter-text-field__select">
+              <option value="">Default order</option>
+              <option value="customer">Customer</option>
+              <option value="phone">Phone</option>
+              <option value="email">Email</option>
+              <option value="billing">Billing</option>
+            </select>
+          </div>
+          <div class="rq-filter-text-field">
+            <label for="customer-sort-dir" class="rq-filter-text-field__label">Direction</label>
+            <select id="customer-sort-dir" name="customer-sort-dir" class="rq-filter-text-field__select">
+              <option value="desc">Descending (Z&rarr;A / High&rarr;Low)</option>
+              <option value="asc">Ascending (A&rarr;Z / Low&rarr;High)</option>
+            </select>
+          </div>
+        </div>
+        <div class="rq-filter-modal__footer">
+          <button type="button" class="btn btn-secondary btn-small" id="customer-filter-reset">Reset all</button>
+          <button type="submit" class="btn btn-primary btn-small">Apply filters</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
 
   {{ render_import_modal('customers', 'customer-import-modal', enable_services) }}
 </main>
@@ -83,35 +188,336 @@
 {% block scripts %}
 <script>
 (function () {
-  const input = document.getElementById('customer-filter-input');
-  const rows = Array.from(document.querySelectorAll('[data-customer-row]'));
-  const count = document.getElementById('customer-filter-count');
-  const emptyRow = document.getElementById('customer-filter-empty');
+  'use strict';
 
-  if (!input || !rows.length || !count || !emptyRow) {
+  var table = document.querySelector('.customer-list-table');
+  var tbody = table ? table.querySelector('tbody') : null;
+  var searchInput = document.getElementById('customer-filter-input');
+  var helperText = document.querySelector('.admin-page-header__description');
+  var emptyRow = document.getElementById('customer-filter-empty');
+  var filterModal = document.getElementById('customer-filter-modal');
+  var filterOpenBtn = document.getElementById('customer-filter-open');
+  var filterCloseBtn = document.getElementById('customer-filter-modal-close');
+  var filterForm = document.getElementById('customer-filter-form');
+  var filterResetBtn = document.getElementById('customer-filter-reset');
+  var filterIndicator = document.getElementById('customer-filter-indicator');
+  var filterClearBtn = document.getElementById('customer-filter-clear');
+  var sortBtns = Array.from(document.querySelectorAll('.rq-sort-btn[data-sort-field]'));
+
+  if (!table || !tbody || !searchInput || !helperText || !emptyRow) {
     return;
   }
 
-  const total = rows.length;
-  const update = function () {
-    const query = input.value.trim().toLowerCase();
-    let visible = 0;
+  var originalRows = Array.from(tbody.querySelectorAll('tr[data-customer-row]'));
+  if (!originalRows.length) {
+    var filterBar = document.querySelector('.rq-filter-bar');
+    if (filterBar) {
+      filterBar.hidden = true;
+    }
+    return;
+  }
 
-    rows.forEach((row) => {
-      const matches = !query || row.textContent.toLowerCase().includes(query);
-      row.hidden = !matches;
-      if (matches) {
-        visible += 1;
-      }
-    });
-
-    emptyRow.hidden = visible !== 0;
-    count.textContent = query
-      ? visible + ' matching customer' + (visible === 1 ? '' : 's')
-      : total + ' customer record' + (total === 1 ? '' : 's');
+  var quickSortCycles = {
+    customer: ['asc', 'desc', null],
+    phone: ['asc', 'desc', null],
+    email: ['asc', 'desc', null],
+    billing: ['desc', 'asc', null]
   };
 
-  input.addEventListener('input', update);
+  var state = {
+    activeFilters: {
+      query: '',
+      city: '',
+      hasPhone: false,
+      hasEmail: false,
+      hasBilling: false
+    },
+    activeSort: {
+      field: null,
+      direction: null
+    },
+    isModified: false
+  };
+
+  function hasActiveSort() {
+    return !!state.activeSort.field && !!state.activeSort.direction;
+  }
+
+  function hasActiveFilters() {
+    var filters = state.activeFilters;
+    return !!filters.query || !!filters.city || filters.hasPhone || filters.hasEmail || filters.hasBilling;
+  }
+
+  function syncToForm() {
+    if (!filterForm) {
+      return;
+    }
+    var cityInput = document.getElementById('customer-city-input');
+    if (cityInput) {
+      cityInput.value = state.activeFilters.city;
+    }
+    var phoneCheckbox = filterForm.querySelector('input[name="has-phone"]');
+    if (phoneCheckbox) {
+      phoneCheckbox.checked = state.activeFilters.hasPhone;
+    }
+    var emailCheckbox = filterForm.querySelector('input[name="has-email"]');
+    if (emailCheckbox) {
+      emailCheckbox.checked = state.activeFilters.hasEmail;
+    }
+    var billingCheckbox = filterForm.querySelector('input[name="has-billing"]');
+    if (billingCheckbox) {
+      billingCheckbox.checked = state.activeFilters.hasBilling;
+    }
+    var sortField = document.getElementById('customer-sort-field');
+    if (sortField) {
+      sortField.value = state.activeSort.field || '';
+    }
+    var sortDir = document.getElementById('customer-sort-dir');
+    if (sortDir) {
+      sortDir.value = state.activeSort.direction || 'desc';
+    }
+  }
+
+  function collectFromForm() {
+    if (!filterForm) {
+      return;
+    }
+    var cityInput = document.getElementById('customer-city-input');
+    state.activeFilters.city = cityInput ? cityInput.value.trim().toLowerCase() : '';
+    var phoneCheckbox = filterForm.querySelector('input[name="has-phone"]');
+    state.activeFilters.hasPhone = !!(phoneCheckbox && phoneCheckbox.checked);
+    var emailCheckbox = filterForm.querySelector('input[name="has-email"]');
+    state.activeFilters.hasEmail = !!(emailCheckbox && emailCheckbox.checked);
+    var billingCheckbox = filterForm.querySelector('input[name="has-billing"]');
+    state.activeFilters.hasBilling = !!(billingCheckbox && billingCheckbox.checked);
+
+    var sortField = document.getElementById('customer-sort-field');
+    var sortDir = document.getElementById('customer-sort-dir');
+    state.activeSort.field = sortField ? (sortField.value || null) : null;
+    state.activeSort.direction = state.activeSort.field ? (sortDir ? (sortDir.value || 'desc') : 'desc') : null;
+  }
+
+  function getSortValue(row, field) {
+    if (field === 'customer') {
+      return row.dataset.sortCustomer || '';
+    }
+    if (field === 'phone') {
+      return Number(row.dataset.sortPhone || '0');
+    }
+    if (field === 'email') {
+      return row.dataset.sortEmail || '';
+    }
+    if (field === 'billing') {
+      return Number(row.dataset.sortBilling || '-1');
+    }
+    return '';
+  }
+
+  function getOriginalIndex(row) {
+    return Number(row.dataset.originalIndex || '0');
+  }
+
+  function getNextQuickSortState(field) {
+    var cycle = quickSortCycles[field] || ['asc', 'desc', null];
+    if (state.activeSort.field !== field) {
+      return {
+        field: field,
+        direction: cycle[0]
+      };
+    }
+
+    var currentIndex = cycle.indexOf(state.activeSort.direction);
+    var nextDirection = cycle[(currentIndex + 1) % cycle.length];
+    return {
+      field: nextDirection ? field : null,
+      direction: nextDirection
+    };
+  }
+
+  function updateSortButtons() {
+    sortBtns.forEach(function (btn) {
+      var field = btn.dataset.sortField;
+      var header = btn.closest('th');
+      if (state.activeSort.field === field && state.activeSort.direction) {
+        btn.dataset.sortActive = state.activeSort.direction;
+        btn.setAttribute('aria-pressed', 'true');
+        if (header) {
+          header.setAttribute('aria-sort', state.activeSort.direction === 'asc' ? 'ascending' : 'descending');
+        }
+      } else {
+        delete btn.dataset.sortActive;
+        btn.setAttribute('aria-pressed', 'false');
+        if (header) {
+          header.setAttribute('aria-sort', 'none');
+        }
+      }
+    });
+  }
+
+  function resetAll() {
+    state.activeFilters.query = '';
+    state.activeFilters.city = '';
+    state.activeFilters.hasPhone = false;
+    state.activeFilters.hasEmail = false;
+    state.activeFilters.hasBilling = false;
+    state.activeSort.field = null;
+    state.activeSort.direction = null;
+    searchInput.value = '';
+    syncToForm();
+    render();
+  }
+
+  function render() {
+    var rows = originalRows.slice();
+    var filters = state.activeFilters;
+
+    if (filters.query) {
+      rows = rows.filter(function (row) {
+        return (row.textContent || '').toLowerCase().indexOf(filters.query) !== -1;
+      });
+    }
+
+    if (filters.city) {
+      rows = rows.filter(function (row) {
+        return (row.dataset.filterCity || '').indexOf(filters.city) !== -1;
+      });
+    }
+
+    if (filters.hasPhone) {
+      rows = rows.filter(function (row) {
+        return row.dataset.filterHasPhone === '1';
+      });
+    }
+
+    if (filters.hasEmail) {
+      rows = rows.filter(function (row) {
+        return row.dataset.filterHasEmail === '1';
+      });
+    }
+
+    if (filters.hasBilling) {
+      rows = rows.filter(function (row) {
+        return row.dataset.filterHasBilling === '1';
+      });
+    }
+
+    if (hasActiveSort()) {
+      var direction = state.activeSort.direction === 'asc' ? 1 : -1;
+      var sortField = state.activeSort.field;
+
+      rows = rows.slice().sort(function (a, b) {
+        var aValue = getSortValue(a, sortField);
+        var bValue = getSortValue(b, sortField);
+        if (aValue < bValue) {
+          return -direction;
+        }
+        if (aValue > bValue) {
+          return direction;
+        }
+        return getOriginalIndex(a) - getOriginalIndex(b);
+      });
+    }
+
+    while (tbody.firstChild) {
+      tbody.removeChild(tbody.firstChild);
+    }
+
+    if (rows.length === 0) {
+      emptyRow.hidden = false;
+      tbody.appendChild(emptyRow);
+    } else {
+      emptyRow.hidden = true;
+      rows.forEach(function (row) {
+        tbody.appendChild(row);
+      });
+    }
+
+    state.isModified = hasActiveFilters() || hasActiveSort();
+
+    if (filterIndicator) {
+      filterIndicator.hidden = !state.isModified;
+    }
+
+    helperText.textContent = rows.length + ' customer record' + (rows.length === 1 ? '' : 's');
+    updateSortButtons();
+  }
+
+  originalRows.forEach(function (row) {
+    row.addEventListener('click', function () {
+      window.location.href = row.dataset.rowHref;
+    });
+
+    row.addEventListener('keydown', function (event) {
+      if (event.key !== 'Enter') {
+        return;
+      }
+      event.preventDefault();
+      window.location.href = row.dataset.rowHref;
+    });
+  });
+
+  searchInput.addEventListener('input', function () {
+    state.activeFilters.query = searchInput.value.trim().toLowerCase();
+    render();
+  });
+
+  sortBtns.forEach(function (btn) {
+    btn.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var nextSort = getNextQuickSortState(btn.dataset.sortField);
+      state.activeSort.field = nextSort.field;
+      state.activeSort.direction = nextSort.direction;
+      syncToForm();
+      render();
+    });
+  });
+
+  function closeModal() {
+    if (filterModal && filterModal.open) {
+      filterModal.close();
+    }
+  }
+
+  if (filterOpenBtn && filterModal && typeof filterModal.showModal === 'function') {
+    filterOpenBtn.addEventListener('click', function () {
+      syncToForm();
+      filterModal.showModal();
+    });
+  }
+
+  if (filterCloseBtn) {
+    filterCloseBtn.addEventListener('click', closeModal);
+  }
+
+  if (filterModal) {
+    filterModal.addEventListener('click', function (event) {
+      if (event.target === filterModal) {
+        closeModal();
+      }
+    });
+  }
+
+  if (filterForm) {
+    filterForm.addEventListener('submit', function (event) {
+      event.preventDefault();
+      collectFromForm();
+      render();
+      closeModal();
+    });
+  }
+
+  if (filterResetBtn) {
+    filterResetBtn.addEventListener('click', function () {
+      resetAll();
+      closeModal();
+    });
+  }
+
+  if (filterClearBtn) {
+    filterClearBtn.addEventListener('click', resetAll);
+  }
+
+  render();
 })();
 </script>
 {% include "admin/import_utility_script.html" %}

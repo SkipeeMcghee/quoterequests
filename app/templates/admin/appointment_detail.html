@@ -30,6 +30,7 @@
         {{ appointment_form.hidden_tag() }}
         <div class="appointment-editor-card__header">
           <div>
+            <p class="eyebrow">Event #{{ appointment.id }}</p>
             <h2>{{ appointment.display_title }}</h2>
             <p class="subtle-text">Keep the current event details and editable fields on one card so the record stays easy to scan and easy to update.</p>
           </div>

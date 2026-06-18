@@ -7,20 +7,13 @@
 <main class="shell dashboard-shell">
   {{ render_admin_page_header(
     title='Content',
-    description='Manage structured brochure content while keeping layout, styling, and spacing inside the templates.',
+    description='Update website content from one place.',
     nav_mode='sub',
     return_url=url_for('admin.dashboard'),
     return_label='Back to Dashboard'
   ) }}
 
-  <section class="table-card">
-    <div class="section-bar">
-      <div>
-        <h2>Content areas</h2>
-        <p class="subtle-text">Keep imagery sharp, text concise, and the public presentation consistent.</p>
-      </div>
-    </div>
-
+  <section>
     <div class="content-management-list">
       {% for module in content_modules %}
         <a class="content-management-item" href="{{ module.manage_url }}">

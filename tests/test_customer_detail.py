@@ -24,8 +24,10 @@ def test_customer_list_hides_last_activity_column(client, app, admin_user):
     response = client.get('/admin/customers')
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert 'Customer directory' in body
+    assert '1 customer record' in body
     assert '<th>Last activity</th>' not in body
+    assert 'Sort by primary phone' in body
+    assert 'Sort by primary email' in body
 
 
 def test_customer_detail_loads_with_empty_related_data(client, app, admin_user):

@@ -103,6 +103,9 @@
             <a href="#billing">Billing</a>
           </p>
           <div class="customer-workflow-links customer-workflow-links--text">
+            {% if enable_scheduling %}
+              <strong>Workflow shortcuts</strong>
+            {% endif %}
             {% if enable_calendar and appointment_count %}
               <a href="{{ url_for('admin.calendar_view', view='list') }}">Open the full schedule</a>
             {% endif %}

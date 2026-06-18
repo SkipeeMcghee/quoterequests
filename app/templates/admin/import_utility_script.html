@@ -5,6 +5,23 @@
     return;
   }
 
+  let openImportModalCount = 0;
+
+  function setImportScrollLock(shouldLock) {
+    if (shouldLock) {
+      openImportModalCount += 1;
+      if (openImportModalCount === 1) {
+        document.body.classList.add('import-popup-open');
+      }
+      return;
+    }
+
+    openImportModalCount = Math.max(0, openImportModalCount - 1);
+    if (openImportModalCount === 0) {
+      document.body.classList.remove('import-popup-open');
+    }
+  }
+
   const steps = ['download', 'upload', 'preview', 'issues', 'confirm', 'summary'];
   const stepMeta = {
     download: { title: 'Download Template' },
@@ -427,21 +444,30 @@
     }
 
     function openModal() {
+      if (modal.open) {
+        return;
+      }
       resetState();
       if (typeof modal.showModal === 'function') {
         modal.showModal();
+        setImportScrollLock(true);
         return;
       }
       modal.setAttribute('open', 'open');
+      setImportScrollLock(true);
     }
 
     function closeModal() {
+      const wasOpen = modal.open || modal.hasAttribute('open');
       if (modal.open && typeof modal.close === 'function') {
         modal.close();
       } else {
         modal.removeAttribute('open');
+        if (wasOpen) {
+          setImportScrollLock(false);
+        }
+        resetState();
       }
-      resetState();
     }
 
     function updateFileName(file) {
@@ -662,6 +688,11 @@
     modal.addEventListener('cancel', function (event) {
       event.preventDefault();
       closeModal();
+    });
+
+    modal.addEventListener('close', function () {
+      setImportScrollLock(false);
+      resetState();
     });
 
     render();

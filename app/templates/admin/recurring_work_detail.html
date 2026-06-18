@@ -13,7 +13,10 @@
     return_url=recurring_return_url,
     return_label=recurring_return_label
   ) %}
-      <button type="button" class="btn btn-secondary" data-recurring-generated-open="recurring-generated-dialog">Synced Events</button>
+      {% if work.customer %}
+        <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id, _anchor='recurring-work') }}">View Customer</a>
+      {% endif %}
+      <button type="button" class="btn btn-secondary" data-recurring-generated-open="recurring-generated-dialog">View Synced Events</button>
   {% endcall %}
 
   <section class="summary-card recurring-plan-overview" id="plan-overview">

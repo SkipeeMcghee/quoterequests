@@ -81,6 +81,7 @@
                 </div>
                 <div class="agenda-event-title">{{ appt.customer.primary_name or appt.quote_request.full_name or 'Customer' }}</div>
                 <div class="agenda-event-subtitle">{{ appt.display_title }}</div>
+                <div class="agenda-event-note">Event #{{ appt.id }}</div>
                 {% if enable_staff_management and appt.assigned_staff %}
                   <div class="agenda-event-staff">
                     Assigned to
@@ -114,6 +115,7 @@
                 <div class="agenda-quick-item__time">{{ appt.start_time.strftime('%H:%M') }}&nbsp;–&nbsp;{{ appt.end_time.strftime('%H:%M') }}</div>
                 <div class="agenda-quick-item__copy">
                   <strong>{{ appt.display_title }}</strong>
+                  <span>Event #{{ appt.id }}</span>
                   <span>{{ appt.customer.primary_name or appt.quote_request.full_name or 'Customer' }}</span>
                   {% if enable_staff_management and appt.assigned_staff %}
                     <span>
@@ -146,6 +148,7 @@
               </div>
               <div class="stacked-content">
                 <p><strong>{{ appointment.display_title }}</strong></p>
+                <p class="subtle-text">Event #{{ appointment.id }}</p>
                 {% if enable_staff_management and appointment.assigned_staff %}
                   <p class="subtle-text">Assigned to
                     {% for staff in appointment.assigned_staff %}

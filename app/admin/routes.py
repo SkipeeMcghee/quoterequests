@@ -1058,7 +1058,7 @@ def content_index():
         content_modules.append(
             {
                 "title": "Gallery",
-                "description": "Manage public gallery images and short supporting text while leaving layout and styling in the templates.",
+                "description": "Add, edit, and organize gallery images.",
                 "manage_url": url_for("admin.gallery_content"),
                 "primary_metric": f"{active_count} active",
                 "secondary_metric": f"{featured_count} featured",
@@ -1072,7 +1072,7 @@ def content_index():
         content_modules.append(
             {
                 "title": "Services",
-                "description": "Keep the service catalog tidy for public intake forms and internal scheduling workflows.",
+                "description": "Add, edit, and organize services.",
                 "manage_url": url_for("admin.service_settings"),
                 "primary_metric": f"{active_count} active",
                 "secondary_metric": f"{archived_count} archived",
@@ -2575,7 +2575,7 @@ def recurring_work_list():
     works = list_recurring_works()
     if current_app.config.get("ENABLE_SCHEDULING"):
         for work in works:
-            sync_recurring_work_appointments(work.id)
+            sync_recurring_work_appointments(work.id, days_ahead=7)
         works = list_recurring_works()
 
     works = sorted(
@@ -2603,6 +2603,12 @@ def new_recurring_work(customer_id: int | None = None):
     customer = get_customer(customer_id) if customer_id is not None else None
     customer_options = _build_customer_options()
     form = RecurringWorkForm(prefix="recurring-work")
+
+    if customer is not None:
+        if form.customer_id.data in (None, ""):
+            form.customer_id.data = str(customer.id)
+        if not (form.customer_lookup.data or "").strip():
+            form.customer_lookup.data = customer.primary_name or ""
 
     if request.method == "GET":
         if form.frequency.data is None:
@@ -2651,7 +2657,7 @@ def new_recurring_work(customer_id: int | None = None):
                     notes=form.notes.data,
                 )
                 if current_app.config.get("ENABLE_SCHEDULING"):
-                    sync_recurring_work_appointments(work.id)
+                    sync_recurring_work_appointments(work.id, days_ahead=7)
                 flash("Recurring work saved.", "success")
                 return redirect(
                     url_for(
@@ -2684,7 +2690,7 @@ def recurring_work_detail(recurring_work_id: int):
     if days_ahead in {choice[0] for choice in generate_recurring_appointments_form.days_ahead.choices}:
         generate_recurring_appointments_form.days_ahead.data = days_ahead
     else:
-        days_ahead = "60"
+        days_ahead = "7"
 
     if current_app.config.get("ENABLE_SCHEDULING"):
         sync_recurring_work_appointments(work.id, days_ahead=int(days_ahead))
@@ -2778,7 +2784,7 @@ def edit_recurring_work_route(recurring_work_id: int):
                     customer_id=int(recurring_work_form.customer_id.data) if recurring_work_form.customer_id.data else None,
                 )
                 if current_app.config.get("ENABLE_SCHEDULING"):
-                    sync_recurring_work_appointments(recurring_work_id)
+                    sync_recurring_work_appointments(recurring_work_id, days_ahead=7)
                 work = get_recurring_work(recurring_work_id)
                 if is_ajax_request:
                     return jsonify(
@@ -2920,7 +2926,7 @@ def customer_detail(customer_id: int):
     customer = get_customer(customer_id)
     if current_app.config.get("ENABLE_RECURRING_WORK") and current_app.config.get("ENABLE_SCHEDULING"):
         for recurring_work in customer.recurring_works:
-            sync_recurring_work_appointments(recurring_work.id)
+            sync_recurring_work_appointments(recurring_work.id, days_ahead=7)
         customer = get_customer(customer_id)
 
     customer_info_form = CustomerInfoForm(
