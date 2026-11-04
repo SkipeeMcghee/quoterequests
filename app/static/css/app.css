@@ -1363,7 +1363,8 @@ textarea {
 .request-quote-tracking__contact-form {
   display: grid;
   gap: 0.2rem;
-  min-width: min(100%, 15rem);
+  width: min(100%, 15rem);
+  min-width: 0;
 }
 
 .request-quote-tracking__contact-form .form-field > span {
@@ -1724,6 +1725,7 @@ textarea {
 
 .section-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: start;
   justify-content: space-between;
   gap: 1rem;
@@ -1771,11 +1773,13 @@ textarea {
 
 .gallery-management-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
 .gallery-management-panel {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -1784,7 +1788,7 @@ textarea {
   align-items: center;
   justify-content: flex-end;
   gap: 0.6rem;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .gallery-management-toolbar .form-actions {
@@ -3251,7 +3255,7 @@ thead th {
 .customer-media-grid,
 .customer-record-layout {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   margin-bottom: 1rem;
 }
@@ -3350,7 +3354,16 @@ thead th {
 .customer-recurring-list,
 .customer-tool-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 1rem;
+}
+
+/* Grid items default to min-width:auto, so wide content (tables, long labels)
+   can force the track past the viewport instead of scrolling inside it. */
+.customer-record-layout__main > *,
+.customer-record-layout__side > * {
+  min-width: 0;
 }
 
 .customer-merge-flow {
@@ -3507,6 +3520,7 @@ thead th {
 
 .customer-aux-group {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
 }
 
@@ -3516,6 +3530,7 @@ thead th {
 
 .customer-aux-list {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
 }
 
@@ -3525,6 +3540,7 @@ thead th {
 .customer-billing-plan,
 .customer-recurring-empty {
   display: flex;
+  flex-wrap: wrap;
   align-items: start;
   justify-content: space-between;
   gap: 1rem;
@@ -3760,7 +3776,17 @@ thead th {
 .recurring-detail-card,
 .recurring-impact-card,
 .recurring-plan-actions-card {
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   align-content: start;
+}
+
+/* Long destructive-action labels must wrap instead of forcing the card past the
+   viewport edge on narrow screens. */
+.recurring-plan-actions-card .btn {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
 }
 
 .recurring-impact-grid {
@@ -3800,6 +3826,7 @@ thead th {
 
 .recurring-form-section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.85rem;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
@@ -3821,6 +3848,7 @@ thead th {
 
 .recurring-edit-context {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
 }
 
@@ -3903,7 +3931,7 @@ thead th {
 .recurring-weekday-picker,
 .recurring-monthday-picker {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(4.2rem, 1fr));
   gap: 0.35rem 0.25rem;
   justify-items: stretch;
   align-items: stretch;
@@ -5078,6 +5106,19 @@ thead th {
 .import-panel__lead p,
 .import-issue-card p {
   margin: 0;
+}
+
+/* Long unbreakable strings (emails, URLs, IDs) should wrap rather than widen
+   the page on narrow screens. */
+.dashboard-shell {
+  overflow-wrap: break-word;
+}
+
+/* A bare `display` value in author CSS overrides the UA stylesheet's
+   `dialog:not([open]) { display: none }`, which leaves closed dialogs in the
+   layout and can push the page wider than the viewport. */
+dialog:not([open]) {
+  display: none;
 }
 
 .gallery-dialog {

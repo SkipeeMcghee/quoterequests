@@ -577,6 +577,17 @@ MEASURE_JS = """
 () => {
   const vw = window.innerWidth;
   const doc = document.documentElement;
+  const clipped = (el) => {
+    // Content inside a scroll container is not page overflow - that is the
+    // container doing its job. Walk ancestors looking for a clipping box.
+    let node = el.parentElement;
+    while (node && node !== document.body) {
+      const style = getComputedStyle(node);
+      if (['auto', 'scroll', 'hidden', 'clip'].includes(style.overflowX)) return true;
+      node = node.parentElement;
+    }
+    return false;
+  };
   const offenders = [];
   for (const el of document.querySelectorAll('body *')) {
     const rect = el.getBoundingClientRect();
@@ -584,6 +595,7 @@ MEASURE_JS = """
     const style = getComputedStyle(el);
     if (style.visibility === 'hidden' || style.display === 'none') continue;
     if (rect.right > vw + 1 || rect.left < -1) {
+      if (clipped(el)) continue;
       offenders.push({
         tag: el.tagName.toLowerCase(),
         cls: (typeof el.className === 'string' ? el.className : '').slice(0, 70),
