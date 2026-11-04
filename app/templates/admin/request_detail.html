@@ -323,7 +323,7 @@
               <div class="request-photo-gallery__stage-frame">
                 <img
                   class="request-photo-gallery__stage-image"
-                  src="{{ url_for('static', filename=first_photo.file_path) }}"
+                  src="{{ media_url(first_photo.file_path) }}"
                   alt="Quote request photo 1"
                   data-gallery-stage
                 >
@@ -341,13 +341,13 @@
                     type="button"
                     class="request-photo-gallery__thumb{% if loop.first %} is-active{% endif %}"
                     data-gallery-thumb
-                    data-photo-src="{{ url_for('static', filename=photo.file_path) }}"
+                    data-photo-src="{{ media_url(photo.file_path) }}"
                     data-photo-alt="Quote request photo {{ loop.index }}"
                     aria-label="Show quote request photo {{ loop.index }}"
                     aria-pressed="{{ 'true' if loop.first else 'false' }}"
                   >
                     <img
-                      src="{{ url_for('static', filename=photo.file_path) }}"
+                      src="{{ media_url(photo.file_path) }}"
                       alt="Quote request photo {{ loop.index }} thumbnail"
                       {% if not loop.first %}loading="lazy"{% endif %}
                     >

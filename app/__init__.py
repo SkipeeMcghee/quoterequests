@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Flask, flash, jsonify, redirect, render_template, render_template_string, request, url_for
+from flask import Flask, abort, flash, jsonify, redirect, render_template, render_template_string, request, url_for
 from flask_login import current_user
 from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -18,6 +18,7 @@ from app.services.themes import (
     display_name as theme_display_name,
     get_active_slug as get_active_theme_slug,
 )
+from app.services.media import media_url
 
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -34,6 +35,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_legacy_admin_routes(app)
     register_login_manager()
     register_context_processors(app)
+    register_private_upload_guard(app)
     register_error_handlers(app)
     register_cli(app)
 
@@ -151,6 +153,24 @@ def _describe_service(service_name) -> str:
     )
 
 
+def register_private_upload_guard(app: Flask) -> None:
+    """Keep request/customer photos out of the public static route.
+
+    The files have to live under static/assets for the existing storage layout to keep
+    working, so the static route is blocked for the private categories and the admin
+    media route serves them to signed-in users instead.
+    """
+
+    from app.services.media import PRIVATE_UPLOAD_ROOTS
+
+    blocked_prefixes = tuple(f"/static/uploads/{root}/" for root in PRIVATE_UPLOAD_ROOTS)
+
+    @app.before_request
+    def block_public_uploads():
+        if request.path.startswith(blocked_prefixes):
+            abort(404)
+
+
 def register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_feature_flags() -> dict[str, object]:
@@ -177,6 +197,7 @@ def register_context_processors(app: Flask) -> None:
             "describe_service": _describe_service,
             "theme_css": css_variables(get_active_theme_slug(app)),
             "active_theme_name": theme_display_name(get_active_theme_slug(app)),
+            "media_url": media_url,
         }
 
 

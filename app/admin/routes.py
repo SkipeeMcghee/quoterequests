@@ -3369,3 +3369,20 @@ def appearance_settings():
         active_slug=get_active_slug(current_app),
         default_slug=DEFAULT_SLUG,
     )
+
+
+@bp.route("/media/<path:storage_path>")
+@login_required
+def uploaded_media(storage_path: str):
+    """Serve a private upload (request or customer photo) to a signed-in user only."""
+
+    from app.services.media import resolve_private_file
+
+    file_path = resolve_private_file(current_app.config["UPLOAD_FOLDER"], storage_path)
+    if file_path is None:
+        raise NotFound()
+
+    response = send_file(file_path, conditional=True)
+    response.headers["Cache-Control"] = "private, max-age=300"
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response

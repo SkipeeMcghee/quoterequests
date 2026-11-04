@@ -170,3 +170,19 @@ Verification before go-live:
 3. Confirm the admin notification arrives at `ADMIN_NOTIFICATION_EMAIL` with a working
    link to the request.
 4. Reply to the confirmation; it should reach `EMAIL_REPLY_TO` (or the from address).
+
+## Private Uploads
+
+Request and customer photos are stored under `app/static/uploads/`, but the static route
+no longer serves them: `/static/uploads/quote_requests/...` and
+`/static/uploads/customers/...` return 404 to everyone, signed in or not. They are served
+by `/admin/media/...` instead, which requires a login, refuses path traversal outside the
+uploads root, and marks responses `private` and `noindex`.
+
+Gallery images stay public under `/static/uploads/gallery/` - they are marketing assets.
+
+Verify after each deployment:
+
+1. Open a request with photos and confirm the thumbnails render.
+2. Copy a thumbnail's URL, open it in a private window - it must redirect to login.
+3. Take the same path but swap `/admin/media/` for `/static/uploads/` - it must 404.

@@ -1242,7 +1242,7 @@ def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_u
     request_detail_js = static_js(app, "pages/admin-request-detail.js")
     assert 'activeIndex = (activeIndex - 1 + thumbButtons.length) % thumbButtons.length;' in request_detail_js
     assert 'activeIndex = (activeIndex + 1) % thumbButtons.length;' in request_detail_js
-    assert f"/static/uploads/quote_requests/{request_id}/" in body
+    assert f"/admin/media/quote_requests/{request_id}/" in body
     assert "Quote request photo 1" in body
 
 

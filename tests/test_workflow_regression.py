@@ -408,7 +408,7 @@ def test_customer_record_workflow_end_to_end(client, app, admin_user):
     )
     assert response.status_code == 200
     photo_body = response.get_data(as_text=True)
-    assert "/static/uploads/" in photo_body
+    assert "/admin/media/customers/" in photo_body
 
     customer_schedule_url = f"/admin/scheduled-work/new?customer_id={customer_id}&source=customer"
     _assert_page_contract(

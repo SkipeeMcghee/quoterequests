@@ -164,8 +164,8 @@
       <div class="photo-grid">
         {% for photo in customer.photos %}
           {% if photo.file_path %}
-            <a class="photo-card" href="{{ url_for('static', filename=photo.file_path) }}" target="_blank" rel="noreferrer">
-              <img src="{{ url_for('static', filename=photo.file_path) }}" alt="Customer photo {{ loop.index }}">
+            <a class="photo-card" href="{{ media_url(photo.file_path) }}" target="_blank" rel="noreferrer">
+              <img src="{{ media_url(photo.file_path) }}" alt="Customer photo {{ loop.index }}">
             </a>
           {% else %}
             <div class="photo-card empty-state">Missing photo reference</div>
