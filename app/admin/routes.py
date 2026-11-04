@@ -3340,3 +3340,32 @@ def create_note(request_id: int):
         flash("Enter a note before saving.", "error")
 
     return redirect(url_for("admin.request_detail", request_id=request_id, _anchor="notes"))
+
+@bp.route("/settings/appearance", methods=["GET", "POST"])
+@login_required
+def appearance_settings():
+    """Internal theme library: pick the palette this site renders with."""
+
+    from app.services.themes import (
+        DEFAULT_SLUG,
+        get_active_slug,
+        get_theme,
+        load_themes,
+        set_active_slug,
+    )
+
+    if request.method == "POST":
+        slug = (request.form.get("theme_slug") or "").strip()
+        if get_theme(slug) is None:
+            flash("Pick a theme from the library.", "error")
+        else:
+            set_active_slug(current_app, slug)
+            flash(f"Appearance updated to {get_theme(slug)['name']}.", "success")
+        return redirect(url_for("admin.appearance_settings"))
+
+    return render_template(
+        "admin/appearance.html",
+        themes=load_themes(),
+        active_slug=get_active_slug(current_app),
+        default_slug=DEFAULT_SLUG,
+    )

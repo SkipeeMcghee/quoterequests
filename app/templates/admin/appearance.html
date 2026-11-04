@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Appearance | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main id="main" class="shell dashboard-shell">
+  <section class="section-intro">
+    <p class="eyebrow">Internal library</p>
+    <h1>Appearance</h1>
+    <p>Pick the palette this site uses. The choice is stored on the server and applies to every page immediately — no redeploy.</p>
+  </section>
+
+  <form method="post" class="stacked-form" data-appearance-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="form-field">
+      <label for="theme-slug">Theme</label>
+      <select id="theme-slug" name="theme_slug" class="select">
+        {% for theme in themes %}
+          <option value="{{ theme.slug }}" {% if theme.slug == active_slug %}selected{% endif %}>
+            {{ theme.name }}{% if theme.slug == default_slug %} (default){% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      <p class="subtle-text">Currently active: <strong>{{ active_theme_name }}</strong>. {{ themes|length }} palettes in the library.</p>
+    </div>
+
+    <div class="button-row">
+      <button type="submit" class="btn btn-primary">Apply theme</button>
+      <a class="btn btn-secondary" href="{{ url_for('admin.dashboard') }}">Back to requests</a>
+    </div>
+  </form>
+
+  <section class="summary-card">
+    <h2>Library</h2>
+    <div class="theme-swatch-grid">
+      {% for theme in themes %}
+        <article class="theme-swatch{% if theme.slug == active_slug %} theme-swatch--active{% endif %}">
+          <div class="theme-swatch__chips">
+            {% for color in theme.colors %}
+              <span class="theme-swatch__chip" style="background: {{ color }}" title="{{ color }}"></span>
+            {% endfor %}
+          </div>
+          <p class="theme-swatch__name">{{ theme.name }}</p>
+          <p class="subtle-text">{{ theme.slug }}</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+</main>
+{% endblock %}

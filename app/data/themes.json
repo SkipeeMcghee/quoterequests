@@ -1,0 +1,1002 @@
+[
+ {
+  "slug": "stormy-morning",
+  "name": "Stormy morning",
+  "colors": [
+   "#6A89A7",
+   "#BDDDFC",
+   "#88BDF2",
+   "#384959"
+  ]
+ },
+ {
+  "slug": "mossy-hollow",
+  "name": "Mossy hollow",
+  "colors": [
+   "#636B2F",
+   "#BAC095",
+   "#D4DE95",
+   "#3D4127"
+  ]
+ },
+ {
+  "slug": "blue-eclipse",
+  "name": "Blue eclipse",
+  "colors": [
+   "#272757",
+   "#8686AC",
+   "#505081",
+   "#0F0E47"
+  ]
+ },
+ {
+  "slug": "lush-forest",
+  "name": "Lush forest",
+  "colors": [
+   "#2E6F40",
+   "#CFFFDC",
+   "#68BA7F",
+   "#253D2C"
+  ]
+ },
+ {
+  "slug": "green-juice",
+  "name": "Green juice",
+  "colors": [
+   "#4CBB17",
+   "#48872B",
+   "#39542C",
+   "#293325"
+  ]
+ },
+ {
+  "slug": "chili-spice",
+  "name": "Chili spice",
+  "colors": [
+   "#CD1C18",
+   "#FFA896",
+   "#9B1313",
+   "#38000A"
+  ]
+ },
+ {
+  "slug": "chocolate-truffle",
+  "name": "Chocolate truffle",
+  "colors": [
+   "#713600",
+   "#C05800",
+   "#FDFBD4",
+   "#38240D"
+  ]
+ },
+ {
+  "slug": "ink-wash",
+  "name": "Ink wash",
+  "colors": [
+   "#4A4A4A",
+   "#CBCBCB",
+   "#FFFFE3",
+   "#6D8196"
+  ]
+ },
+ {
+  "slug": "golden-taupe",
+  "name": "Golden taupe",
+  "colors": [
+   "#D4AF37",
+   "#BDB76B",
+   "#FDFBD4",
+   "#CE8946"
+  ]
+ },
+ {
+  "slug": "wisteria-bloom",
+  "name": "Wisteria bloom",
+  "colors": [
+   "#D3D3FF",
+   "#9400D3",
+   "#D8BFD8",
+   "#ED80E9"
+  ]
+ },
+ {
+  "slug": "burnt-sienna",
+  "name": "Burnt sienna",
+  "colors": [
+   "#E35336",
+   "#F5F5DC",
+   "#F4A460",
+   "#A0522D"
+  ]
+ },
+ {
+  "slug": "blooming-romance",
+  "name": "Blooming romance",
+  "colors": [
+   "#660033",
+   "#E673AC",
+   "#469110",
+   "#00520A"
+  ]
+ },
+ {
+  "slug": "desert-dusk",
+  "name": "Desert dusk",
+  "colors": [
+   "#A2574F",
+   "#E68057",
+   "#BF7587",
+   "#993A8B"
+  ]
+ },
+ {
+  "slug": "lavender-fields",
+  "name": "Lavender fields",
+  "colors": [
+   "#FDFBD4",
+   "#BDB96A",
+   "#C1BFFF",
+   "#CF6DFC"
+  ]
+ },
+ {
+  "slug": "hydrangea",
+  "name": "Hydrangea",
+  "colors": [
+   "#FF8DA1",
+   "#FFC2BA",
+   "#FF9CE9",
+   "#AD56C4"
+  ]
+ },
+ {
+  "slug": "cactus-flower",
+  "name": "Cactus flower",
+  "colors": [
+   "#E491A6",
+   "#845763",
+   "#92E4BA",
+   "#90C67F"
+  ]
+ },
+ {
+  "slug": "wildflowers",
+  "name": "Wildflowers",
+  "colors": [
+   "#A8DCAB",
+   "#519755",
+   "#DBAAA7",
+   "#BE91BE"
+  ]
+ },
+ {
+  "slug": "country-garden",
+  "name": "Country garden",
+  "colors": [
+   "#FFFFE3",
+   "#DBD4FF",
+   "#808034",
+   "#723480"
+  ]
+ },
+ {
+  "slug": "lotus-garden",
+  "name": "Lotus garden",
+  "colors": [
+   "#ADEBB3",
+   "#FF857A",
+   "#EBAEE6",
+   "#6B403C"
+  ]
+ },
+ {
+  "slug": "iris-garden",
+  "name": "Iris garden",
+  "colors": [
+   "#A47DAB",
+   "#692475",
+   "#82AB7D",
+   "#6A6B4E"
+  ]
+ },
+ {
+  "slug": "fresh-peach",
+  "name": "Fresh peach",
+  "colors": [
+   "#FFD3AC",
+   "#FFB5AB",
+   "#E39A7B",
+   "#DBB06B"
+  ]
+ },
+ {
+  "slug": "golden-hour",
+  "name": "Golden hour",
+  "colors": [
+   "#FFBF00",
+   "#CFB53B",
+   "#E0B0FF",
+   "#CC5500"
+  ]
+ },
+ {
+  "slug": "spiced-chai",
+  "name": "Spiced chai",
+  "colors": [
+   "#FDFBD4",
+   "#D47E30",
+   "#8D5A2B",
+   "#825E34"
+  ]
+ },
+ {
+  "slug": "cherry-blossom",
+  "name": "Cherry blossom",
+  "colors": [
+   "#F2C7C7",
+   "#FFFFFF",
+   "#D5F3D8",
+   "#FFB7C5"
+  ]
+ },
+ {
+  "slug": "evening-rose",
+  "name": "Evening rose",
+  "colors": [
+   "#DCA1A1",
+   "#996666",
+   "#8E4585",
+   "#4A4A4A"
+  ]
+ },
+ {
+  "slug": "pastel-garden",
+  "name": "Pastel garden",
+  "colors": [
+   "#C75F71",
+   "#F0B8B8",
+   "#A2AE9D",
+   "#54463A"
+  ]
+ },
+ {
+  "slug": "tuscan-sunset",
+  "name": "Tuscan sunset",
+  "colors": [
+   "#E35336",
+   "#FFD3AC",
+   "#9988A1",
+   "#8A2B0E"
+  ]
+ },
+ {
+  "slug": "zesty-lemon",
+  "name": "Zesty lemon",
+  "colors": [
+   "#FFFF66",
+   "#FFE566",
+   "#D6D58B",
+   "#B3B347"
+  ]
+ },
+ {
+  "slug": "california-beaches",
+  "name": "California beaches",
+  "colors": [
+   "#FFC067",
+   "#66F4FF",
+   "#66C4FF",
+   "#7D99AA"
+  ]
+ },
+ {
+  "slug": "freshly-squeezed",
+  "name": "Freshly squeezed",
+  "colors": [
+   "#FFBF00",
+   "#F2CF7E",
+   "#FFE642",
+   "#FF7900"
+  ]
+ },
+ {
+  "slug": "pistachio-dream",
+  "name": "Pistachio dream",
+  "colors": [
+   "#80EF80",
+   "#E3F0A3",
+   "#BADBA2",
+   "#42D674"
+  ]
+ },
+ {
+  "slug": "mango-popsicle",
+  "name": "Mango popsicle",
+  "colors": [
+   "#F2B949",
+   "#EDD377",
+   "#F2E829",
+   "#F27430"
+  ]
+ },
+ {
+  "slug": "guava",
+  "name": "Guava",
+  "colors": [
+   "#FF8559",
+   "#FFB578",
+   "#E65447",
+   "#CF5376"
+  ]
+ },
+ {
+  "slug": "glowing-horizon",
+  "name": "Glowing horizon",
+  "colors": [
+   "#FFB343",
+   "#42EAFF",
+   "#4272FF",
+   "#FF7E42"
+  ]
+ },
+ {
+  "slug": "sunny-day",
+  "name": "Sunny day",
+  "colors": [
+   "#FFBF00",
+   "#807040",
+   "#007EFF",
+   "#2400FF"
+  ]
+ },
+ {
+  "slug": "retro-sunset",
+  "name": "Retro sunset",
+  "colors": [
+   "#BE5103",
+   "#FFCE1B",
+   "#069494",
+   "#B7410E"
+  ]
+ },
+ {
+  "slug": "bubblegum-pop",
+  "name": "Bubblegum pop",
+  "colors": [
+   "#FF69B4",
+   "#069494",
+   "#FFFFFF",
+   "#00F0FF"
+  ]
+ },
+ {
+  "slug": "cotton-candy-skies",
+  "name": "Cotton candy skies",
+  "colors": [
+   "#B298E7",
+   "#B8E3E9",
+   "#F5B8D5",
+   "#F9BEDD"
+  ]
+ },
+ {
+  "slug": "electric-kiwi",
+  "name": "Electric kiwi",
+  "colors": [
+   "#CCFF00",
+   "#FFFF00",
+   "#DFFF00",
+   "#000000"
+  ]
+ },
+ {
+  "slug": "watermelon-splash",
+  "name": "Watermelon splash",
+  "colors": [
+   "#FC6C85",
+   "#89F336",
+   "#4A4A4A",
+   "#ADEBB3"
+  ]
+ },
+ {
+  "slug": "alchemical-reaction",
+  "name": "Alchemical reaction",
+  "colors": [
+   "#9D00FF",
+   "#DE811D",
+   "#6BFF00",
+   "#5B8040"
+  ]
+ },
+ {
+  "slug": "electropop",
+  "name": "Electropop",
+  "colors": [
+   "#CCFF00",
+   "#FF6B00",
+   "#F900FF",
+   "#5200FF"
+  ]
+ },
+ {
+  "slug": "cool-revival",
+  "name": "Cool revival",
+  "colors": [
+   "#00FFFF",
+   "#00AEFF",
+   "#00DE94",
+   "#00FF52"
+  ]
+ },
+ {
+  "slug": "neon-jungle",
+  "name": "Neon jungle",
+  "colors": [
+   "#89F336",
+   "#38A711",
+   "#F23598",
+   "#A835F2"
+  ]
+ },
+ {
+  "slug": "sharp-edge",
+  "name": "Sharp edge",
+  "colors": [
+   "#898989",
+   "#D9D9D9",
+   "#FF4D4D",
+   "#4DFFBC"
+  ]
+ },
+ {
+  "slug": "electric-fusion",
+  "name": "Electric fusion",
+  "colors": [
+   "#00F0FF",
+   "#00FF81",
+   "#FFA900",
+   "#FF6800"
+  ]
+ },
+ {
+  "slug": "fireworks",
+  "name": "Fireworks",
+  "colors": [
+   "#ED2100",
+   "#E88A38",
+   "#960016",
+   "#BF00AC"
+  ]
+ },
+ {
+  "slug": "space-berries",
+  "name": "Space berries",
+  "colors": [
+   "#FD3DB5",
+   "#FFB8DC",
+   "#FB6A2C",
+   "#8C1946"
+  ]
+ },
+ {
+  "slug": "pop-art",
+  "name": "Pop art",
+  "colors": [
+   "#00F0FF",
+   "#FF46A2",
+   "#FFFF00",
+   "#EE4B2B"
+  ]
+ },
+ {
+  "slug": "urban-graffiti",
+  "name": "Urban graffiti",
+  "colors": [
+   "#FF2400",
+   "#2CFF05",
+   "#00F0FF",
+   "#5A5A5A"
+  ]
+ },
+ {
+  "slug": "neon-noir",
+  "name": "Neon noir",
+  "colors": [
+   "#000000",
+   "#2CFF05",
+   "#BF00FF",
+   "#2D2D2D"
+  ]
+ },
+ {
+  "slug": "tropical-punch",
+  "name": "Tropical punch",
+  "colors": [
+   "#FF8243",
+   "#FFC0CB",
+   "#FCE883",
+   "#069494"
+  ]
+ },
+ {
+  "slug": "cobalt-sky",
+  "name": "Cobalt sky",
+  "colors": [
+   "#0047AB",
+   "#000080",
+   "#82C8E5",
+   "#6D8196"
+  ]
+ },
+ {
+  "slug": "technicolor-dream",
+  "name": "Technicolor dream",
+  "colors": [
+   "#FF00FF",
+   "#00FFFF",
+   "#CCFF00",
+   "#191970"
+  ]
+ },
+ {
+  "slug": "jewel-box",
+  "name": "Jewel box",
+  "colors": [
+   "#50C878",
+   "#0F52BA",
+   "#9966CC",
+   "#CFB53B"
+  ]
+ },
+ {
+  "slug": "salt-and-pepper",
+  "name": "Salt and pepper",
+  "colors": [
+   "#FFFFFF",
+   "#D4D4D4",
+   "#B3B3B3",
+   "#2B2B2B"
+  ]
+ },
+ {
+  "slug": "quite-clear",
+  "name": "Quite clear",
+  "colors": [
+   "#CBCBCB",
+   "#F2F2F2",
+   "#174D38",
+   "#4D1717"
+  ]
+ },
+ {
+  "slug": "gothic-noir",
+  "name": "Gothic noir",
+  "colors": [
+   "#000000",
+   "#D1D0D0",
+   "#988686",
+   "#5C4E4E"
+  ]
+ },
+ {
+  "slug": "yacht-club",
+  "name": "Yacht club",
+  "colors": [
+   "#F2F0EF",
+   "#BBBDBC",
+   "#245F73",
+   "#733E24"
+  ]
+ },
+ {
+  "slug": "quiet-luxury",
+  "name": "Quiet luxury",
+  "colors": [
+   "#F7E6CA",
+   "#E8D59E",
+   "#D9BBB0",
+   "#AD9C8E"
+  ]
+ },
+ {
+  "slug": "night-sands",
+  "name": "Night sands",
+  "colors": [
+   "#CBBD93",
+   "#FAE8B4",
+   "#80775C",
+   "#574A24"
+  ]
+ },
+ {
+  "slug": "harbor-haze",
+  "name": "Harbor haze",
+  "colors": [
+   "#909EAE",
+   "#5C8DC5",
+   "#AD9E90",
+   "#736F60"
+  ]
+ },
+ {
+  "slug": "old-photograph",
+  "name": "Old photograph",
+  "colors": [
+   "#FDFBD4",
+   "#D9D7B6",
+   "#878672",
+   "#545333"
+  ]
+ },
+ {
+  "slug": "cappuccino",
+  "name": "Cappuccino",
+  "colors": [
+   "#D6B588",
+   "#C6C0B9",
+   "#705E46",
+   "#422701"
+  ]
+ },
+ {
+  "slug": "breakfast-tea",
+  "name": "Breakfast tea",
+  "colors": [
+   "#FFD3AC",
+   "#CCBEB1",
+   "#664C36",
+   "#331C08"
+  ]
+ },
+ {
+  "slug": "cozy-campfire",
+  "name": "Cozy campfire",
+  "colors": [
+   "#895129",
+   "#AD7A32",
+   "#8A6E29",
+   "#660F09"
+  ]
+ },
+ {
+  "slug": "stone-path",
+  "name": "Stone path",
+  "colors": [
+   "#A49A87",
+   "#A5A58D",
+   "#968F83",
+   "#E8E5DF"
+  ]
+ },
+ {
+  "slug": "desert-mirage",
+  "name": "Desert mirage",
+  "colors": [
+   "#C2B280",
+   "#E35336",
+   "#98A869",
+   "#272757"
+  ]
+ },
+ {
+  "slug": "honeycomb",
+  "name": "Honeycomb",
+  "colors": [
+   "#FFC107",
+   "#F9E076",
+   "#FFFDD0",
+   "#895129"
+  ]
+ },
+ {
+  "slug": "urban-loft",
+  "name": "Urban loft",
+  "colors": [
+   "#9C9A9A",
+   "#A35E47",
+   "#000000",
+   "#464646"
+  ]
+ },
+ {
+  "slug": "spiced-mocha",
+  "name": "Spiced mocha",
+  "colors": [
+   "#6F4E37",
+   "#D47E30",
+   "#F5F5DC",
+   "#6D3B07"
+  ]
+ },
+ {
+  "slug": "charming-seaside",
+  "name": "Charming seaside",
+  "colors": [
+   "#B3EBF2",
+   "#85D1DB",
+   "#B6F2D1",
+   "#C9FDF2"
+  ]
+ },
+ {
+  "slug": "calm-blue",
+  "name": "Calm blue",
+  "colors": [
+   "#90D5FF",
+   "#57B9FF",
+   "#77B1D4",
+   "#517891"
+  ]
+ },
+ {
+  "slug": "beachfront-views",
+  "name": "Beachfront views",
+  "colors": [
+   "#EDE8D0",
+   "#6E632E",
+   "#DBD1ED",
+   "#ABBEED"
+  ]
+ },
+ {
+  "slug": "under-the-moonlight",
+  "name": "Under the moonlight",
+  "colors": [
+   "#CCCCFF",
+   "#A3A3CC",
+   "#5C5C99",
+   "#292966"
+  ]
+ },
+ {
+  "slug": "lavender-lullaby",
+  "name": "Lavender lullaby",
+  "colors": [
+   "#B5C7EB",
+   "#9EF0FF",
+   "#A4A5F5",
+   "#8E70CF"
+  ]
+ },
+ {
+  "slug": "minty-fresh",
+  "name": "Minty fresh",
+  "colors": [
+   "#98FBCB",
+   "#BFFFED",
+   "#7FCFA8",
+   "#558B71"
+  ]
+ },
+ {
+  "slug": "retro-calm",
+  "name": "Retro calm",
+  "colors": [
+   "#81D8D0",
+   "#D99E82",
+   "#D7D982",
+   "#AE82D9"
+  ]
+ },
+ {
+  "slug": "siltstone",
+  "name": "Siltstone",
+  "colors": [
+   "#CBBD93",
+   "#FFF5B8",
+   "#FFB16E",
+   "#CCA25A"
+  ]
+ },
+ {
+  "slug": "emerald-odyssey",
+  "name": "Emerald odyssey",
+  "colors": [
+   "#00674F",
+   "#73E6CB",
+   "#3EBB9E",
+   "#0A3C30"
+  ]
+ },
+ {
+  "slug": "ocean-tide",
+  "name": "Ocean tide",
+  "colors": [
+   "#00D1D1",
+   "#4052D6",
+   "#00ADAD",
+   "#005C5C"
+  ]
+ },
+ {
+  "slug": "peach-skyline",
+  "name": "Peach skyline",
+  "colors": [
+   "#FFDBBB",
+   "#BADDFF",
+   "#BAFFF5",
+   "#496580"
+  ]
+ },
+ {
+  "slug": "mountain-mist",
+  "name": "Mountain mist",
+  "colors": [
+   "#6D8196",
+   "#B0C4DE",
+   "#01796F",
+   "#5A5A5A"
+  ]
+ },
+ {
+  "slug": "morning-dew",
+  "name": "Morning dew",
+  "colors": [
+   "#AFEEEE",
+   "#ADEBB3",
+   "#C4C4C4",
+   "#D3D3D3"
+  ]
+ },
+ {
+  "slug": "frozen-lake",
+  "name": "Frozen lake",
+  "colors": [
+   "#6D8196",
+   "#ADD8E6",
+   "#FFFAFA",
+   "#000080"
+  ]
+ },
+ {
+  "slug": "olive-grove",
+  "name": "Olive grove",
+  "colors": [
+   "#808000",
+   "#228B22",
+   "#636B2F",
+   "#F2F0EF"
+  ]
+ },
+ {
+  "slug": "coastal-morning",
+  "name": "Coastal morning",
+  "colors": [
+   "#93C572",
+   "#89CFF0",
+   "#F5F5DC",
+   "#82C8E5"
+  ]
+ },
+ {
+  "slug": "eucalyptus-grove",
+  "name": "Eucalyptus grove",
+  "colors": [
+   "#B2AC88",
+   "#898989",
+   "#F2F0EF",
+   "#4B6E48"
+  ]
+ },
+ {
+  "slug": "soft-spring",
+  "name": "Soft spring",
+  "colors": [
+   "#6395EE",
+   "#90B8D6",
+   "#88CFA8",
+   "#85DECB"
+  ]
+ },
+ {
+  "slug": "autumn-leaves",
+  "name": "Autumn leaves",
+  "colors": [
+   "#FFB343",
+   "#DB9A39",
+   "#B37E2E",
+   "#614419"
+  ]
+ },
+ {
+  "slug": "winter-chill",
+  "name": "Winter chill",
+  "colors": [
+   "#B8E3E9",
+   "#93B1B5",
+   "#4F7C82",
+   "#0B2E33"
+  ]
+ },
+ {
+  "slug": "spring-energy",
+  "name": "Spring energy",
+  "colors": [
+   "#89F336",
+   "#FFFC30",
+   "#4FE0CB",
+   "#00BF33"
+  ]
+ },
+ {
+  "slug": "pumpkin-spice-season",
+  "name": "Pumpkin spice season",
+  "colors": [
+   "#BE5103",
+   "#8C4C1F",
+   "#544823",
+   "#332216"
+  ]
+ },
+ {
+  "slug": "island-oasis",
+  "name": "Island oasis",
+  "colors": [
+   "#CCFF00",
+   "#FFF37E",
+   "#9DE05A",
+   "#FFAE25"
+  ]
+ },
+ {
+  "slug": "autumn-orchard",
+  "name": "Autumn orchard",
+  "colors": [
+   "#8E4585",
+   "#DAA520",
+   "#2E6F40",
+   "#660033"
+  ]
+ },
+ {
+  "slug": "tropical-rainforest",
+  "name": "Tropical rainforest",
+  "colors": [
+   "#50C878",
+   "#7E8C54",
+   "#4F7942",
+   "#71AA34"
+  ]
+ },
+ {
+  "slug": "wildflower-meadow",
+  "name": "Wildflower meadow",
+  "colors": [
+   "#FBF9E7",
+   "#FDB813",
+   "#82C8E5",
+   "#7CFC00"
+  ]
+ },
+ {
+  "slug": "harvest-moon",
+  "name": "Harvest moon",
+  "colors": [
+   "#800020",
+   "#FFCE1B",
+   "#A52A2A",
+   "#BE5103"
+  ]
+ },
+ {
+  "slug": "winter-berry",
+  "name": "Winter berry",
+  "colors": [
+   "#8E0A1E",
+   "#2E6F40",
+   "#ADD8E6",
+   "#FFFFFF"
+  ]
+ },
+ {
+  "slug": "summer-breeze",
+  "name": "Summer breeze",
+  "colors": [
+   "#FFEB3B",
+   "#F88379",
+   "#82C8E5",
+   "#E6D8C4"
+  ]
+ }
+]

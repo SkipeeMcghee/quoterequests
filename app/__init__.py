@@ -13,6 +13,11 @@ from app.admin import bp as admin_bp
 from app.cli import register_cli
 from app.services.gallery_catalog import has_public_gallery_items
 from app.services.service_catalog import list_active_services
+from app.services.themes import (
+    css_variables,
+    display_name as theme_display_name,
+    get_active_slug as get_active_theme_slug,
+)
 
 
 def create_app(config_name: str | None = None) -> Flask:
@@ -170,6 +175,8 @@ def register_context_processors(app: Flask) -> None:
             "enabled_social_links": _get_enabled_social_links(app),
             "services": _get_site_services(app),
             "describe_service": _describe_service,
+            "theme_css": css_variables(get_active_theme_slug(app)),
+            "active_theme_name": theme_display_name(get_active_theme_slug(app)),
         }
 
 

@@ -64,11 +64,17 @@ Last updated: 2026-11-04 (baseline `550baa1` + Phase 1 polish).
 | `/admin/content/gallery` | `ENABLE_GALLERY` | Empty, 30 items, reorder mode, upload errors, lightbox. |
 | `/admin/settings/services` | `ENABLE_SERVICES` | Empty, archived services, reorder mode. |
 | `/admin/imports/<type>/template.xlsx` | — | File download, not a page (sweep skips it). |
+| `/admin/settings/appearance` | — | Internal theme library: dropdown of 100 palettes, swatch grid, applied server-side to every page. Check: long option list, active swatch highlight, applying then reloading. |
 
 ## Known gaps logged here, not yet fixed
 
 - `QuoteRequestForm` defines `preferred_time` fields but `quote_request.html` never
   renders them — either surface them or delete the fields.
+- The theme library is light-UI only: several rules hard-code `rgba(255,255,255,…)`
+  surfaces, so dark palettes are deliberately lightened rather than rendered dark.
+  A true dark mode needs those surfaces converted to tokens first.
+- 42 lines of inline JS remain in `admin/customer_merge.html` (it builds a JSON map
+  with a Jinja loop); every other page's JS now lives in `app/static/js/`.
 - 12 hidden/JS-generated controls are labelled now, but the availability editor is
   mouse-first: keyboard reordering of time windows has no equivalent.
 - Contrast has not been measured against WCAG AA; the sweep only checks structure.

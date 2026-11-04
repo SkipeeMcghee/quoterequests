@@ -12,6 +12,11 @@ from app.models.user import User
 from app.services.recaptcha import RecaptchaVerificationResult
 
 
+def static_js(app, relative_path: str) -> str:
+    """Page behaviour lives in app/static/js now, so assert against the shipped file."""
+    return (Path(app.static_folder) / "js" / relative_path).read_text(encoding="utf-8")
+
+
 JPEG_BYTES = b"\xff\xd8\xff\xe0" + b"0" * 32
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"0" * 32
 
@@ -120,7 +125,9 @@ def test_quote_request_submission_requires_valid_recaptcha_when_enabled(client, 
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "We couldn't verify the spam protection check. Please try again." in body
+    assert "We couldn't verify the spam protection check. Please try again." in static_js(
+        app, "pages/main-quote-request.js"
+    )
 
     with app.app_context():
         assert QuoteRequest.query.count() == 0
@@ -1232,8 +1239,9 @@ def test_uploaded_files_appear_on_admin_request_detail_page(client, app, admin_u
     assert 'data-gallery-prev' in body
     assert 'data-gallery-next' in body
     assert body.count('aria-label="Show quote request photo ') == 2
-    assert 'activeIndex = (activeIndex - 1 + thumbButtons.length) % thumbButtons.length;' in body
-    assert 'activeIndex = (activeIndex + 1) % thumbButtons.length;' in body
+    request_detail_js = static_js(app, "pages/admin-request-detail.js")
+    assert 'activeIndex = (activeIndex - 1 + thumbButtons.length) % thumbButtons.length;' in request_detail_js
+    assert 'activeIndex = (activeIndex + 1) % thumbButtons.length;' in request_detail_js
     assert f"/static/uploads/quote_requests/{request_id}/" in body
     assert "Quote request photo 1" in body
 
@@ -1666,7 +1674,7 @@ def test_request_detail_manual_customer_combobox_renders_all_customer_options(cl
     assert 'Dana Customer' in body
     assert 'data-scroll-anchor="quotes"' in body
     assert 'data-scroll-anchor="notes"' in body
-    assert "admin-request-detail-scroll" in body
+    assert "admin-request-detail-scroll" in static_js(app, "pages/admin-request-detail.js")
     assert "request-detail-customer-panel" in body
 
 
