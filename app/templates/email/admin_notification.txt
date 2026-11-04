@@ -1,0 +1,19 @@
+New {{ quote_request.request_type|lower or 'quote' }} request from {{ quote_request.full_name }}
+
+Request number: {{ quote_request.request_number }}
+Services: {{ quote_request.service_list_display or '(none selected)' }}
+City: {{ quote_request.city }}
+Phone: {{ quote_request.phone or '(not provided)' }}
+Email: {{ quote_request.email or '(not provided)' }}
+Preferred date: {{ quote_request.preferred_date or '(flexible)' }}
+Preferred time: {{ quote_request.preferred_time or '(flexible)' }}
+Photos: {{ photo_count }}
+
+Notes from the customer:
+{{ quote_request.additional_notes or '(none)' }}
+
+Open the request:
+{{ request_url }}
+
+--
+Sent by {{ business_name }}

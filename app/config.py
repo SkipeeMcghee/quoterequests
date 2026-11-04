@@ -120,6 +120,20 @@ class Config:
     SOCIAL_LINKS = build_social_links()
     ADMIN_NOTIFICATION_EMAIL = os.getenv("ADMIN_NOTIFICATION_EMAIL", "admin@example.com")
     DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", BUSINESS_EMAIL)
+
+    # Transactional email. Off unless configured, so a fresh install never tries to
+    # talk to a mail server. Brevo: SMTP_HOST=smtp-relay.brevo.com, SMTP_PORT=587,
+    # SMTP_USERNAME=<login>, SMTP_PASSWORD=<SMTP key>.
+    EMAIL_ENABLED = parse_bool_env("EMAIL_ENABLED", False)
+    SMTP_HOST = (os.getenv("SMTP_HOST", "") or "").strip()
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587") or 587)
+    SMTP_USERNAME = (os.getenv("SMTP_USERNAME", "") or "").strip()
+    SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+    SMTP_USE_TLS = parse_bool_env("SMTP_USE_TLS", True)
+    SMTP_USE_SSL = parse_bool_env("SMTP_USE_SSL", False)
+    SMTP_TIMEOUT = int(os.getenv("SMTP_TIMEOUT", "10") or 10)
+    EMAIL_FROM_NAME = (os.getenv("EMAIL_FROM_NAME", "") or BUSINESS_NAME).strip()
+    EMAIL_REPLY_TO = (os.getenv("EMAIL_REPLY_TO", "") or "").strip()
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
     REMEMBER_COOKIE_HTTPONLY = True

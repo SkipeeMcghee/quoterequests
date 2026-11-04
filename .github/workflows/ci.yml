@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m pytest tests -q -p no:cacheprovider
+
+  ui-sweep:
+    name: UI sweep (390 / 1440)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install playwright
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Sweep every route
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python scripts/ui_sweep.py --widths 390,1440 --browser chromium
+
+      - name: Upload sweep report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-sweep-report
+          path: artifacts/ui-sweep/**/summary.md
+          if-no-files-found: warn

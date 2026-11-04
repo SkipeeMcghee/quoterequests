@@ -1,0 +1,22 @@
+{%- set business = business_name or 'the team' -%}
+Hi {{ quote_request.full_name }},
+
+Thanks for your request. We have it and someone will follow up using the contact
+details you gave us.
+
+Request summary
+  Request number: {{ quote_request.request_number }}
+  Services: {{ quote_request.service_list_display or 'to be confirmed' }}
+  Location: {{ quote_request.city }}
+  Preferred date: {{ quote_request.preferred_date or 'flexible' }}
+  Contact: {{ quote_request.email or quote_request.phone }}
+
+If anything above looks wrong, reply to this email and we will fix it.
+
+{{ business }}
+{% if phone %}{{ phone }}{% endif %}
+{% if email %}{{ email }}{% endif %}
+{% if service_area %}
+
+Service area: {{ service_area }}
+{% endif %}

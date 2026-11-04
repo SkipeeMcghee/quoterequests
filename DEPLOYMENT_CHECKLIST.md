@@ -142,3 +142,31 @@ Use that generated value as the production `SECRET_KEY` for that customer.
 - Do not reuse one `SECRET_KEY` across all customers.
 - Do not generate a new `SECRET_KEY` on every app startup.
 - Do not copy the local development `.env` directly into production without reviewing it.
+## Transactional Email
+
+Outbound mail is disabled unless `EMAIL_ENABLED=true`, so a misconfigured site fails
+quietly instead of blocking quote submissions.
+
+Required settings:
+
+- `EMAIL_ENABLED` — `true` to send at all.
+- `SMTP_HOST` / `SMTP_PORT` — for Brevo, `smtp-relay.brevo.com` and `587`.
+- `SMTP_USERNAME` / `SMTP_PASSWORD` — the Brevo SMTP login and **SMTP key** (not the
+  account password, and not the API key used for the HTTP API).
+- `SMTP_USE_TLS` — `true` for port 587 (STARTTLS). `SMTP_USE_SSL` is for implicit TLS
+  on 465; never set both.
+- `DEFAULT_FROM_EMAIL` — must be a sender Brevo has verified for that customer domain.
+- `ADMIN_NOTIFICATION_EMAIL` — where new requests are announced.
+- `EMAIL_FROM_NAME`, `EMAIL_REPLY_TO` — display name and optional reply address.
+
+Domain setup (Brevo): add the customer domain under Senders & Domains, publish the DKIM
+and SPF records, and wait for verification before the first send. Mail from an
+unverified domain lands in spam or gets rejected.
+
+Verification before go-live:
+
+1. Submit a real request through the public form using an address you can read.
+2. Confirm the customer confirmation arrives, with the request number and services.
+3. Confirm the admin notification arrives at `ADMIN_NOTIFICATION_EMAIL` with a working
+   link to the request.
+4. Reply to the confirmation; it should reach `EMAIL_REPLY_TO` (or the from address).
