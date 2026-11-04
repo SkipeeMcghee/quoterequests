@@ -186,3 +186,37 @@ Verify after each deployment:
 1. Open a request with photos and confirm the thumbnails render.
 2. Copy a thumbnail's URL, open it in a private window - it must redirect to login.
 3. Take the same path but swap `/admin/media/` for `/static/uploads/` - it must 404.
+
+## Migrations
+
+Rehearse before every deployment - `flask db upgrade` must never run for the first time
+on a customer's database.
+
+    .\.venv\Scripts\python.exe scripts\rehearse_migrations.py --smoke
+
+That builds the whole schema from scratch inside a throwaway schema in the target
+database, applies every migration, compares the result against the models, and writes a
+customer/request/appointment through the ORM. It exits non-zero on drift, then drops the
+throwaway schema.
+
+Known drift at the time of writing: `appointments.requested_time_window` and
+`appointments.confirmed_time_window` exist in the database but not in the models - they
+are nullable with no default, so they are dead weight rather than a breakage. Removing
+them needs its own migration and a data check.
+
+## Backups
+
+    .\.venv\Scripts\python.exe scripts\backup.py --out D:\backups\customer-name --keep 14
+    .\.venv\Scripts\python.exe scripts\restore_check.py
+
+The first command writes `database.dump` (pg_dump custom format), `uploads.tar.gz` and a
+`manifest.json` with checksums, the alembic revision and row counts, then prunes old
+runs. The second verifies a backup by restoring it into a scratch schema, comparing row
+counts against the manifest and dropping the scratch schema - it never touches live data.
+
+Run the backup nightly (Windows Task Scheduler or cron) and **run the restore check at
+least weekly** - an unverified backup is a rumour. Keep at least one copy off the
+application host.
+
+Requires the PostgreSQL client tools (`pg_dump`, `pg_restore`, `psql`). Set `PG_BIN` if
+they are not on PATH.

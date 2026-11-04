@@ -13,3 +13,6 @@ tmp_*
 *.log
 *.err
 *_output.txt
+
+# backup output (dumps contain customer data, never commit)
+backups/
