@@ -67,12 +67,31 @@ Last updated: 2026-11-04 (baseline `550baa1` + Phase 1 polish).
 | `/admin/settings/appearance` | — | Internal theme library: dropdown of 100 palettes, swatch grid, applied server-side to every page. Check: long option list, active swatch highlight, applying then reloading. |
 
 ## Known gaps logged here, not yet fixed
-
 - `QuoteRequestForm` defines `preferred_time` fields but `quote_request.html` never
   renders them — either surface them or delete the fields.
 - The theme library is light-UI only: several rules hard-code `rgba(255,255,255,…)`
   surfaces, so dark palettes are deliberately lightened rather than rendered dark.
   A true dark mode needs those surfaces converted to tokens first.
+
+## Review log
+
+Pass of 2026-11-04: all 102 screenshots (34 routes × 390/768/1440) reviewed via
+contact sheets, plus contrast and keyboard probes.
+
+Fixed in that pass:
+- Home hero stayed two-column at phone width (heading squeezed into half the screen).
+- Schedule toolbar: view toggle, month nav and action buttons collided at 390px; the
+  month heading is now on its own row and the buttons stack.
+- Customers table: percentage columns collapsed to slivers; it now keeps a 44rem
+  minimum and scrolls inside its card.
+- Muted text (`--muted`) was 0.72 alpha — 3.42:1 on the page background. Raised to
+  0.88, which clears 4.5:1 while staying visibly lighter than body text.
+- Theme accent had only a 3:1 target, but it is used for link text and for button
+  backgrounds carrying white text; raised to 4.5:1 in both directions, verified
+  across all 100 palettes.
+
+Not defects (found and dismissed): gallery thumbnails look blank because the seeded
+demo data points every item at the white logo file, not because images fail.
 - 42 lines of inline JS remain in `admin/customer_merge.html` (it builds a JSON map
   with a Jinja loop); every other page's JS now lives in `app/static/js/`.
 - 12 hidden/JS-generated controls are labelled now, but the availability editor is

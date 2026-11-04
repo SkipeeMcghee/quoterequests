@@ -23,7 +23,9 @@ THEMES_PATH = Path(__file__).resolve().parents[1] / "data" / "themes.json"
 DEFAULT_SLUG = "quite-clear"
 
 MIN_TEXT_CONTRAST = 7.0
-MIN_ACCENT_CONTRAST = 3.0
+# Accent is used for link text and for button backgrounds carrying white text, so it
+# has to clear normal-text contrast in both directions.
+MIN_ACCENT_CONTRAST = 4.5
 MIN_BACKGROUND_LUMINANCE = 0.72
 
 
@@ -85,6 +87,18 @@ def _contrast_until(color: str, background: str, target: float) -> str:
     return direction
 
 
+def _white_text_safe(color: str, target: float) -> str:
+    """Buttons paint white text on the brand/accent colour, so it has to be dark enough."""
+
+    if contrast_ratio("#FFFFFF", color) >= target:
+        return color
+    for step in range(1, 21):
+        candidate = mix(color, "#000000", step / 20)
+        if contrast_ratio("#FFFFFF", candidate) >= target:
+            return candidate
+    return "#000000"
+
+
 @lru_cache(maxsize=1)
 def load_themes() -> tuple[dict, ...]:
     raw = json.loads(THEMES_PATH.read_text(encoding="utf-8"))
@@ -115,8 +129,10 @@ def build_roles(colors: list[str]) -> dict[str, str]:
     card = _lighten_until(mix(background, "#FFFFFF", 0.5), MIN_BACKGROUND_LUMINANCE + 0.05)
     card_solid = _lighten_until(mix(background, "#FFFFFF", 0.78), MIN_BACKGROUND_LUMINANCE + 0.1)
     neutral = _contrast_until(darkest, background, MIN_TEXT_CONTRAST)
-    brand = _contrast_until(darkest, background, MIN_TEXT_CONTRAST)
-    accent = _contrast_until(second_darkest, background, MIN_ACCENT_CONTRAST)
+    brand = _white_text_safe(_contrast_until(darkest, background, MIN_TEXT_CONTRAST), MIN_TEXT_CONTRAST)
+    accent = _white_text_safe(
+        _contrast_until(second_darkest, background, MIN_ACCENT_CONTRAST), MIN_ACCENT_CONTRAST
+    )
 
     return {
         "background": background,

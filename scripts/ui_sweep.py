@@ -610,6 +610,77 @@ MEASURE_JS = """
   const controls = [...document.querySelectorAll('input, select, textarea')].filter(
     (el) => !['hidden', 'submit', 'button', 'checkbox', 'radio'].includes(el.type)
   );
+
+  // ---- contrast audit -------------------------------------------------
+  const parseColor = (value) => {
+    const match = value && value.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/);
+    if (!match) return null;
+    return {
+      r: Number(match[1]), g: Number(match[2]), b: Number(match[3]),
+      a: match[4] === undefined ? 1 : Number(match[4]),
+    };
+  };
+  const luminance = ({ r, g, b }) => {
+    const channel = (v) => {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  };
+  const ratio = (first, second) => {
+    const a = luminance(first);
+    const b = luminance(second);
+    const [high, low] = a > b ? [a, b] : [b, a];
+    return (high + 0.05) / (low + 0.05);
+  };
+  const effectiveBackground = (el) => {
+    let node = el;
+    while (node && node !== document.documentElement) {
+      const style = getComputedStyle(node);
+      const parsed = parseColor(style.backgroundColor);
+      if (parsed && parsed.a >= 0.85) return parsed;
+      node = node.parentElement;
+    }
+    return { r: 255, g: 255, b: 255, a: 1 };
+  };
+  const composite = (foreground, background) => ({
+    r: foreground.r * foreground.a + background.r * (1 - foreground.a),
+    g: foreground.g * foreground.a + background.g * (1 - foreground.a),
+    b: foreground.b * foreground.a + background.b * (1 - foreground.a),
+    a: 1,
+  });
+  const contrastIssues = [];
+  for (const el of document.querySelectorAll('body *')) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) continue;
+    const style = getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none' || Number(style.opacity) < 0.5) continue;
+    const ownText = [...el.childNodes]
+      .filter((node) => node.nodeType === 3 && node.textContent.trim().length > 2)
+      .map((node) => node.textContent.trim())
+      .join(' ');
+    if (!ownText) continue;
+    const foreground = parseColor(style.color);
+    if (!foreground) continue;
+    if (foreground.a < 0.6) continue;
+    const background = effectiveBackground(el);
+    const fontSize = parseFloat(style.fontSize) || 16;
+    const bold = Number(style.fontWeight) >= 700;
+    const large = fontSize >= 24 || (bold && fontSize >= 18.66);
+    const minimum = large ? 3 : 4.5;
+    const value = ratio(composite(foreground, background), background);
+    if (value < minimum) {
+      contrastIssues.push({
+        ratio: Math.round(value * 100) / 100,
+        minimum,
+        text: ownText.slice(0, 40),
+        color: style.color,
+        background: `rgb(${background.r}, ${background.g}, ${background.b})`,
+        source: (el.tagName.toLowerCase() + '.' + (typeof el.className === 'string' ? el.className : '')).slice(0, 50),
+      });
+    }
+  }
+  contrastIssues.sort((a, b) => a.ratio - b.ratio);
   return {
     title: document.title,
     viewport: vw,
@@ -641,6 +712,8 @@ MEASURE_JS = """
                       !(el.querySelector('img[alt]') && el.querySelector('img[alt]').alt))
       .length,
     siteConfigLeak: document.body.innerText.includes('placeholder-business'),
+    contrastIssues: contrastIssues.slice(0, 6),
+    contrastIssueCount: contrastIssues.length,
     mainVisible: (() => {
       const main = document.querySelector('main');
       if (!main) return false;
@@ -857,6 +930,14 @@ def classify(record: dict) -> list[tuple[str, str]]:
         issues.append(("warn", "no visible <main> landmark"))
     if metrics.get("siteConfigLeak"):
         issues.append(("warn", "placeholder text leaked into the page"))
+    for item in metrics.get("contrastIssues", []):
+        issues.append(
+            (
+                "warn",
+                f"contrast {item['ratio']}:1 below {item['minimum']} for "
+                f"\"{item['text']}\" ({item['color']} on {item['background']}, {item['source']})",
+            )
+        )
     return issues
 
 

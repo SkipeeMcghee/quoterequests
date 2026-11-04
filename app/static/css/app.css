@@ -12,7 +12,7 @@
   --card: #f2f2f2;
   --card-solid: #fbfbfb;
   --text: var(--theme-neutral);
-  --muted: rgba(var(--theme-neutral-rgb), 0.72);
+  --muted: rgba(var(--theme-neutral-rgb), 0.88);
   --line: rgba(var(--theme-neutral-rgb), 0.2);
   --accent: var(--theme-accent);
   --accent-strong: var(--theme-brand);
@@ -1121,6 +1121,10 @@ textarea {
 }
 
 @media (max-width: 720px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .brochure-grid--two,
   .brochure-grid--three,
   .gallery-grid,
@@ -3479,6 +3483,9 @@ thead th {
 
 .customer-list-table {
   table-layout: fixed;
+  /* Below this the percentage columns collapse into unreadable slivers; the
+     surrounding .table-scroll takes over instead of squeezing the text. */
+  min-width: 44rem;
 }
 
 .customer-list-table th,
@@ -6233,4 +6240,88 @@ body.import-popup-open {
 .theme-swatch__name {
   margin: 0;
   font-weight: 700;
+}
+
+/* Narrow-screen overrides live at the end of the file: the schedule toolbar's base
+   rules appear later than the old 720px block, so equal-specificity overrides must
+   come after them to win. */
+@media (max-width: 720px) {
+  .calendar-period-nav {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .schedule-view-panel__toolbar,
+  .schedule-view-panel__toolbar--calendar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .schedule-view-panel__toolbar--calendar .schedule-toolbar-group {
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 720px) {
+  .schedule-view-panel__toolbar--calendar .schedule-toolbar-group {
+    width: 100%;
+  }
+
+  .schedule-view-toggle {
+    width: 100%;
+  }
+
+  .schedule-view-toggle .btn {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .calendar-period-nav {
+    width: 100%;
+  }
+
+  .calendar-nav__arrow {
+    padding-inline: 0.5rem;
+  }
+
+  .schedule-period-heading {
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+}
+
+@media (max-width: 720px) {
+  /* The month heading shrinks to fit in the desktop layout; on a phone it gets its
+     own row instead of being clipped to "Novemb..." between the arrows. */
+  .calendar-period-nav {
+    grid-auto-rows: min-content;
+  }
+
+  .calendar-period-nav .schedule-period-heading {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin-bottom: 0.3rem;
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .calendar-period-nav .calendar-nav__arrow {
+    grid-row: 2;
+  }
+
+  .calendar-period-nav .calendar-nav__arrow:first-of-type {
+    grid-column: 1;
+  }
+
+  .calendar-period-nav .calendar-nav__arrow:last-of-type {
+    grid-column: 3;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Two-up buttons do not fit a phone-width card with these labels; stack them. */
+  .schedule-view-toggle .btn,
+  .schedule-toolbar-group--action .btn {
+    flex: 1 1 100%;
+    justify-content: center;
+    white-space: normal;
+  }
 }

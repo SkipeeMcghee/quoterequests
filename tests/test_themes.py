@@ -38,8 +38,12 @@ def test_every_palette_produces_a_light_surface_and_readable_text():
             failures.append((theme["slug"], "background too dark"))
         if contrast_ratio(roles["neutral"], roles["background"]) < 7:
             failures.append((theme["slug"], "text contrast below 7:1"))
-        if contrast_ratio(roles["accent"], roles["background"]) < 3:
-            failures.append((theme["slug"], "accent contrast below 3:1"))
+        if contrast_ratio(roles["accent"], roles["background"]) < 4.5:
+            failures.append((theme["slug"], "accent text contrast below 4.5:1"))
+        if contrast_ratio("#FFFFFF", roles["accent"]) < 4.5:
+            failures.append((theme["slug"], "white on accent below 4.5:1"))
+        if contrast_ratio("#FFFFFF", roles["brand"]) < 4.5:
+            failures.append((theme["slug"], "white on brand below 4.5:1"))
 
     assert failures == []
 
