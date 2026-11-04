@@ -37,6 +37,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_context_processors(app)
     register_private_upload_guard(app)
     register_rate_limiting(app)
+    register_proxy_fix(app)
     register_error_handlers(app)
     register_cli(app)
 
@@ -175,6 +176,23 @@ def register_private_upload_guard(app: Flask) -> None:
     def block_public_uploads():
         if request.path.startswith(blocked_prefixes):
             abort(404)
+
+
+def register_proxy_fix(app: Flask) -> None:
+    """Trust one layer of reverse-proxy headers when TRUST_PROXY is on.
+
+    nginx terminates TLS and forwards X-Forwarded-For/Proto/Host. Without this the app
+    thinks every request came from 127.0.0.1 over http, which breaks per-client rate
+    limiting and secure-cookie checks. Off by default: trusting these headers without a
+    proxy in front lets a client spoof its own address.
+    """
+
+    if not app.config.get("TRUST_PROXY"):
+        return
+
+    from werkzeug.middleware.proxy_fix import ProxyFix
+
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
 
 def register_rate_limiting(app: Flask) -> None:

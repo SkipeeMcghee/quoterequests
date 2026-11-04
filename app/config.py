@@ -139,6 +139,10 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = "Lax"
 
+    # Set true only when nginx (or another reverse proxy) sits in front and sets
+    # X-Forwarded-For/Proto. Off by default so a client cannot spoof its own address.
+    TRUST_PROXY = parse_bool_env("TRUST_PROXY", False)
+
     # Anonymous-form throttling. Counters are per process; see app/services/rate_limit.py.
     RATE_LIMIT_ENABLED = parse_bool_env("RATE_LIMIT_ENABLED", True)
     RATE_LIMIT_FORM_REQUESTS = int(os.getenv("RATE_LIMIT_FORM_REQUESTS", "5") or 5)

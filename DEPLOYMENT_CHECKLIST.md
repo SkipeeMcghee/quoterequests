@@ -253,3 +253,24 @@ Verify after deployment:
    429 page with a Retry-After header.
 2. Try ten wrong admin passwords: further attempts should be refused the same way.
 3. Upload a file larger than 25 MB: expect the 413 page, not a 500.
+
+## Reverse Proxy And Hosting
+
+Target: a DigitalOcean droplet (or similar Linux host) running nginx in front of gunicorn.
+
+- Full first-boot runbook: `deploy/README.md`.
+- Files: `deploy/gunicorn.conf.py` (loopback bind, 2 workers, 4 threads),
+  `deploy/quoterequests.service` (systemd, hardened), `deploy/nginx-quoterequests.conf`
+  (TLS, security headers, proxy headers, private-upload block).
+- Server dependencies: `requirements-server.txt` (adds gunicorn).
+
+Two settings matter and are easy to get wrong:
+
+1. `TRUST_PROXY=true` in production. Without it the app sees every request as
+   127.0.0.1 over http, so per-client rate limiting collapses to one shared bucket and
+   secure-cookie checks misfire.
+2. nginx must set `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host` and
+   `X-Forwarded-Port`. The shipped config does.
+
+gunicorn binds 127.0.0.1:8000 only. Never open that port in the firewall - nginx is the
+only thing that should reach it.

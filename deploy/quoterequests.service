@@ -1,0 +1,33 @@
+[Unit]
+Description=Quote Requests (gunicorn)
+After=network.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=quoterequests
+Group=quoterequests
+WorkingDirectory=/srv/quoterequests
+EnvironmentFile=/srv/quoterequests/.env
+ExecStart=/srv/quoterequests/.venv/bin/gunicorn --config deploy/gunicorn.conf.py wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=35
+Restart=always
+RestartSec=5
+
+# Hardening: the app only needs to read its own tree and write uploads/instance.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/quoterequests/app/static/uploads /srv/quoterequests/instance
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
