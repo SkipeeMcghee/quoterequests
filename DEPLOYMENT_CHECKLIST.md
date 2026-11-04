@@ -220,3 +220,36 @@ application host.
 
 Requires the PostgreSQL client tools (`pg_dump`, `pg_restore`, `psql`). Set `PG_BIN` if
 they are not on PATH.
+
+## Rate Limiting And Upload Caps
+
+Anonymous POSTs are throttled inside the app, with no external dependency:
+
+- `RATE_LIMIT_FORM_REQUESTS` per `RATE_LIMIT_FORM_WINDOW_SECONDS` for `/quote-request`
+  and `/schedule-work` (default 5 per 10 minutes, per client IP).
+- `RATE_LIMIT_LOGIN_REQUESTS` per `RATE_LIMIT_LOGIN_WINDOW_SECONDS` for the admin login
+  (default 10 per 5 minutes).
+- `GET` requests are never counted. Over-limit requests get a branded 429 page and a
+  `Retry-After` header.
+- `X-Forwarded-For` is honoured, so the limit works behind nginx - make sure the proxy
+  sets that header and the app is not directly reachable from the internet.
+
+Two limits worth understanding before trusting it:
+
+1. Counters live in the worker process. With gunicorn running several workers, each keeps
+   its own tally, so the effective limit is roughly `workers x limit`. Either run one
+   worker or treat this as a speed bump next to reCAPTCHA. If exact limits are ever
+   required, the fixed-window store in `app/services/rate_limit.py` can be swapped for
+   Redis without touching the callers.
+2. Counters reset when the app restarts.
+
+Upload size is capped by `MAX_CONTENT_LENGTH` (25 MB per request, across all photos on
+one submission). Oversized uploads get the branded 413 page. Individual images are still
+validated by extension and by file signature.
+
+Verify after deployment:
+
+1. Submit the quote form six times in a row from one machine: the sixth should show the
+   429 page with a Retry-After header.
+2. Try ten wrong admin passwords: further attempts should be refused the same way.
+3. Upload a file larger than 25 MB: expect the 413 page, not a 500.

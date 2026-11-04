@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Too many requests | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main id="main" class="shell narrow-shell">
+  <section class="section-intro">
+    <p class="eyebrow">429 — slow down</p>
+    <h1>That was a lot of attempts.</h1>
+    <p>
+      We limit how often this form can be submitted from one connection to keep spam out.
+      Give it a few minutes and try again{% if retry_after %} — about {{ retry_after }} seconds{% endif %}.
+    </p>
+  </section>
+
+  <div class="detail-actions">
+    <a class="btn btn-primary" href="{{ url_for('main.index') }}">Back to the home page</a>
+    {% if phone %}<a class="btn btn-secondary" href="tel:{{ phone }}">Call {{ phone }}</a>{% endif %}
+  </div>
+</main>
+{% endblock %}

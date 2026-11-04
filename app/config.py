@@ -94,7 +94,7 @@ class Config:
         "https://www.google.com/recaptcha/api/siteverify",
     ).strip()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    MAX_CONTENT_LENGTH = 100 * 1024 * 1024
+    MAX_CONTENT_LENGTH = 25 * 1024 * 1024
     UPLOAD_FOLDER = str(BASE_DIR / "app" / "static" / "uploads")
     ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
     ENABLE_GALLERY = parse_bool_env("ENABLE_GALLERY", False)
@@ -139,6 +139,13 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SAMESITE = "Lax"
 
+    # Anonymous-form throttling. Counters are per process; see app/services/rate_limit.py.
+    RATE_LIMIT_ENABLED = parse_bool_env("RATE_LIMIT_ENABLED", True)
+    RATE_LIMIT_FORM_REQUESTS = int(os.getenv("RATE_LIMIT_FORM_REQUESTS", "5") or 5)
+    RATE_LIMIT_FORM_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_FORM_WINDOW_SECONDS", "600") or 600)
+    RATE_LIMIT_LOGIN_REQUESTS = int(os.getenv("RATE_LIMIT_LOGIN_REQUESTS", "10") or 10)
+    RATE_LIMIT_LOGIN_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_LOGIN_WINDOW_SECONDS", "300") or 300)
+
     @staticmethod
     def validate() -> None:
         return None
@@ -162,6 +169,7 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     TESTING = True
     WTF_CSRF_ENABLED = False
+    RATE_LIMIT_ENABLED = False
     SOCIAL_LINKS_PREVIEW = False
     ENABLE_GALLERY = False
     ENABLE_SERVICES = False

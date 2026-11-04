@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Flask, abort, flash, jsonify, redirect, render_template, render_template_string, request, url_for
+from flask import Flask, abort, flash, jsonify, make_response, redirect, render_template, render_template_string, request, url_for
 from flask_login import current_user
 from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -36,6 +36,7 @@ def create_app(config_name: str | None = None) -> Flask:
     register_login_manager()
     register_context_processors(app)
     register_private_upload_guard(app)
+    register_rate_limiting(app)
     register_error_handlers(app)
     register_cli(app)
 
@@ -174,6 +175,22 @@ def register_private_upload_guard(app: Flask) -> None:
     def block_public_uploads():
         if request.path.startswith(blocked_prefixes):
             abort(404)
+
+
+def register_rate_limiting(app: Flask) -> None:
+    """Throttle the two anonymous POST endpoints and the login form."""
+
+    from app.services.rate_limit import check_rate_limit
+
+    @app.before_request
+    def enforce_rate_limits():
+        verdict = check_rate_limit()
+        if verdict is None:
+            return None
+        retry_after, _limit = verdict
+        response = make_response(render_template("errors/429.html", retry_after=retry_after), 429)
+        response.headers["Retry-After"] = str(retry_after)
+        return response
 
 
 def register_context_processors(app: Flask) -> None:
