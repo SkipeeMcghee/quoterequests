@@ -6,3 +6,10 @@ __pycache__/
 *.sqlite3
 instance/
 app/static/uploads/quote_requests/
+
+# scratch / run output (never commit these)
+artifacts/
+tmp_*
+*.log
+*.err
+*_output.txt
