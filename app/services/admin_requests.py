@@ -922,19 +922,32 @@ def merge_customers(source_customer_id: int, target_customer_id: int) -> Custome
 
         if field.is_primary and field.kind in target_primary_by_kind:
             field.is_primary = False
-        field.customer_id = target.id
+        target.fields.append(field)
         target_field_keys.add(key)
         if field.is_primary:
             target_primary_by_kind[field.kind] = field
 
-    for note in source.notes:
-        note.customer_id = target.id
+    for note in list(source.notes):
+        target.notes.append(note)
 
-    for address in source.addresses:
-        address.customer_id = target.id
+    for address in list(source.addresses):
+        target.addresses.append(address)
 
-    for quote_request in source.quote_requests:
-        quote_request.customer_id = target.id
+    for quote_request in list(source.quote_requests):
+        target.quote_requests.append(quote_request)
+
+    # Photos, recurring plans and appointments are customer-owned records. Photos and
+    # plans cascade-delete with the customer, and appointments fall back to NULL, so a
+    # merge without this quietly destroyed history. Move them through the relationship
+    # (not just the FK) so the delete-orphan cascade does not claim them.
+    for photo in list(source.photos):
+        target.photos.append(photo)
+
+    for recurring_work in list(source.recurring_works):
+        target.recurring_works.append(recurring_work)
+
+    for appointment in list(source.appointments):
+        target.appointments.append(appointment)
 
     target.sync_primary_name()
     db.session.delete(source)

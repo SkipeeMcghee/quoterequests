@@ -80,7 +80,12 @@ def register_login_manager() -> None:
 
     @login_manager.user_loader
     def load_user(user_id: str) -> User | None:
-        return db.session.get(User, int(user_id))
+        user = db.session.get(User, int(user_id))
+        # A deactivated account must not keep a live session: Flask-Login only checks
+        # is_active at login time, so revoke it here on every request instead.
+        if user is None or not user.is_active:
+            return None
+        return user
 
 
 def _get_site_services(app: Flask):
