@@ -4,7 +4,7 @@
 {% block title %}{{ 'New staff member' if is_new else 'Edit staff member' }}{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Add Staff Member' if is_new else 'Edit Staff Member',
     description='Create or update staff contact details, compensation, status, services, and staff notes.',

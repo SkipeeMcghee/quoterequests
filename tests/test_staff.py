@@ -200,7 +200,7 @@ def test_staff_detail_prioritizes_workflow_sections(client, app, admin_user):
     assert body.count("Weekly availability") == 1
     assert "Hours Last Week" not in body
     assert "Hours This Week" not in body
-    assert "Scheduled Hours by Date Range" in body
+    assert "Scheduled hours by date range" in body
     assert "Filter scheduled hours" not in body
     assert "All Dates" in body
     assert "Preset" in body
@@ -211,14 +211,14 @@ def test_staff_detail_prioritizes_workflow_sections(client, app, admin_user):
     assert "Last Month to Date" in body
     assert 'data-scheduled-hours-filter' in body
     assert 'data-scheduled-hours-preset' in body
-    assert "Update Scheduled Hours" not in body
+    assert "Update Scheduled hours" not in body
     assert "Total scheduled hours" not in body
     assert "Scheduled hours this week" not in body
     assert "Scheduled hours this month" not in body
     assert "Assigned scheduled work" in body
     assert "Recently completed scheduled work" in body
     assert "Add weekly availability" in body
-    assert body.index("Add weekly availability") < body.index("Scheduled Hours by Date Range") < body.index("Assigned scheduled work")
+    assert body.index("Add weekly availability") < body.index("Scheduled hours by date range") < body.index("Assigned scheduled work")
     assert "Drag across a day to add availability." in body
     assert 'data-availability-board' in body
     assert 'data-availability-manual-days' in body

@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
     <div class="page-shell">
       {% block site_header %}
         {% set is_admin_workspace = current_user.is_authenticated and request.blueprint == 'admin' %}

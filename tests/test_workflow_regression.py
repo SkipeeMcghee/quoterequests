@@ -732,10 +732,10 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
         client,
         recurring_detail_url,
         back_label="Back to Customer",
-        expected_text=("Synced Events", "Window Cleaning"),
+        expected_text=("Synced events", "Window Cleaning"),
     )
     assert f"Linked request #{request_id}" in recurring_detail_body
-    assert "View Synced Events" in recurring_detail_body
+    assert "View Synced events" in recurring_detail_body
     assert "Back to Customer Record" not in recurring_detail_body
     assert "Calendar View" not in recurring_detail_body
     assert "List View" not in recurring_detail_body
@@ -752,7 +752,7 @@ def test_recurring_work_workflow_end_to_end(client, app, admin_user):
         client,
         f"/admin/recurring-work/{recurring_work_id}?source=customer&customer_id={customer_id}",
         back_label="Back to Customer",
-        expected_text=("Synced Events",),
+        expected_text=("Synced events",),
     )
     assert f"/admin/appointments/{appointment_id}?source=day" in generated_detail_body
 
@@ -807,7 +807,7 @@ def test_staff_assignment_workflow_end_to_end(client, app, admin_user):
         client,
         f"/admin/staff/{staff_id}",
         back_label="Back to Staff",
-        expected_text=("Services they can perform", "Weekly availability", "Scheduled Hours by Date Range"),
+        expected_text=("Services they can perform", "Weekly availability", "Scheduled hours by date range"),
     )
     assert "No upcoming assigned scheduled work." in staff_detail_body
 
@@ -845,7 +845,7 @@ def test_staff_assignment_workflow_end_to_end(client, app, admin_user):
         client,
         f"/admin/staff/{staff_id}",
         back_label="Back to Staff",
-        expected_text=("Assigned scheduled work", f"Event #{appointment_id}", "Scheduled Hours by Date Range"),
+        expected_text=("Assigned scheduled work", f"Event #{appointment_id}", "Scheduled hours by date range"),
     )
     assert "2.0" in updated_staff_body
 

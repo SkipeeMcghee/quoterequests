@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from flask import Flask, flash, jsonify, redirect, render_template_string, request, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, render_template_string, request, url_for
+from flask_login import current_user
 from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -203,6 +204,20 @@ def register_error_handlers(app: Flask) -> None:
             </html>""",
             error=error,
         ), 413
+
+    @app.errorhandler(404)
+    def handle_not_found(error):
+        if request.path.startswith("/admin") and not current_user.is_authenticated:
+            return redirect(url_for("admin.admin_entry"))
+        return render_template("errors/404.html"), 404
+
+    @app.errorhandler(500)
+    def handle_server_error(error):
+        app.logger.exception("Unhandled error while serving %s", request.path)
+        try:
+            return render_template("errors/500.html"), 500
+        except Exception:  # noqa: BLE001 - the error page must never raise
+            return "Something went wrong. Please try again.", 500
 
 
 def _ensure_runtime_directories(app: Flask) -> None:

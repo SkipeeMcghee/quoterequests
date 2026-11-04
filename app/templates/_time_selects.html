@@ -6,8 +6,8 @@
       <span>{{ label }}</span>
     {% endif %}
     <div class="time-select-row">
-      {{ hour_field(class_="select") }}
-      {{ minute_field(class_="select") }}
+      {{ hour_field(class_="select", aria_label=label ~ " hour") }}
+      {{ minute_field(class_="select", aria_label=label ~ " minutes") }}
     </div>
     {% for error in hour_field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
   </label>

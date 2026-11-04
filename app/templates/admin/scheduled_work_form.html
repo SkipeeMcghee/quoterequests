@@ -6,7 +6,7 @@
 {% block title %}Create Scheduled Event{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% set show_new_customer_section = (not form.customer_id.data) or form.new_customer_name.data or form.new_customer_city.data or form.new_customer_phone.data or form.new_customer_email.data or form.new_customer_name.errors or form.new_customer_city.errors or form.customer_id.errors %}
   {% set show_optional_section = form.internal_notes.data %}
   {% call render_admin_page_header(

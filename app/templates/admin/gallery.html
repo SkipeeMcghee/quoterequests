@@ -4,7 +4,7 @@
 {% block title %}Gallery | Admin{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Gallery',
     description='Manage public gallery imagery with focused upload and arrangement controls, plus inline autosave for the supporting details.',
@@ -215,7 +215,7 @@
     <div class="gallery-lightbox__card gallery-lightbox__card--image-only" role="dialog" aria-modal="true" aria-label="Gallery image preview">
       <button type="button" class="gallery-lightbox__close" data-gallery-lightbox-close aria-label="Close image preview">&times;</button>
       <div class="gallery-lightbox__image-frame">
-        <img src="" alt="" data-gallery-lightbox-image>
+        <img alt="" data-gallery-lightbox-image>
       </div>
     </div>
   </dialog>

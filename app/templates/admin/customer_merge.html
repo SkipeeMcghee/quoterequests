@@ -4,7 +4,7 @@
 {% block title %}Merge customer: {{ source.primary_name or 'Unnamed' }}{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% set selected_target = namespace(customer=none) %}
   {% for target in targets %}
     {% if target.id == merge_form.target_customer_id.data %}

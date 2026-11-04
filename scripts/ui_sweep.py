@@ -620,11 +620,13 @@ MEASURE_JS = """
     h1: [...document.querySelectorAll('h1')].map((el) => el.textContent.trim().slice(0, 90)),
     h2Count: document.querySelectorAll('h2').length,
     brokenImages: images
+      .filter((img) => img.hasAttribute('src') || img.hasAttribute('srcset'))
       .filter((img) => !img.complete || img.naturalWidth === 0)
       .map((img) => img.currentSrc || img.src)
       .slice(0, 8),
     imagesWithoutAlt: images.filter((img) => !img.hasAttribute('alt')).length,
     unlabeledControls: controls
+      .filter((el) => el.offsetParent !== null)
       .filter((el) => {
         if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')) return false;
         if (el.labels && el.labels.length) return false;

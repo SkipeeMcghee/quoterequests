@@ -5,7 +5,7 @@
 {% block title %}{{ staff_member.display_name }}{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Staff Details',
     description='Review contact details, weekly availability, assigned scheduled work, and scheduled hours for planning.' if not enable_services else 'Review contact details, service coverage, weekly availability, assigned scheduled work, and scheduled hours for planning.',
@@ -221,7 +221,7 @@
 
     <article class="summary-card staff-scheduled-hours">
       <div class="section-bar compact-bar">
-        <h2>Scheduled Hours by Date Range</h2>
+        <h2>Scheduled hours by date range</h2>
       </div>
       <div class="staff-hours-stack">
         <article class="staff-hours-card">
@@ -788,6 +788,14 @@
     Object.keys(datasetValues).forEach(function (key) {
       select.dataset[key] = datasetValues[key];
     });
+
+    // Two selects inside one wrapping label only labels the first one, so each
+    // boundary/part pair names itself.
+    if (datasetValues.manualPart) {
+      const boundaryLabel = datasetValues.manualBoundary === 'start' ? 'Start time' : 'End time';
+      const partLabel = datasetValues.manualPart === 'hour' ? 'hour' : 'minutes';
+      select.setAttribute('aria-label', boundaryLabel + ' ' + partLabel);
+    }
 
     options.forEach(function (option) {
       const optionElement = document.createElement('option');

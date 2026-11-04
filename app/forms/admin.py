@@ -215,9 +215,9 @@ class CustomerInfoForm(FlaskForm):
     individual_name = StringField("Individual name", validators=[Optional(), Length(max=255)])
     business_name = StringField("Business name", validators=[Optional(), Length(max=255)])
     display_name_preference = SelectField("Display name", choices=[("individual", "Individual name")], validators=[Optional()])
-    primary_phone = StringField("Phone", validators=[Optional(), Length(max=50)])
-    primary_email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
-    primary_city = StringField("City", validators=[DataRequired(), Length(max=255)])
+    primary_phone = StringField("Phone", validators=[Optional(), Length(max=50)], render_kw={"type": "tel", "inputmode": "tel", "autocomplete": "tel"})
+    primary_email = StringField("Email", validators=[Optional(), Length(max=255), Email()], render_kw={"type": "email", "inputmode": "email", "autocomplete": "email"})
+    primary_city = StringField("City", validators=[DataRequired(), Length(max=255)], render_kw={"autocomplete": "address-level2"})
     submit = SubmitField("Save Customer")
 
     def __init__(self, *args, **kwargs):
@@ -263,7 +263,7 @@ class CustomerAddressForm(FlaskForm):
     address_line_1 = StringField("Address Line 1", validators=[Optional(), Length(max=255)])
     address_line_2 = StringField("Address Line 2", validators=[Optional(), Length(max=255)])
     state = StringField("State", validators=[Optional(), Length(max=255)])
-    zip_code = StringField("Zip", validators=[Optional(), Length(max=20)])
+    zip_code = StringField("Zip", validators=[Optional(), Length(max=20)], render_kw={"inputmode": "numeric", "autocomplete": "postal-code"})
     is_billing = BooleanField("Mark as billing address", validators=[Optional()])
     submit = SubmitField("Add Address")
 
@@ -318,9 +318,9 @@ class MergeCustomerForm(FlaskForm):
 
 
 class StaffMemberForm(FlaskForm):
-    display_name = StringField("Name", validators=[DataRequired(), Length(max=255)])
-    phone = StringField("Phone", validators=[Optional(), Length(max=50)])
-    email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
+    display_name = StringField("Name", validators=[DataRequired(), Length(max=255)], render_kw={"autocomplete": "name"})
+    phone = StringField("Phone", validators=[Optional(), Length(max=50)], render_kw={"type": "tel", "inputmode": "tel", "autocomplete": "tel"})
+    email = StringField("Email", validators=[Optional(), Length(max=255), Email()], render_kw={"type": "email", "inputmode": "email", "autocomplete": "email"})
     worker_type = SelectField(
         "Worker type",
         choices=[("employee", "Employee"), ("contractor", "Contractor")],
@@ -441,9 +441,9 @@ class CreateScheduledWorkForm(TimeSelectMixin, FlaskForm):
     customer_id = SelectField("Customer", coerce=int, validators=[Optional()])
     customer_lookup = StringField("Customer", validators=[Optional()])
     new_customer_name = StringField("New customer name", validators=[Optional(), Length(max=255)])
-    new_customer_phone = StringField("Phone", validators=[Optional(), Length(max=50)])
-    new_customer_email = StringField("Email", validators=[Optional(), Length(max=255), Email()])
-    new_customer_city = StringField("City", validators=[Optional(), Length(max=255)])
+    new_customer_phone = StringField("Phone", validators=[Optional(), Length(max=50)], render_kw={"type": "tel", "inputmode": "tel", "autocomplete": "tel"})
+    new_customer_email = StringField("Email", validators=[Optional(), Length(max=255), Email()], render_kw={"type": "email", "inputmode": "email", "autocomplete": "email"})
+    new_customer_city = StringField("City", validators=[Optional(), Length(max=255)], render_kw={"autocomplete": "address-level2"})
     title = StringField("Work title / summary", validators=[DataRequired(), Length(max=255)])
     service_ids = SelectMultipleField(
         "Services",

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Page not found | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main id="main" class="shell narrow-shell">
+  <section class="section-intro">
+    <p class="eyebrow">404 — page not found</p>
+    <h1>That page doesn't exist.</h1>
+    <p>The link may be out of date, or the page may have moved. Everything you need is reachable from here.</p>
+  </section>
+
+  <div class="detail-actions">
+    <a class="btn btn-primary" href="{{ url_for('main.index') }}">Back to the home page</a>
+    <a class="btn btn-secondary" href="{{ url_for('main.quote_request') }}">Request a quote</a>
+  </div>
+</main>
+{% endblock %}

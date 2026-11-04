@@ -5,7 +5,7 @@
 {% block title %}Staff{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Staff',
     description='Review staff contact details, weekly availability, scheduled hours, and assigned work.' if not enable_services else 'Review staff contact details, service coverage, weekly availability, scheduled hours, and assigned work.',

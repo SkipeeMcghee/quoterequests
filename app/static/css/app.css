@@ -6174,3 +6174,24 @@ body.import-popup-open {
     grid-template-columns: 1fr;
   }
 }
+
+/* Keyboard users get a way past the navigation on every page. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+  padding: 0.75rem 1.1rem;
+  border-radius: 0 0 14px 0;
+  background: var(--accent-strong);
+  color: #ffffff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  left: 0;
+  outline: 3px solid #ffffff;
+  outline-offset: -6px;
+}

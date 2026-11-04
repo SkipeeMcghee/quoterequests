@@ -6,7 +6,7 @@
 {% block title %}Scheduled Event{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% set location = appointment.quote_request.city if appointment.quote_request and appointment.quote_request.city else appointment.customer.primary_city if appointment.customer and appointment.customer.primary_city else None %}
   {% call render_admin_page_header(
     title=appointment.display_title,

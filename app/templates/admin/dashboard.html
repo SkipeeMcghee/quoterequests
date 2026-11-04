@@ -4,7 +4,7 @@
 {% block title %}Admin Dashboard{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% set request_colspan = 5 if enable_services else 4 %}
   {% call render_admin_page_header(
     title='Requests',
@@ -170,7 +170,7 @@
   <dialog class="rq-filter-modal" id="rq-filter-modal" aria-modal="true" aria-labelledby="rq-filter-modal-title">
     <div class="rq-filter-modal__card">
       <div class="rq-filter-modal__header">
-        <h3 class="rq-filter-modal__title" id="rq-filter-modal-title">Filter &amp; Sort</h3>
+        <h3 class="rq-filter-modal__title" id="rq-filter-modal-title">Filter &amp; sort</h3>
         <button type="button" class="rq-filter-modal__close" id="rq-filter-modal-close" aria-label="Close filter panel">&#xD7;</button>
       </div>
       <form class="rq-filter-modal__form" id="rq-filter-form" novalidate>

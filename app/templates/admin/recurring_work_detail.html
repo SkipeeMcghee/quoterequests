@@ -5,7 +5,7 @@
 {% block title %}Recurring work #{{ work.plan_id }}{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Recurring Work Details',
     description='Edit this repeating service plan and keep its scheduled events aligned automatically.',
@@ -16,7 +16,7 @@
       {% if work.customer %}
         <a class="btn btn-secondary" href="{{ url_for('admin.customer_detail', customer_id=work.customer.id, _anchor='recurring-work') }}">View Customer</a>
       {% endif %}
-      <button type="button" class="btn btn-secondary" data-recurring-generated-open="recurring-generated-dialog">View Synced Events</button>
+      <button type="button" class="btn btn-secondary" data-recurring-generated-open="recurring-generated-dialog">View Synced events</button>
   {% endcall %}
 
   <section class="summary-card recurring-plan-overview" id="plan-overview">
@@ -262,7 +262,7 @@
     <div class="gallery-dialog__card" role="dialog" aria-modal="true" aria-labelledby="recurring-generated-title">
       <header class="gallery-dialog__header">
         <div class="gallery-dialog__copy">
-          <h2 id="recurring-generated-title">Synced Events</h2>
+          <h2 id="recurring-generated-title">Synced events</h2>
           <p class="subtle-text">Review the child events this plan owns. Adjust how far ahead these synced events are generated and see the impact of your recurring plan changes.</p>
           <div class="recurring-generated-dialog__metrics">
             <div>

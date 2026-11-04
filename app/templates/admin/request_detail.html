@@ -6,7 +6,7 @@
 {% block title %}{{ quote_request.request_reference }}{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% call render_admin_page_header(
     title=quote_request.request_reference,
     description='Review this request, link it to a customer, or schedule the work.',

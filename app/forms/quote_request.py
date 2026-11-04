@@ -17,10 +17,10 @@ class QuoteRequestForm(TimeSelectMixin, FlaskForm):
         "preferred_time": {"label": "preferred time"},
     }
 
-    full_name = StringField("Name", validators=[DataRequired(), Length(max=255)])
-    phone = StringField("Phone", validators=[Optional(), Length(max=50)])
-    email = EmailField("Email", validators=[Optional(), Length(max=255)])
-    city = StringField("Location", validators=[DataRequired(), Length(max=255)])
+    full_name = StringField("Name", validators=[DataRequired(), Length(max=255)], render_kw={"autocomplete": "name"})
+    phone = StringField("Phone", validators=[Optional(), Length(max=50)], render_kw={"type": "tel", "inputmode": "tel", "autocomplete": "tel"})
+    email = EmailField("Email", validators=[Optional(), Length(max=255)], render_kw={"inputmode": "email", "autocomplete": "email"})
+    city = StringField("Location", validators=[DataRequired(), Length(max=255)], render_kw={"autocomplete": "address-level2"})
     preferred_date = DateField("Preferred date", validators=[Optional()])
     preferred_time_hour = SelectField("Preferred time hour", validators=[Optional()])
     preferred_time_minute = SelectField("Preferred time minute", validators=[Optional()])

@@ -4,7 +4,7 @@
 {% block title %}Customer: {{ customer.primary_name or 'Unnamed' }}{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% set request_count = request_history|length %}
   {% set appointment_count = appointments|length %}
   {% set note_count = customer_notes|length %}

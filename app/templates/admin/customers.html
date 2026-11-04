@@ -5,7 +5,7 @@
 {% block title %}Customer records{% endblock %}
 
 {% block content %}
-<main class="shell dashboard-shell">
+<main id="main" class="shell dashboard-shell">
   {% call render_admin_page_header(
     title='Customers',
     description=(customers|length ~ ' customer record' ~ ('s' if customers|length != 1 else '')),
@@ -139,7 +139,7 @@
   <dialog class="rq-filter-modal" id="customer-filter-modal" aria-modal="true" aria-labelledby="customer-filter-modal-title">
     <div class="rq-filter-modal__card">
       <div class="rq-filter-modal__header">
-        <h3 class="rq-filter-modal__title" id="customer-filter-modal-title">Filter &amp; Sort</h3>
+        <h3 class="rq-filter-modal__title" id="customer-filter-modal-title">Filter &amp; sort</h3>
         <button type="button" class="rq-filter-modal__close" id="customer-filter-modal-close" aria-label="Close customer filter panel">&#xD7;</button>
       </div>
       <form class="rq-filter-modal__form" id="customer-filter-form" novalidate>

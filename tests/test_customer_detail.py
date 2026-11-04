@@ -530,14 +530,14 @@ def test_recurring_work_detail_shows_generation_links_and_customer_context(clien
 
     body = response.get_data(as_text=True)
     assert 'Back to Customer' in body
-    assert 'View Synced Events' in body
+    assert 'View Synced events' in body
     assert body.count('View Customer') == 1
     assert 'Schedule sync' in body
     assert 'Update synced window' in body
     assert 'Archive Plan and Remove Future Managed Events' in body
     assert 'Mark Exception' in body
     assert 'Save Recurring Work' not in body
-    assert 'Synced Events' in body
+    assert 'Synced events' in body
     assert 'Back to Customer Record' not in body
     assert 'Calendar View' not in body
     assert 'List View' not in body
