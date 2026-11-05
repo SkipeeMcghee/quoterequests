@@ -58,20 +58,31 @@ pytest · GitHub Actions · gunicorn + nginx in production.
 ## Quick start (Windows)
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-
-# optional: only needed to run the UI sweep
-python -m pip install playwright
-
-copy .env.example .env      # then edit: SECRET_KEY, DATABASE_URL, BUSINESS_*
-python -m flask --app run.py db upgrade
-python -m flask --app run.py create-admin
-python -m flask --app run.py run
+.\scripts\dev_setup.ps1
+Copy-Item .env.example .env  # do not overwrite an existing .env
 ```
 
-Then open <http://127.0.0.1:5000/>. The admin lives at `/admin`.
+Use Python 3.12 for a fresh development environment. The bootstrap is repeatable,
+works from any working directory, installs runtime/dev dependencies and Chromium, checks
+dependency consistency, and runs a short readiness test set. If local execution policy
+blocks the script, run `powershell -ExecutionPolicy Bypass -File scripts\dev_setup.ps1`
+for that invocation only. It never edits `.env` or customer databases.
+
+Edit `.env`: set a random `SECRET_KEY`, `DATABASE_URL=sqlite+pysqlite:///platform.sqlite3`
+for local maintenance binding, and `TENANT_REGISTRY_FILE=tenants.json`. Keep email off
+for demo data. Then use the venv interpreter (activation is optional):
+
+```powershell
+.\.venv\Scripts\python.exe -m flask --app run.py tenant create demo --domain localhost --demo
+.\.venv\Scripts\python.exe -m flask --app run.py create-admin --tenant demo --email owner@example.test
+.\.venv\Scripts\python.exe -m flask --app run.py seed-demo --tenant demo
+.\.venv\Scripts\python.exe -m flask --app run.py run
+```
+
+Open <http://localhost:5000/> and log in at `/admin` using the prompted password.
+`localhost` is the configured domain here; `127.0.0.1` intentionally fails closed unless
+also registered with repeated `--domain`. For production use separate PostgreSQL
+databases, real domains, TLS, and the deployment runbook rather than this SQLite example.
 
 If your database is already behind the migration head, `db upgrade` is the fix — the app
 does not migrate itself on boot.
@@ -196,10 +207,21 @@ python -m flask --app run.py db -x tenant=alpha upgrade
 Passwords are prompted invisibly. `--admin-password` (provisioning) or `--password`
 (admin creation) is available for automation, but avoid secrets in shell history.
 `create-admin` and `create-dev-admin` both accept `--tenant`; omitting it only works with
-the automatic default tenant. The UI demo seeder remains a disposable test-data tool,
-not a production fleet command.
+the automatic default tenant. `seed-demo --tenant <slug>` adds synthetic services,
+customers, requests across statuses, quote records, appointments, and a labeled gallery
+illustration. Re-running does not duplicate the demo. Existing business data is refused
+unless you use the guarded reset workflow; admin accounts are always preserved.
 
-`tenant create` accepts repeated `--domain`, an optional `--settings` JSON object, and
+Mark only disposable tenants with `"DEMO_TENANT": true` in their settings. Reset one with
+`flask seed-demo --tenant demo --reset`; this deletes its business records and referenced
+upload files, then reseeds it. It never resets another tenant, changes themes/settings,
+or sends notification emails. Schedule that command against a dedicated demo tenant;
+do not give prospects administrative access to real customer tenants.
+Non-demo resets require **both** `--force --confirm <exact slug>` and are destructive.
+Take a tenant backup first. The separate UI sweep seeder remains disposable test tooling.
+
+`tenant create` accepts repeated `--domain`, `--demo` (disposable with email disabled),
+an optional `--settings` JSON object, and
 `--database-uri`. Without a URI it creates
 `instance/tenants/<slug>/tenant.sqlite3`; in-memory SQLite cannot be provisioned.
 For production, pre-create a dedicated PostgreSQL database and supply its SQLAlchemy
@@ -312,6 +334,36 @@ The sweep boots its own seeded SQLite database, logs in through the real form, a
 horizontal overflow, WCAG contrast failures, broken images, unlabeled controls, JS errors
 and failed requests — with a full-page screenshot per route per width. `--matrix` sweeps
 the feature-flag presets. CI runs both jobs on every push.
+
+Runtime packages (including `openpyxl` for spreadsheet imports) are pinned in
+`requirements.txt`; `requirements-dev.txt` includes runtime packages plus pytest and
+Playwright. CI uses the same dev manifest. Run `python -m pip check` after installation.
+
+### Monitoring and exception reporting
+
+`GET /healthz` returns exactly `{"status":"ok"}` with 200, even without a registered
+tenant host. It performs no database query and is exempt from rate limiting. This is a
+platform responsiveness check, not proof that every tenant database is ready.
+`GET /healthz?db=1` requires a registered, enabled host and executes a small query only
+against that tenant; unknown hosts fail closed and database failures return JSON 503.
+
+Production requests emit JSON logs to the existing application log stream with level,
+timestamp, request ID, endpoint/status, and tenant scope. Responses include
+`X-Request-ID`; request bodies/cookies and exception values are not added to monitoring
+events. Configure retention and restricted access in your server log collector.
+
+Optionally set `ERROR_WEBHOOK_URL` to a trusted HTTPS endpoint. Unset means no outbound
+reporting. Unhandled exceptions send only exception class, request ID, and tenant slug,
+not names, form data, credentials, paths, or stack traces. Delivery has a short timeout;
+failure is logged and `flask test-error-reporting` exits unsuccessfully. That CLI command
+sends a synthetic event when enabled, or explains that reporting is disabled.
+No public endpoint deliberately triggers exceptions. Configure uptime alerts and verify
+the webhook with your provider during deployment.
+
+Privacy/terms pages interpolate each tenant's identity and describe the implemented
+data flows. Owners should review them for their jurisdiction, retention practices, and
+actual service contracts before publishing; the supplied copy is not legal advice.
+See [the owner guide](docs/OWNER-GUIDE.md) for day-to-day operation.
 
 ## Operating it
 

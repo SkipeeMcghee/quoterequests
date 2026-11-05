@@ -23,12 +23,28 @@
 
     <article class="legal-section">
       <h2>Sharing and retention</h2>
-      <p class="subtle-text">Information is kept only as long as it is useful for customer service, internal operations, recordkeeping, and applicable legal obligations. It is not sold as a standalone data set.</p>
+      <p class="subtle-text">We keep request and customer records for the time reasonably needed to respond, deliver services, resolve disputes, and meet tax, insurance, and other legal obligations. Retention varies by record type; backups may remain until their normal expiry. We do not sell your personal information.</p>
+      <p class="subtle-text">Authorized staff and service providers supporting hosting, email, security, and business administration may process information for these purposes. We may disclose records when required by law or to protect safety and legal rights. Other businesses served by this platform do not receive access to your records.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Customer records and photos</h2>
+      <p class="subtle-text">{{ business_name }} serves {{ service_area or "the local service area" }}. We may connect requests to customer contact details, addresses, notes, estimates, appointments, and service history. Uploaded request and customer photos are restricted to authorized users; they are not automatically published in our gallery. We seek permission before using identifiable customer photos for public promotion. Please avoid uploading unnecessary sensitive information or photos of people without permission.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Cookies and security</h2>
+      <p class="subtle-text">Essential cookies support staff login, session security, form protection, and messages shown after submissions. A remember-me cookie is optional at login. Browser settings can block or remove cookies, but some functions may stop working. If enabled, reCAPTCHA helps prevent spam and may process browser and device information under Google's privacy policy. Hosting and security logs may include technical information such as IP addresses. We use access controls and other reasonable safeguards, but no online system can guarantee absolute security.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Your choices and requests</h2>
+      <p class="subtle-text">Contact us to ask about your records, correct contact details, or request deletion where permitted. We may need to verify your identity and retain information required by law or an ongoing service agreement. Applicable privacy rights depend on your location. This site is intended for people arranging business services, not children. We may update this policy when our practices change; the current version appears on this page.</p>
     </article>
 
     <article class="legal-section">
       <h2>Questions</h2>
-      <p class="subtle-text">For privacy questions, contact {{ business_name }} at {{ email }} or {{ phone }}.</p>
+      <p class="subtle-text">For privacy questions, contact {{ business_name }}{% if email %} at <a href="mailto:{{ email }}">{{ email }}</a>{% endif %}{% if phone %} by phone at {{ phone }}{% endif %}.{% if address %} Written requests may be sent to {{ address }}.{% else %} Please contact us for a mailing address before sending documents.{% endif %}</p>
     </article>
   </section>
 </main>

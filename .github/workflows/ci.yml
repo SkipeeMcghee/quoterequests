@@ -20,8 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
+          pip install -r requirements-dev.txt
 
       - name: Run tests
         env:
@@ -43,8 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install playwright
+          pip install -r requirements-dev.txt
 
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium

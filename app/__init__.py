@@ -33,6 +33,8 @@ def create_app(config_name: str | None = None, config_overrides: Mapping[str, ob
     config_object.validate()
 
     register_proxy_fix(app)
+    from app.monitoring import register_monitoring
+    register_monitoring(app)
     register_tenancy(app)
     _ensure_runtime_directories(app)
     register_extensions(app)

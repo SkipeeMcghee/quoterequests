@@ -20,6 +20,28 @@ MIGRATIONS = str(Path(__file__).resolve().parents[1] / "migrations")
 
 
 def register_cli(app: Flask) -> None:
+    @app.cli.command("seed-demo")
+    @click.option("--tenant", "tenant_slug")
+    @click.option("--reset", is_flag=True)
+    @click.option("--force", is_flag=True, help="Allow non-demo reset only with exact --confirm slug.")
+    @click.option("--confirm")
+    def seed_demo_command(tenant_slug: str | None, reset: bool, force: bool, confirm: str | None) -> None:
+        from app.services.demo import seed_demo
+        if (force or confirm is not None) and not reset:
+            raise click.ClickException("--force and --confirm require --reset.")
+        with _cli_tenant(tenant_slug):
+            changed = seed_demo(reset=reset, force=force, confirmation=confirm)
+        click.echo("Demo records seeded; admin accounts preserved." if changed else "Demo records already seeded; no changes.")
+
+    @app.cli.command("test-error-reporting")
+    def test_error_reporting() -> None:
+        from app.monitoring import report_exception
+        if not app.config.get("ERROR_WEBHOOK_URL"):
+            click.echo("Error reporting is disabled (ERROR_WEBHOOK_URL unset).")
+        elif report_exception(RuntimeError("Synthetic reporting verification")):
+            click.echo("Synthetic exception report delivered.")
+        else:
+            raise click.ClickException("Exception reporting delivery failed; inspect application logs.")
     @app.cli.command("create-admin")
     @click.option("--email", prompt=True)
     @click.password_option("--password", prompt=True, confirmation_prompt=True)
@@ -62,16 +84,21 @@ def register_cli(app: Flask) -> None:
     @click.option("--domain", multiple=True, required=True)
     @click.option("--database-uri", help="Existing PostgreSQL database URI; defaults to a dedicated SQLite file.")
     @click.option("--settings", default="{}", help="JSON object of tenant settings.")
+    @click.option("--demo", is_flag=True, help="Mark as disposable demo and disable email notifications.")
     @click.option("--admin-email")
     @click.option("--admin-password", help="Omit to enter a hidden password prompt.")
     def create_tenant(slug: str, domain: tuple[str, ...], database_uri: str | None,
-                      settings: str, admin_email: str | None, admin_password: str | None) -> None:
+                      settings: str, demo: bool, admin_email: str | None, admin_password: str | None) -> None:
         if admin_password and not admin_email:
             raise click.ClickException("--admin-password requires --admin-email.")
         if admin_email and admin_password is None:
             admin_password = click.prompt("Admin password", hide_input=True, confirmation_prompt=True)
         try:
             overrides = json.loads(settings)
+            if demo:
+                if not isinstance(overrides, dict):
+                    raise ValueError("Tenant settings must be a JSON object.")
+                overrides.update(DEMO_TENANT=True, EMAIL_ENABLED=False)
             with tenant_registry_write_lock() as path:
                 records = read_tenant_records(path)
                 old = get_registry()

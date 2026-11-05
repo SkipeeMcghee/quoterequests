@@ -114,6 +114,8 @@ def bucket_for(endpoint: str) -> str | None:
 def check_rate_limit() -> tuple[int, int] | None:
     """Return (retry_after_seconds, limit) when the caller is over, else None."""
 
+    if request.endpoint == "healthz":
+        return None
     if not tenant_config("RATE_LIMIT_ENABLED", True):
         return None
     if request.method != "POST":

@@ -35,7 +35,7 @@ TENANT_BOOLEAN_SETTINGS = frozenset({
     "ENABLE_SERVICES", "ENABLE_GALLERY", "ENABLE_SCHEDULING", "ENABLE_STAFF_MANAGEMENT",
     "ENABLE_CUSTOMER_RECORDS", "ENABLE_CALENDAR", "ENABLE_RECURRING_WORK",
     "EMAIL_ENABLED", "SMTP_USE_TLS", "SMTP_USE_SSL", "RECAPTCHA_ENABLED",
-    "SOCIAL_LINKS_PREVIEW", "RATE_LIMIT_ENABLED",
+    "SOCIAL_LINKS_PREVIEW", "RATE_LIMIT_ENABLED", "DEMO_TENANT",
     *(f"SOCIAL_{platform.upper()}_ENABLED" for platform in SOCIAL_PLATFORM_ASSETS),
 })
 TENANT_INTEGER_SETTINGS = frozenset({
@@ -160,6 +160,8 @@ def build_social_links() -> dict[str, dict[str, str | bool]]:
 
 
 class Config:
+    ERROR_WEBHOOK_URL = os.getenv("ERROR_WEBHOOK_URL", "").strip()
+    DEMO_TENANT = False
     TENANTS = None
     TENANTS_JSON = os.getenv("TENANTS_JSON", "")
     TENANT_REGISTRY_FILE = os.getenv("TENANT_REGISTRY_FILE", "")
@@ -259,6 +261,7 @@ class DevelopmentConfig(Config):
 
 
 class TestingConfig(Config):
+    ERROR_WEBHOOK_URL = ""
     TENANT_ALLOW_DEFAULT = True
     TENANTS_JSON = ""
     TENANT_REGISTRY_FILE = ""

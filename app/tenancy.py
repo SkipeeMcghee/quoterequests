@@ -308,6 +308,8 @@ def register_tenancy(app: Flask) -> None:
     def resolve_tenant():
         g.pop("tenant", None)
         g.pop("_login_user", None)
+        if request.endpoint == "healthz" and request.method in ("GET", "HEAD") and request.args.get("db") != "1":
+            return
         try:
             tenant = get_registry().resolve(request.host)
         except (ValueError, UnicodeError):

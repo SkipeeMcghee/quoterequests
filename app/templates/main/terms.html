@@ -13,7 +13,7 @@
   <section class="legal-stack">
     <article class="legal-section">
       <h2>Use of the site</h2>
-      <p class="subtle-text">Visitors may browse the site, review public information, and submit legitimate quote or work requests for services in {{ service_area }}.</p>
+      <p class="subtle-text">Visitors may browse the site and submit legitimate quote or work requests to {{ business_name }} for services in {{ service_area or "the local service area" }}. Do not misuse forms, attempt unauthorized access, interfere with availability, or submit unlawful content.</p>
     </article>
 
     <article class="legal-section">
@@ -24,11 +24,27 @@
     <article class="legal-section">
       <h2>Accuracy of submissions</h2>
       <p class="subtle-text">Customers should provide accurate contact details and project information so {{ business_name }} can respond appropriately.</p>
+      <p class="subtle-text">Only upload material you are entitled to share. You permit us to use submitted information and photos to review your request and perform agreed services, not to publish identifiable photos for promotion without permission. Do not include unnecessary sensitive information.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Estimates, appointments, and payment</h2>
+      <p class="subtle-text">A website request or preferred date is not a confirmed appointment or a contract to perform work. Estimates may depend on inspection, access, materials, and the information supplied. A written quote or service agreement sets the scope, pricing, payment terms, and any cancellation or rescheduling charges. Changes require agreement before additional work. Contact us promptly if access or scheduling needs change; weather and other conditions may require rescheduling.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Site information and responsibility</h2>
+      <p class="subtle-text">We aim to keep service information accurate, but descriptions and gallery examples are illustrative and do not promise a particular result for your property. The site may be unavailable for maintenance or reasons beyond our control. Nothing in these terms excludes rights or responsibilities that cannot lawfully be excluded, or replaces a separately agreed service contract.</p>
+    </article>
+
+    <article class="legal-section">
+      <h2>Privacy and changes</h2>
+      <p class="subtle-text">Our <a href="{{ url_for('main.privacy_policy') }}">Privacy Policy</a> explains how request data, customer records, uploaded photos, and essential cookies are handled. We may update these website terms; changes do not retroactively alter an agreed service contract. Please contact us first to discuss concerns about the site or your service.</p>
     </article>
 
     <article class="legal-section">
       <h2>Contact</h2>
-      <p class="subtle-text">Questions about these terms can be sent to {{ email }} or directed to {{ address }}.</p>
+      <p class="subtle-text">Questions about these terms should be directed to {{ business_name }}{% if email %} at <a href="mailto:{{ email }}">{{ email }}</a>{% endif %}{% if phone %} or by phone at {{ phone }}{% endif %}.{% if address %} Our contact address is {{ address }}.{% else %} Contact us for a mailing address before sending documents.{% endif %}</p>
     </article>
   </section>
 </main>
