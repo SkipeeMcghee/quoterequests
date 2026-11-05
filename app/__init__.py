@@ -20,7 +20,7 @@ from app.services.themes import (
     get_active_slug as get_active_theme_slug,
 )
 from app.services.media import media_url
-from app.tenancy import get_registry, register_tenancy
+from app.tenancy import current_tenant_settings, get_registry, register_tenancy
 
 
 def create_app(config_name: str | None = None, config_overrides: Mapping[str, object] | None = None) -> Flask:
@@ -99,11 +99,12 @@ def _get_site_services(app: Flask):
 
 
 def _get_enabled_social_links(app: Flask) -> list[dict[str, str | bool]]:
-    configured_links = app.config.get("SOCIAL_LINKS", {})
-    preview_mode = app.config.get("SOCIAL_LINKS_PREVIEW", False)
+    tenant_settings = current_tenant_settings()
+    configured_links = tenant_settings.get("SOCIAL_LINKS", {})
+    preview_mode = tenant_settings.get("SOCIAL_LINKS_PREVIEW", False)
     enabled_links: list[dict[str, str | bool]] = []
     for platform, settings in configured_links.items():
-        if not isinstance(settings, dict):
+        if not isinstance(settings, Mapping):
             continue
 
         is_enabled = bool(settings.get("enabled"))
@@ -218,24 +219,25 @@ def register_rate_limiting(app: Flask) -> None:
 def register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_feature_flags() -> dict[str, object]:
+        settings = current_tenant_settings()
         return {
-            "enable_gallery": app.config.get("ENABLE_GALLERY", False),
-            "enable_services": app.config.get("ENABLE_SERVICES", False),
-            "enable_scheduling": app.config.get("ENABLE_SCHEDULING", False),
-            "enable_staff_management": app.config.get("ENABLE_STAFF_MANAGEMENT", False),
-            "enable_customer_records": app.config.get("ENABLE_CUSTOMER_RECORDS", False),
-            "enable_calendar": app.config.get("ENABLE_CALENDAR", False),
-            "enable_recurring_work": app.config.get("ENABLE_RECURRING_WORK", False),
+            "enable_gallery": settings.get("ENABLE_GALLERY", False),
+            "enable_services": settings.get("ENABLE_SERVICES", False),
+            "enable_scheduling": settings.get("ENABLE_SCHEDULING", False),
+            "enable_staff_management": settings.get("ENABLE_STAFF_MANAGEMENT", False),
+            "enable_customer_records": settings.get("ENABLE_CUSTOMER_RECORDS", False),
+            "enable_calendar": settings.get("ENABLE_CALENDAR", False),
+            "enable_recurring_work": settings.get("ENABLE_RECURRING_WORK", False),
             "has_public_gallery": has_public_gallery_items(),
-            "business_name": app.config.get("BUSINESS_NAME", app.config.get("COMPANY_NAME", "Service Company")),
-            "tagline": app.config.get("TAGLINE", ""),
-            "phone": app.config.get("BUSINESS_PHONE", ""),
-            "email": app.config.get("BUSINESS_EMAIL", ""),
-            "service_area": app.config.get("SERVICE_AREA", ""),
-            "address": app.config.get("BUSINESS_ADDRESS", ""),
-            "staff_compensation_currency": app.config.get("STAFF_COMPENSATION_CURRENCY", "USD"),
-            "site_logo": app.config.get("SITE_LOGO", {}),
-            "social_links": app.config.get("SOCIAL_LINKS", {}),
+            "business_name": settings.get("BUSINESS_NAME", "Service Company"),
+            "tagline": settings.get("TAGLINE", ""),
+            "phone": settings.get("BUSINESS_PHONE", ""),
+            "email": settings.get("BUSINESS_EMAIL", ""),
+            "service_area": settings.get("SERVICE_AREA", ""),
+            "address": settings.get("BUSINESS_ADDRESS", ""),
+            "staff_compensation_currency": settings.get("STAFF_COMPENSATION_CURRENCY", "USD"),
+            "site_logo": settings.get("SITE_LOGO", {}),
+            "social_links": settings.get("SOCIAL_LINKS", {}),
             "enabled_social_links": _get_enabled_social_links(app),
             "services": _get_site_services(app),
             "describe_service": _describe_service,

@@ -4,10 +4,11 @@ A reusable Flask starter for service businesses: a public marketing site, a quot
 request intake, and an internal operations dashboard — with the optional parts switchable
 per customer from a single config file.
 
-Server-rendered HTML, no SPA, no build step. Wave 1 of multi-tenancy supports
-host-selected databases and tenant-bound authentication in one application instance.
-Branding, feature flags, uploads, and themes are still deployment-wide; this is not yet
-a fully isolated multi-tenant deployment.
+Server-rendered HTML, no SPA, no build step. Multi-tenancy supports host-selected
+databases, tenant-bound authentication, and tenant-specific branding, feature flags,
+integrations, themes, and rate-limit buckets in one application instance.
+Upload/media storage is still deployment-wide pending Wave 3; this is not yet a fully
+isolated multi-tenant deployment.
 
 ## What it does
 
@@ -32,7 +33,8 @@ a fully isolated multi-tenant deployment.
 
 ## Module flags
 
-Every optional module is a feature flag, so one deployment only carries what it sells.
+Every optional module is a feature flag, configurable per tenant with deployment-wide
+defaults for local development and single-client compatibility.
 
 | Flag | Turns on |
 |---|---|
@@ -101,7 +103,7 @@ change behaviour rather than just branding:
 | `TRUST_PROXY` | Set true only behind nginx, so client IPs and scheme are correct |
 | `SITE_THEME` | Deploy-time default palette; customers can change it later in admin |
 
-### Tenant routing (Wave 1)
+### Tenant routing (Waves 1-2)
 
 Development and testing automatically provide a `default` tenant using `DATABASE_URL`
 (the testing database in tests), limited to `localhost`, `127.0.0.1`, and `[::1]`.
@@ -118,12 +120,23 @@ Set `TENANTS_JSON` in the environment, or supply an equivalent `TENANTS` mapping
   "alpha": {
     "hosts": ["alpha.example.test"],
     "database_uri": "sqlite+pysqlite:///alpha.db",
-    "enabled": true
+    "enabled": true,
+    "settings": {
+      "BUSINESS_NAME": "Alpha Services",
+      "BUSINESS_PHONE": "555-0101",
+      "ENABLE_SCHEDULING": false,
+      "CANONICAL_ORIGIN": "https://alpha.example.test"
+    }
   },
   "beta": {
     "hosts": ["beta.example.test"],
     "database_uri": "sqlite+pysqlite:///beta.db",
-    "enabled": true
+    "enabled": true,
+    "settings": {
+      "BUSINESS_NAME": "Beta Works",
+      "ENABLE_SCHEDULING": true,
+      "CANONICAL_ORIGIN": "https://beta.example.test"
+    }
   }
 }
 ```
@@ -154,12 +167,44 @@ with app.app_context(), tenant_context("alpha") as tenant:
     ...
 ```
 
-This selects ORM routing only: `db.engine`, `db.create_all()`, and
+This selects ORM routing and tenant settings: `db.engine`, `db.create_all()`, and
 the existing migration commands do **not** automatically select that tenant.
 For explicit engine work, use `app.extensions["tenancy"].engine_for(tenant)`.
 Provision and migrate each tenant database explicitly; automatic fleet migrations and
-tenant-aware CLI command options are not part of Wave 1. Do not serve independent
-production clients until upload, theme, and tenant-settings isolation is completed.
+tenant-aware CLI command options are not part of these waves. Do not serve independent
+production clients until upload/media storage isolation is completed in Wave 3.
+
+### Tenant settings and appearance (Wave 2)
+
+Each tenant's optional `settings` mapping overrides application defaults. Read settings
+through `tenant_config(key, default=None)` or the read-only `current_tenant_settings()`
+mapping from `app.tenancy`; neither changes `app.config` nor the process environment.
+Nested logo/social mappings are read-only too. Settings are snapshotted at startup, so
+restart workers after changing the registry. JSON flags must be booleans, not strings;
+invalid types, ranges, unsupported settings, and non-HTTPS canonical origins fail startup.
+
+Supported settings include:
+
+- Business name/contact/address/tagline/service area; `BUSINESS_NAME` and `COMPANY_NAME`
+  are aliases, as are `STAFF_COMPENSATION_CURRENCY` and `COMPENSATION_CURRENCY`.
+- All module `ENABLE_*` flags; `SITE_LOGO_PATH`/`SITE_LOGO_ALT` or `SITE_LOGO`;
+  `SOCIAL_LINKS`, `SOCIAL_<PLATFORM>_ENABLED`/`_URL`, and `SOCIAL_LINKS_PREVIEW`.
+  Social entries merge by platform; flat platform settings take precedence.
+- `EMAIL_ENABLED`, `ADMIN_NOTIFICATION_EMAIL`, `DEFAULT_FROM_EMAIL`, `EMAIL_FROM_NAME`,
+  `EMAIL_REPLY_TO`, and optional `SMTP_*` overrides. Overriding business identity also
+  supplies tenant sender-name/address defaults unless explicitly overridden.
+- `RECAPTCHA_*`, `SITE_THEME`, and `RATE_LIMIT_*`.
+
+`CANONICAL_ORIGIN` is an HTTPS origin without a path, credentials, query, or fragment.
+For explicit tenants it defaults to HTTPS on the first registered host, never the incoming
+request host. Notifications use it both during requests and within `tenant_context` jobs.
+The automatic local/test tenant preserves legacy development URLs when no origin is set.
+
+Explicit tenants persist appearance in `instance/tenants/<slug>/theme.json`; they never
+read the legacy shared theme file. The automatic local/test tenant retains
+`instance/theme.json` for compatibility. Rate-limit counters use
+`tenant_slug:bucket:client_ip`; they remain in-memory and per worker, not a distributed
+quota. Upload/media paths are unchanged by this wave.
 
 ## Testing and quality gates
 

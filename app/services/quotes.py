@@ -9,6 +9,7 @@ from app.models import Appointment, QuoteRequest
 from app.services.email_hooks import send_admin_notification, send_customer_confirmation
 from app.services.service_catalog import resolve_active_service_options_by_names
 from app.services.uploads import cleanup_request_photo_dir, save_request_photos
+from app.tenancy import tenant_config
 
 
 def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorage], request_type: str = "Quote request") -> QuoteRequest:
@@ -30,7 +31,7 @@ def create_quote_request(form: QuoteRequestForm, uploaded_files: list[FileStorag
         if additional_notes:
             quote_request.additional_notes = additional_notes
 
-        if current_app.config.get("ENABLE_SCHEDULING") and request_type == "Work request":
+        if tenant_config("ENABLE_SCHEDULING") and request_type == "Work request":
             preferred_date = form.preferred_date.data
             preferred_time = form.time_value("preferred_time")
             if preferred_date or preferred_time or additional_notes:

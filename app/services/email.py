@@ -19,6 +19,8 @@ from email.utils import formatdate, make_msgid
 
 from flask import current_app
 
+from app.tenancy import current_tenant_settings
+
 
 @dataclass(frozen=True)
 class EmailSettings:
@@ -40,7 +42,7 @@ class EmailSettings:
 
 
 def load_settings(config=None) -> EmailSettings:
-    config = config or current_app.config
+    config = current_tenant_settings() if config is None else config
     return EmailSettings(
         enabled=bool(config.get("EMAIL_ENABLED", False)),
         host=(config.get("SMTP_HOST") or "").strip(),

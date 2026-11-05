@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from flask import current_app
 from sqlalchemy import func
 from werkzeug.exceptions import BadRequest, NotFound
 
 from app.extensions import db
 from app.models import ServiceOption
+from app.tenancy import current_tenant_settings
 
 
 def is_services_enabled(config=None) -> bool:
-    settings = config or current_app.config
+    settings = current_tenant_settings() if config is None else config
     return bool(settings.get("ENABLE_SERVICES", False))
 
 

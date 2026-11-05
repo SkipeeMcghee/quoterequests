@@ -10,6 +10,7 @@ from flask import current_app, has_request_context, render_template, url_for
 
 from app.models import QuoteRequest
 from app.services.email import send_email
+from app.tenancy import tenant_config
 
 
 def send_customer_confirmation(quote_request: QuoteRequest) -> bool:
@@ -22,10 +23,10 @@ def send_customer_confirmation(quote_request: QuoteRequest) -> bool:
     body = render_template(
         "email/customer_confirmation.txt",
         quote_request=quote_request,
-        business_name=current_app.config.get("BUSINESS_NAME", ""),
-        phone=current_app.config.get("BUSINESS_PHONE", ""),
-        email=current_app.config.get("BUSINESS_EMAIL", ""),
-        service_area=current_app.config.get("SERVICE_AREA", ""),
+        business_name=tenant_config("BUSINESS_NAME", ""),
+        phone=tenant_config("BUSINESS_PHONE", ""),
+        email=tenant_config("BUSINESS_EMAIL", ""),
+        service_area=tenant_config("SERVICE_AREA", ""),
     )
     return send_email(
         to=quote_request.email,
@@ -35,7 +36,7 @@ def send_customer_confirmation(quote_request: QuoteRequest) -> bool:
 
 
 def send_admin_notification(quote_request: QuoteRequest) -> bool:
-    recipient = (current_app.config.get("ADMIN_NOTIFICATION_EMAIL") or "").strip()
+    recipient = (tenant_config("ADMIN_NOTIFICATION_EMAIL") or "").strip()
     if not recipient:
         current_app.logger.warning(
             "ADMIN_NOTIFICATION_EMAIL is not set; notification for request %s skipped",
@@ -46,7 +47,7 @@ def send_admin_notification(quote_request: QuoteRequest) -> bool:
     body = render_template(
         "email/admin_notification.txt",
         quote_request=quote_request,
-        business_name=current_app.config.get("BUSINESS_NAME", ""),
+        business_name=tenant_config("BUSINESS_NAME", ""),
         photo_count=len(quote_request.photos or []),
         request_url=_request_url(quote_request),
     )
@@ -61,9 +62,11 @@ def send_admin_notification(quote_request: QuoteRequest) -> bool:
 
 
 def _request_url(quote_request: QuoteRequest) -> str:
-    if not has_request_context():
-        return f"/admin/requests/{quote_request.id}"
-    try:
+    origin = tenant_config("CANONICAL_ORIGIN", "")
+    if not origin and has_request_context():
         return url_for("admin.request_detail", request_id=quote_request.id, _external=True)
-    except Exception:  # noqa: BLE001 - a broken URL must not stop the notification
-        return f"/admin/requests/{quote_request.id}"
+    adapter = current_app.url_map.bind(
+        "localhost", script_name=current_app.config.get("APPLICATION_ROOT", "/"),
+    )
+    path = adapter.build("admin.request_detail", {"request_id": quote_request.id})
+    return f"{origin}{path}"

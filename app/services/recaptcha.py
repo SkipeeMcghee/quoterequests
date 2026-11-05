@@ -7,7 +7,7 @@ from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from flask import current_app
+from app.tenancy import current_tenant_settings
 
 
 DEFAULT_RECAPTCHA_ERROR = "We couldn't verify the spam protection check. Please try again."
@@ -24,26 +24,27 @@ class RecaptchaVerificationResult:
 
 
 def is_recaptcha_enabled(config: Mapping[str, object] | None = None) -> bool:
-    settings = config or current_app.config
+    settings = current_tenant_settings() if config is None else config
     return bool(settings.get("RECAPTCHA_ENABLED", False))
 
 
 def should_render_recaptcha(config: Mapping[str, object] | None = None) -> bool:
-    settings = config or current_app.config
+    settings = current_tenant_settings() if config is None else config
     site_key = str(settings.get("RECAPTCHA_SITE_KEY", "")).strip()
     return is_recaptcha_enabled(settings) and bool(site_key)
 
 
 def verify_recaptcha_submission(token: str, action: str, remote_ip: str | None = None) -> RecaptchaVerificationResult:
-    if not is_recaptcha_enabled():
+    settings = current_tenant_settings()
+    if not is_recaptcha_enabled(settings):
         return RecaptchaVerificationResult(success=True)
 
     if not token.strip():
         return RecaptchaVerificationResult(success=False, message=MISSING_TOKEN_ERROR)
 
-    secret_key = str(current_app.config.get("RECAPTCHA_SECRET_KEY", "")).strip()
-    verify_url = str(current_app.config.get("RECAPTCHA_VERIFY_URL", "")).strip()
-    minimum_score = float(current_app.config.get("RECAPTCHA_MIN_SCORE", 0.5))
+    secret_key = str(settings.get("RECAPTCHA_SECRET_KEY", "")).strip()
+    verify_url = str(settings.get("RECAPTCHA_VERIFY_URL", "")).strip()
+    minimum_score = float(settings.get("RECAPTCHA_MIN_SCORE", 0.5))
     if not secret_key or not verify_url:
         return RecaptchaVerificationResult(success=False, message=MISCONFIGURED_RECAPTCHA_ERROR)
 

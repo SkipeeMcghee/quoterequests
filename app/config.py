@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -27,6 +30,80 @@ SOCIAL_PLATFORM_ASSETS: dict[str, dict[str, str]] = {
     "reddit": {"label": "Reddit", "icon_path": "assets/images/reddit.png"},
     "google": {"label": "Google Business", "icon_path": "assets/images/google.png"},
 }
+
+TENANT_BOOLEAN_SETTINGS = frozenset({
+    "ENABLE_SERVICES", "ENABLE_GALLERY", "ENABLE_SCHEDULING", "ENABLE_STAFF_MANAGEMENT",
+    "ENABLE_CUSTOMER_RECORDS", "ENABLE_CALENDAR", "ENABLE_RECURRING_WORK",
+    "EMAIL_ENABLED", "SMTP_USE_TLS", "SMTP_USE_SSL", "RECAPTCHA_ENABLED",
+    "SOCIAL_LINKS_PREVIEW", "RATE_LIMIT_ENABLED",
+    *(f"SOCIAL_{platform.upper()}_ENABLED" for platform in SOCIAL_PLATFORM_ASSETS),
+})
+TENANT_INTEGER_SETTINGS = frozenset({
+    "SMTP_PORT", "SMTP_TIMEOUT", "RATE_LIMIT_FORM_REQUESTS", "RATE_LIMIT_FORM_WINDOW_SECONDS",
+    "RATE_LIMIT_LOGIN_REQUESTS", "RATE_LIMIT_LOGIN_WINDOW_SECONDS",
+})
+TENANT_STRING_SETTINGS = frozenset({
+    "BUSINESS_NAME", "COMPANY_NAME", "TAGLINE", "BUSINESS_PHONE", "BUSINESS_EMAIL",
+    "SERVICE_AREA", "BUSINESS_ADDRESS", "STAFF_COMPENSATION_CURRENCY", "COMPENSATION_CURRENCY",
+    "SITE_LOGO_PATH", "SITE_LOGO_ALT", "SITE_THEME", "CANONICAL_ORIGIN",
+    "ADMIN_NOTIFICATION_EMAIL", "DEFAULT_FROM_EMAIL", "EMAIL_FROM_NAME", "EMAIL_REPLY_TO",
+    "SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "RECAPTCHA_SITE_KEY",
+    "RECAPTCHA_SECRET_KEY", "RECAPTCHA_VERIFY_URL",
+    *(f"SOCIAL_{platform.upper()}_URL" for platform in SOCIAL_PLATFORM_ASSETS),
+})
+TENANT_SETTING_KEYS = (
+    TENANT_BOOLEAN_SETTINGS | TENANT_INTEGER_SETTINGS | TENANT_STRING_SETTINGS
+    | {"RECAPTCHA_MIN_SCORE", "SITE_LOGO", "SOCIAL_LINKS"}
+)
+
+
+def normalize_canonical_origin(value: str) -> str:
+    if not value:
+        return ""
+    parsed = urlsplit(value)
+    if (
+        any(char.isspace() or char == "\\" for char in value)
+        or parsed.scheme != "https" or not parsed.hostname
+        or parsed.username is not None or parsed.password is not None
+        or parsed.path not in ("", "/") or parsed.query or parsed.fragment
+    ):
+        raise ValueError("CANONICAL_ORIGIN must be an HTTPS origin without credentials or a path.")
+    hostname = parsed.hostname.rstrip(".").encode("idna").decode("ascii").lower()
+    hostname = f"[{hostname}]" if ":" in hostname else hostname
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    return f"https://{hostname}{port}"
+
+
+def validate_tenant_settings(settings: Mapping[str, Any]) -> None:
+    for key, value in settings.items():
+        if key not in TENANT_SETTING_KEYS:
+            raise ValueError(f"Unsupported tenant setting: {key}")
+        if key in TENANT_BOOLEAN_SETTINGS:
+            valid = isinstance(value, bool)
+        elif key in TENANT_INTEGER_SETTINGS:
+            valid = type(value) is int and value > 0 and (key != "SMTP_PORT" or value <= 65535)
+        elif key == "RECAPTCHA_MIN_SCORE":
+            valid = type(value) in (int, float) and 0 <= value <= 1
+        elif key in ("SITE_LOGO", "SOCIAL_LINKS"):
+            if not isinstance(value, Mapping):
+                raise ValueError(f"Tenant {key} must be a mapping.")
+            if key == "SITE_LOGO":
+                valid = all(name in ("path", "alt") and isinstance(item, str) for name, item in value.items())
+            else:
+                valid = all(
+                    isinstance(platform, str) and isinstance(link, Mapping) and all(
+                        (name == "enabled" and isinstance(item, bool))
+                        or (name in ("url", "label", "icon_path") and isinstance(item, str))
+                        for name, item in link.items()
+                    )
+                    for platform, link in value.items()
+                )
+        else:
+            valid = isinstance(value, str)
+        if not valid:
+            raise ValueError(f"Invalid value type or range for tenant setting {key}.")
+        if key == "CANONICAL_ORIGIN":
+            normalize_canonical_origin(value)
 
 
 def get_required_env(name: str) -> str:
@@ -115,7 +192,12 @@ class Config:
     BUSINESS_EMAIL = os.getenv("BUSINESS_EMAIL", "hello@example.com")
     SERVICE_AREA = os.getenv("SERVICE_AREA", "your local service area")
     BUSINESS_ADDRESS = os.getenv("BUSINESS_ADDRESS", "123 Service Lane, Suite 100")
-    STAFF_COMPENSATION_CURRENCY = (os.getenv("STAFF_COMPENSATION_CURRENCY", "USD").strip() or "USD").upper()
+    STAFF_COMPENSATION_CURRENCY = (
+        (os.getenv("STAFF_COMPENSATION_CURRENCY") or os.getenv("COMPENSATION_CURRENCY", "USD")).strip() or "USD"
+    ).upper()
+    COMPENSATION_CURRENCY = STAFF_COMPENSATION_CURRENCY
+    CANONICAL_ORIGIN = os.getenv("CANONICAL_ORIGIN", "").strip()
+    SITE_THEME = os.getenv("SITE_THEME", "").strip()
     SITE_LOGO = {
         "path": normalize_static_asset_path(os.getenv("SITE_LOGO_PATH", DEFAULT_SITE_LOGO_PATH), DEFAULT_SITE_LOGO_PATH),
         "alt": os.getenv("SITE_LOGO_ALT", "").strip(),

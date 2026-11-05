@@ -1,7 +1,7 @@
 """In-app rate limiting for the endpoints an anonymous visitor can POST to.
 
-Deliberately small: a fixed-window counter held in memory, keyed by client IP and a
-named bucket. No dependency, no Redis, no configuration to get wrong.
+Deliberately small: a fixed-window counter held in memory, keyed by tenant, client IP,
+and a named bucket. No dependency, no Redis.
 
 Two honest limitations, both documented in the deployment checklist:
 
@@ -20,7 +20,9 @@ import threading
 import time
 from dataclasses import dataclass
 
-from flask import current_app, request
+from flask import request
+
+from app.tenancy import current_tenant_settings, get_current_tenant, tenant_config
 
 
 @dataclass(frozen=True)
@@ -43,14 +45,14 @@ class _FixedWindowStore:
 
         now = time.monotonic()
         with self._lock:
-            started, count = self._hits.get(key, (now, 0))
-            if now - started >= window_seconds:
-                started, count = now, 0
+            expires, count = self._hits.get(key, (now + window_seconds, 0))
+            if now >= expires:
+                expires, count = now + window_seconds, 0
             count += 1
-            self._hits[key] = (started, count)
+            self._hits[key] = (expires, count)
             if len(self._hits) > 5000:  # keep a runaway keyspace from growing forever
                 self._hits = {
-                    key_: value for key_, value in self._hits.items() if now - value[0] < window_seconds
+                    key_: value for key_, value in self._hits.items() if now < value[0]
                 }
             return count
 
@@ -77,7 +79,7 @@ def client_key() -> str:
 
 
 def limits_from_config() -> dict[str, Limit]:
-    config = current_app.config
+    config = current_tenant_settings()
     return {
         "forms": Limit(
             int(config.get("RATE_LIMIT_FORM_REQUESTS") or 5),
@@ -112,7 +114,7 @@ def bucket_for(endpoint: str) -> str | None:
 def check_rate_limit() -> tuple[int, int] | None:
     """Return (retry_after_seconds, limit) when the caller is over, else None."""
 
-    if not current_app.config.get("RATE_LIMIT_ENABLED", True):
+    if not tenant_config("RATE_LIMIT_ENABLED", True):
         return None
     if request.method != "POST":
         return None
@@ -122,7 +124,7 @@ def check_rate_limit() -> tuple[int, int] | None:
         return None
 
     limit = limits_from_config()[bucket]
-    key = f"{bucket}:{client_key()}"
+    key = f"{get_current_tenant().slug}:{bucket}:{client_key()}"
     count = _STORE.hit(key, limit.window_seconds)
 
     if count > limit.max_requests:

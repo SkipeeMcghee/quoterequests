@@ -1,4 +1,4 @@
-from flask import current_app, flash, redirect, render_template, request, url_for
+from flask import flash, redirect, render_template, request, url_for
 from werkzeug.exceptions import BadRequest, NotFound
 
 from app.forms.quote_request import QuoteRequestForm
@@ -7,6 +7,7 @@ from app.services.gallery_catalog import list_public_gallery_items, require_gall
 from app.services.quotes import create_quote_request
 from app.services.recaptcha import should_render_recaptcha, verify_recaptcha_submission
 from app.services.service_catalog import require_services_enabled
+from app.tenancy import tenant_config
 
 
 HOME_TRUST_POINTS = (
@@ -76,7 +77,7 @@ SCHEDULE_WORK_RECAPTCHA_ACTION = "schedule_work"
 def _public_form_context(recaptcha_action: str) -> dict[str, str | bool]:
     return {
         "recaptcha_enabled": should_render_recaptcha(),
-        "recaptcha_site_key": current_app.config.get("RECAPTCHA_SITE_KEY", ""),
+        "recaptcha_site_key": tenant_config("RECAPTCHA_SITE_KEY", ""),
         "recaptcha_action": recaptcha_action,
     }
 
@@ -172,7 +173,7 @@ def quote_request():
 
 @bp.route("/schedule-work", methods=["GET", "POST"])
 def schedule_work():
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("main.quote_request"))
 
     form = QuoteRequestForm()

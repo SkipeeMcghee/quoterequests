@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 from werkzeug.exceptions import NotFound
 
 from app.admin import bp
+from app.tenancy import tenant_config
 from app.auth.routes import handle_admin_login
 from app.date_ranges import DATE_RANGE_PRESET_GROUPS, resolve_date_range_preset
 from app.forms.admin import (
@@ -141,7 +142,7 @@ AVAILABILITY_BOARD_SLOT_MINUTES = 15
 
 
 def _is_content_enabled() -> bool:
-    return bool(current_app.config.get("ENABLE_SERVICES") or current_app.config.get("ENABLE_GALLERY"))
+    return bool(tenant_config("ENABLE_SERVICES") or tenant_config("ENABLE_GALLERY"))
 
 
 def _is_ajax_request() -> bool:
@@ -177,11 +178,11 @@ def _find_customer_option_label(customer_options: list[tuple[int, str]], custome
 
 def _ensure_import_enabled(entity_type: str):
     definition = get_import_definition(entity_type)
-    if definition.key == "customers" and not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if definition.key == "customers" and not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         raise NotFound()
     if definition.key == "staff" and (
-        not current_app.config.get("ENABLE_SCHEDULING")
-        or not current_app.config.get("ENABLE_STAFF_MANAGEMENT")
+        not tenant_config("ENABLE_SCHEDULING")
+        or not tenant_config("ENABLE_STAFF_MANAGEMENT")
     ):
         raise NotFound()
     return definition
@@ -258,7 +259,7 @@ def _build_staff_assignment_context(
     start_time=None,
     end_time=None,
 ) -> dict[str, list]:
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return {
             "required_service_names": [],
             "matching_staff_info": [],
@@ -812,7 +813,7 @@ def _render_recurring_work_detail_page(
     )
     recurring_calendar_url = None
     recurring_list_url = None
-    if current_app.config.get("ENABLE_CALENDAR"):
+    if tenant_config("ENABLE_CALENDAR"):
         recurring_calendar_url = url_for(
             "admin.calendar_view",
             year=reference_date.year,
@@ -1051,7 +1052,7 @@ def content_index():
 
     content_modules: list[dict[str, str]] = []
 
-    if current_app.config.get("ENABLE_GALLERY"):
+    if tenant_config("ENABLE_GALLERY"):
         gallery_items = list_gallery_items(include_inactive=True)
         active_count = sum(1 for gallery_item in gallery_items if gallery_item.is_active)
         featured_count = sum(1 for gallery_item in gallery_items if gallery_item.featured)
@@ -1065,7 +1066,7 @@ def content_index():
             }
         )
 
-    if current_app.config.get("ENABLE_SERVICES"):
+    if tenant_config("ENABLE_SERVICES"):
         services = list_services(include_inactive=True)
         active_count = sum(1 for service in services if service.is_active)
         archived_count = sum(1 for service in services if not service.is_active)
@@ -1273,7 +1274,7 @@ def toggle_service_status_route(service_id: int):
 @bp.get("/calendar")
 @login_required
 def calendar_view():
-    if not current_app.config.get("ENABLE_CALENDAR"):
+    if not tenant_config("ENABLE_CALENDAR"):
         return redirect(url_for("admin.dashboard"))
 
     year = request.args.get("year", type=int)
@@ -1369,7 +1370,7 @@ def calendar_view():
 @bp.get("/calendar/<int:year>/<int:month>/<int:day>")
 @login_required
 def calendar_day_view(year: int, month: int, day: int):
-    if not current_app.config.get("ENABLE_CALENDAR"):
+    if not tenant_config("ENABLE_CALENDAR"):
         return redirect(url_for("admin.dashboard"))
 
     try:
@@ -1453,7 +1454,7 @@ def calendar_day_view(year: int, month: int, day: int):
 @bp.route("/scheduled-work/new", methods=["GET", "POST"])
 @login_required
 def new_scheduled_work():
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.dashboard"))
 
     request_id = request.args.get("request_id", type=int)
@@ -1656,7 +1657,7 @@ def new_scheduled_work():
 @bp.get("/appointments/<int:appointment_id>")
 @login_required
 def appointment_detail(appointment_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.dashboard"))
 
     appointment = get_appointment(appointment_id)
@@ -1725,7 +1726,7 @@ def appointment_detail(appointment_id: int):
         day=calendar_day,
     )
 
-    if current_app.config.get("ENABLE_SCHEDULING") and current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if tenant_config("ENABLE_SCHEDULING") and tenant_config("ENABLE_STAFF_MANAGEMENT"):
         assign_staff_form = AppointmentStaffAssignmentForm(
             prefix="assign-staff",
             staff_ids=[staff.id for staff in appointment.assigned_staff],
@@ -1766,7 +1767,7 @@ def appointment_detail(appointment_id: int):
 @bp.post("/appointments/<int:appointment_id>/assign-staff")
 @login_required
 def assign_staff_to_appointment(appointment_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
 
     form = AppointmentStaffAssignmentForm(prefix="assign-staff")
@@ -1786,7 +1787,7 @@ def assign_staff_to_appointment(appointment_id: int):
 @bp.post("/appointments/<int:appointment_id>/remove-staff/<int:staff_member_id>")
 @login_required
 def remove_staff_from_appointment(appointment_id: int, staff_member_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
 
     form = ActionForm(prefix=f"remove-staff-{staff_member_id}")
@@ -1853,7 +1854,7 @@ def request_detail(request_id: int):
     schedule_other_staff_info = []
     reschedule_form = None
 
-    if current_app.config.get("ENABLE_SCHEDULING"):
+    if tenant_config("ENABLE_SCHEDULING"):
         if quote_request.current_appointment:
             appointment_form = AppointmentForm(
                 obj=quote_request.current_appointment,
@@ -1870,7 +1871,7 @@ def request_detail(request_id: int):
             appointment_form.submit.label.text = "Save Scheduling Changes"
             appointment_delete_form = ActionForm(prefix="delete-appointment")
             reschedule_form = RescheduleAppointmentForm(prefix="reschedule")
-            if current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+            if tenant_config("ENABLE_STAFF_MANAGEMENT"):
                 appointment_assign_staff_form = AppointmentStaffAssignmentForm(
                     prefix="assign-staff",
                     staff_ids=[staff.id for staff in quote_request.current_appointment.assigned_staff],
@@ -1895,7 +1896,7 @@ def request_detail(request_id: int):
                 ]
             appointment_form.title.data = quote_request.service_list_display if is_services_enabled() else quote_request.request_type
             _set_default_minute_values(appointment_form, ("start_time_minute", "end_time_minute"))
-            if current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+            if tenant_config("ENABLE_STAFF_MANAGEMENT"):
                 staffing_context = _build_staff_assignment_context(
                     quote_request=quote_request,
                     selected_staff_ids=appointment_form.staff_ids.data,
@@ -2112,7 +2113,7 @@ def update_last_contacted_on_route(request_id: int):
 @bp.post("/requests/<int:request_id>/appointments")
 @login_required
 def create_appointment_route(request_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.request_detail", request_id=request_id))
 
     form = AppointmentForm(prefix="create")
@@ -2163,7 +2164,7 @@ def create_appointment_route(request_id: int):
 @bp.post("/requests/<int:request_id>/link-customer")
 @login_required
 def link_customer_route(request_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.request_detail", request_id=request_id))
 
     form = LinkCustomerForm(prefix="link-customer")
@@ -2198,7 +2199,7 @@ def link_customer_route(request_id: int):
 @bp.post("/requests/<int:request_id>/unlink-customer")
 @login_required
 def unlink_customer_route(request_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.request_detail", request_id=request_id))
 
     form = ActionForm(prefix="unlink-customer")
@@ -2217,7 +2218,7 @@ def unlink_customer_route(request_id: int):
 @bp.post("/requests/<int:request_id>/create-customer")
 @login_required
 def create_customer_route(request_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.request_detail", request_id=request_id))
 
     form = CreateCustomerForm(prefix="create-customer")
@@ -2236,7 +2237,7 @@ def create_customer_route(request_id: int):
 @bp.get("/customers")
 @login_required
 def customer_list():
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     customers = list_customers()
     return render_template("admin/customers.html", customers=customers)
@@ -2245,7 +2246,7 @@ def customer_list():
 @bp.get("/staff")
 @login_required
 def staff_list():
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
     staff_members = sorted(
         list_staff_members(),
@@ -2298,7 +2299,7 @@ def staff_list():
 @bp.route("/staff/new", methods=["GET", "POST"])
 @login_required
 def new_staff_member():
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
     form = StaffMemberForm(prefix="staff")
     if request.method == "POST" and form.validate_on_submit():
@@ -2324,7 +2325,7 @@ def new_staff_member():
 @bp.get("/staff/<int:staff_member_id>")
 @login_required
 def staff_detail(staff_member_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
     staff_member = get_staff_member(staff_member_id)
     today = date.today()
@@ -2426,7 +2427,7 @@ def staff_detail(staff_member_id: int):
 @bp.route("/staff/<int:staff_member_id>/edit", methods=["GET", "POST"])
 @login_required
 def edit_staff_member(staff_member_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
     staff_member = get_staff_member(staff_member_id)
     form = StaffMemberForm(
@@ -2465,7 +2466,7 @@ def edit_staff_member(staff_member_id: int):
 @bp.post("/staff/<int:staff_member_id>/notes")
 @login_required
 def update_staff_member_notes_route(staff_member_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
 
     form = StaffNotesForm(prefix="staff-notes")
@@ -2492,7 +2493,7 @@ def update_staff_member_notes_route(staff_member_id: int):
 @bp.post("/staff/<int:staff_member_id>/availability")
 @login_required
 def add_staff_availability_route(staff_member_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
     form = StaffAvailabilityForm(prefix="availability")
     if form.validate_on_submit():
@@ -2515,7 +2516,7 @@ def add_staff_availability_route(staff_member_id: int):
 @bp.post("/staff/<int:staff_member_id>/availability/sync")
 @login_required
 def sync_staff_availability_route(staff_member_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
 
     form = StaffAvailabilitySyncForm(prefix="availability-sync")
@@ -2557,7 +2558,7 @@ def sync_staff_availability_route(staff_member_id: int):
 @bp.post("/staff/<int:staff_member_id>/availability/<int:availability_id>/delete")
 @login_required
 def delete_staff_availability_route(staff_member_id: int, availability_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING") or not current_app.config.get("ENABLE_STAFF_MANAGEMENT"):
+    if not tenant_config("ENABLE_SCHEDULING") or not tenant_config("ENABLE_STAFF_MANAGEMENT"):
         return redirect(url_for("admin.dashboard"))
     try:
         delete_staff_availability(availability_id)
@@ -2570,10 +2571,10 @@ def delete_staff_availability_route(staff_member_id: int, availability_id: int):
 @bp.get("/recurring-work")
 @login_required
 def recurring_work_list():
-    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+    if not tenant_config("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
     works = list_recurring_works()
-    if current_app.config.get("ENABLE_SCHEDULING"):
+    if tenant_config("ENABLE_SCHEDULING"):
         for work in works:
             sync_recurring_work_appointments(work.id, days_ahead=7)
         works = list_recurring_works()
@@ -2595,9 +2596,9 @@ def recurring_work_list():
 @bp.route("/customers/<int:customer_id>/recurring-work/new", methods=["GET", "POST"])
 @login_required
 def new_recurring_work(customer_id: int | None = None):
-    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+    if not tenant_config("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
 
     customer = get_customer(customer_id) if customer_id is not None else None
@@ -2656,7 +2657,7 @@ def new_recurring_work(customer_id: int | None = None):
                     status=form.status.data,
                     notes=form.notes.data,
                 )
-                if current_app.config.get("ENABLE_SCHEDULING"):
+                if tenant_config("ENABLE_SCHEDULING"):
                     sync_recurring_work_appointments(work.id, days_ahead=7)
                 flash("Recurring work saved.", "success")
                 return redirect(
@@ -2682,7 +2683,7 @@ def new_recurring_work(customer_id: int | None = None):
 @bp.get("/recurring-work/<int:recurring_work_id>")
 @login_required
 def recurring_work_detail(recurring_work_id: int):
-    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+    if not tenant_config("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
     work = get_recurring_work(recurring_work_id)
     generate_recurring_appointments_form = RecurringWorkGenerationForm(prefix="generate-recurring")
@@ -2692,7 +2693,7 @@ def recurring_work_detail(recurring_work_id: int):
     else:
         days_ahead = "7"
 
-    if current_app.config.get("ENABLE_SCHEDULING"):
+    if tenant_config("ENABLE_SCHEDULING"):
         sync_recurring_work_appointments(work.id, days_ahead=int(days_ahead))
         work = get_recurring_work(recurring_work_id)
     recurring_work_form = RecurringWorkForm(prefix="recurring-work", obj=work)
@@ -2707,7 +2708,7 @@ def recurring_work_detail(recurring_work_id: int):
 @bp.post("/recurring-work/<int:recurring_work_id>/impact-preview")
 @login_required
 def preview_recurring_work_impact_route(recurring_work_id: int):
-    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+    if not tenant_config("ENABLE_RECURRING_WORK"):
         raise NotFound()
 
     form = RecurringWorkForm(prefix="recurring-work")
@@ -2753,7 +2754,7 @@ def preview_recurring_work_impact_route(recurring_work_id: int):
 @bp.post("/recurring-work/<int:recurring_work_id>/edit")
 @login_required
 def edit_recurring_work_route(recurring_work_id: int):
-    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+    if not tenant_config("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
 
     work = get_recurring_work(recurring_work_id)
@@ -2783,7 +2784,7 @@ def edit_recurring_work_route(recurring_work_id: int):
                     notes=recurring_work_form.notes.data,
                     customer_id=int(recurring_work_form.customer_id.data) if recurring_work_form.customer_id.data else None,
                 )
-                if current_app.config.get("ENABLE_SCHEDULING"):
+                if tenant_config("ENABLE_SCHEDULING"):
                     sync_recurring_work_appointments(recurring_work_id, days_ahead=7)
                 work = get_recurring_work(recurring_work_id)
                 if is_ajax_request:
@@ -2815,7 +2816,7 @@ def edit_recurring_work_route(recurring_work_id: int):
 @bp.post("/recurring-work/<int:recurring_work_id>/archive")
 @login_required
 def archive_recurring_work_route(recurring_work_id: int):
-    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+    if not tenant_config("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
 
     recurring_source_args = _recurring_source_args_from_request()
@@ -2841,9 +2842,9 @@ def archive_recurring_work_route(recurring_work_id: int):
 @bp.post("/recurring-work/<int:recurring_work_id>/generate")
 @login_required
 def generate_recurring_work_appointments_route(recurring_work_id: int):
-    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+    if not tenant_config("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.recurring_work_detail", recurring_work_id=recurring_work_id, **_recurring_source_args_from_request()))
 
     work = get_recurring_work(recurring_work_id)
@@ -2886,7 +2887,7 @@ def generate_recurring_work_appointments_route(recurring_work_id: int):
 @bp.post("/appointments/<int:appointment_id>/recurring-exception")
 @login_required
 def set_recurring_exception_route(appointment_id: int):
-    if not current_app.config.get("ENABLE_RECURRING_WORK") or not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_RECURRING_WORK") or not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.dashboard"))
 
     appointment = get_appointment(appointment_id)
@@ -2921,10 +2922,10 @@ def set_recurring_exception_route(appointment_id: int):
 @bp.get("/customers/<int:customer_id>")
 @login_required
 def customer_detail(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     customer = get_customer(customer_id)
-    if current_app.config.get("ENABLE_RECURRING_WORK") and current_app.config.get("ENABLE_SCHEDULING"):
+    if tenant_config("ENABLE_RECURRING_WORK") and tenant_config("ENABLE_SCHEDULING"):
         for recurring_work in customer.recurring_works:
             sync_recurring_work_appointments(recurring_work.id, days_ahead=7)
         customer = get_customer(customer_id)
@@ -2988,7 +2989,7 @@ def customer_detail(customer_id: int):
 @bp.get("/customers/<int:customer_id>/merge")
 @login_required
 def customer_merge(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     source = get_customer(customer_id)
     form = MergeCustomerForm(prefix="merge-customer")
@@ -3008,7 +3009,7 @@ def customer_merge(customer_id: int):
 @bp.post("/customers/<int:customer_id>/merge")
 @login_required
 def customer_merge_action(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     form = MergeCustomerForm(prefix="merge-customer")
     targets = [customer for customer in list_customers() if customer.id != customer_id]
@@ -3038,7 +3039,7 @@ def customer_merge_action(customer_id: int):
 @bp.post("/customers/<int:customer_id>/billing")
 @login_required
 def update_customer_billing_route(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     form = CustomerBillingForm(prefix="customer-billing")
     if form.validate_on_submit():
@@ -3055,7 +3056,7 @@ def update_customer_billing_route(customer_id: int):
 @bp.post("/customers/<int:customer_id>/info")
 @login_required
 def update_customer_info_route(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     form = CustomerInfoForm(prefix="customer-info")
     if form.validate_on_submit():
@@ -3080,7 +3081,7 @@ def update_customer_info_route(customer_id: int):
 @bp.post("/customers/<int:customer_id>/addresses")
 @login_required
 def add_customer_address_route(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
 
     form = CustomerAddressForm(prefix="customer-address")
@@ -3106,7 +3107,7 @@ def add_customer_address_route(customer_id: int):
 @bp.post("/customers/<int:customer_id>/addresses/<int:address_id>/billing")
 @login_required
 def set_customer_billing_address_route(customer_id: int, address_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
 
     try:
@@ -3121,7 +3122,7 @@ def set_customer_billing_address_route(customer_id: int, address_id: int):
 @bp.post("/customers/<int:customer_id>/photos")
 @login_required
 def upload_customer_photos_route(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     form = CustomerPhotoUploadForm(prefix="customer-photos")
     if form.validate_on_submit():
@@ -3139,7 +3140,7 @@ def upload_customer_photos_route(customer_id: int):
 @bp.post("/customers/<int:customer_id>/fields")
 @login_required
 def add_customer_field_route(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     form = CustomerFieldForm(prefix="add-customer-field")
     if form.validate_on_submit():
@@ -3156,7 +3157,7 @@ def add_customer_field_route(customer_id: int):
 @bp.post("/customers/<int:customer_id>/set-primary")
 @login_required
 def set_primary_field_route(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     form = SetPrimaryFieldForm(prefix="set-primary")
     if form.validate_on_submit():
@@ -3173,7 +3174,7 @@ def set_primary_field_route(customer_id: int):
 @bp.post("/customers/<int:customer_id>/notes")
 @login_required
 def add_customer_note_route(customer_id: int):
-    if not current_app.config.get("ENABLE_CUSTOMER_RECORDS"):
+    if not tenant_config("ENABLE_CUSTOMER_RECORDS"):
         return redirect(url_for("admin.dashboard"))
     form = CustomerNoteForm(prefix="customer-note")
     if form.validate_on_submit():
@@ -3189,9 +3190,9 @@ def add_customer_note_route(customer_id: int):
 @bp.post("/customers/<int:customer_id>/recurring-work/generate")
 @login_required
 def generate_recurring_appointments_route(customer_id: int):
-    if not current_app.config.get("ENABLE_RECURRING_WORK"):
+    if not tenant_config("ENABLE_RECURRING_WORK"):
         return redirect(url_for("admin.dashboard"))
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.customer_detail", customer_id=customer_id))
 
     form = RecurringWorkGenerationForm(prefix="generate-recurring")
@@ -3213,7 +3214,7 @@ def generate_recurring_appointments_route(customer_id: int):
 @bp.post("/appointments/<int:appointment_id>/status")
 @login_required
 def update_appointment_status_route(appointment_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.dashboard"))
 
     form = AppointmentStatusForm()
@@ -3230,7 +3231,7 @@ def update_appointment_status_route(appointment_id: int):
 @bp.post("/appointments/<int:appointment_id>/edit")
 @login_required
 def edit_appointment_route(appointment_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.dashboard"))
 
     form = AppointmentForm(prefix="edit")
@@ -3277,7 +3278,7 @@ def edit_appointment_route(appointment_id: int):
 @bp.post("/appointments/<int:appointment_id>/delete")
 @login_required
 def delete_appointment_route(appointment_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.dashboard"))
 
     appointment = get_appointment(appointment_id)
@@ -3298,7 +3299,7 @@ def delete_appointment_route(appointment_id: int):
 @bp.post("/appointments/<int:appointment_id>/reschedule")
 @login_required
 def reschedule_appointment_route(appointment_id: int):
-    if not current_app.config.get("ENABLE_SCHEDULING"):
+    if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("admin.dashboard"))
 
     form = RescheduleAppointmentForm(prefix="reschedule")

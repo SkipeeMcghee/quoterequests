@@ -16,6 +16,8 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+from app.tenancy import get_current_tenant, get_registry, tenant_config
+
 THEMES_PATH = Path(__file__).resolve().parents[1] / "data" / "themes.json"
 
 # The palette the stylesheet was designed around; selecting it means "emit no
@@ -169,14 +171,17 @@ def display_name(slug: str | None) -> str:
 # ---------------------------------------------------------------------------
 # Active theme selection
 #
-# The choice lives in instance/theme.json so a customer can change it at runtime
+# The choice lives under instance/tenants/<slug>/ so a tenant can change it at runtime
 # (from the admin appearance screen) without a redeploy. SITE_THEME in the
 # environment is the deploy-time default for a fresh install.
 # ---------------------------------------------------------------------------
 
 
 def _state_path(app) -> Path:
-    return Path(app.instance_path) / "theme.json"
+    tenant = get_current_tenant()
+    if tenant.slug == get_registry().default_slug:
+        return Path(app.instance_path) / "theme.json"
+    return Path(app.instance_path) / "tenants" / tenant.slug / "theme.json"
 
 
 def get_active_slug(app) -> str:
@@ -184,11 +189,12 @@ def get_active_slug(app) -> str:
     if state.exists():
         try:
             saved = json.loads(state.read_text(encoding="utf-8-sig")).get("slug")
-        except (ValueError, OSError):
+        except (ValueError, OSError) as exc:
+            app.logger.warning("Unable to read tenant theme state at %s: %s", state, exc)
             saved = None
         if get_theme(saved) is not None:
             return saved
-    configured = app.config.get("SITE_THEME")
+    configured = tenant_config("SITE_THEME")
     if get_theme(configured) is not None:
         return configured
     return DEFAULT_SLUG
