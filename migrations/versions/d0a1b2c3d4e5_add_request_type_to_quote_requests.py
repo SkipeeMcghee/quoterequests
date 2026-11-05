@@ -21,7 +21,8 @@ def upgrade():
         'quote_requests',
         sa.Column('request_type', sa.String(length=32), nullable=False, server_default='Quote request'),
     )
-    op.alter_column('quote_requests', 'request_type', server_default=None)
+    with op.batch_alter_table('quote_requests') as batch:
+        batch.alter_column('request_type', server_default=None)
 
 
 def downgrade():

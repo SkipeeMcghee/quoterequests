@@ -45,23 +45,20 @@ def upgrade():
 
     op.add_column('appointments', sa.Column('recurring_work_id', sa.Integer(), nullable=True))
     op.create_index(op.f('ix_appointments_recurring_work_id'), 'appointments', ['recurring_work_id'], unique=False)
-    op.create_foreign_key(
-        'fk_appointments_recurring_work_id_recurring_works',
-        'appointments',
-        'recurring_works',
-        ['recurring_work_id'],
-        ['id'],
-        ondelete='SET NULL',
-    )
-
-    op.alter_column('appointments', 'quote_request_id', existing_type=sa.Integer(), nullable=True)
+    with op.batch_alter_table('appointments') as batch:
+        batch.create_foreign_key(
+            'fk_appointments_recurring_work_id_recurring_works', 'recurring_works',
+            ['recurring_work_id'], ['id'], ondelete='SET NULL',
+        )
+        batch.alter_column('quote_request_id', existing_type=sa.Integer(), nullable=True)
 
 
 def downgrade():
-    op.alter_column('appointments', 'quote_request_id', existing_type=sa.Integer(), nullable=False)
-    op.drop_constraint('fk_appointments_recurring_work_id_recurring_works', 'appointments', type_='foreignkey')
-    op.drop_index(op.f('ix_appointments_recurring_work_id'), table_name='appointments')
-    op.drop_column('appointments', 'recurring_work_id')
+    with op.batch_alter_table('appointments') as batch:
+        batch.alter_column('quote_request_id', existing_type=sa.Integer(), nullable=False)
+        batch.drop_constraint('fk_appointments_recurring_work_id_recurring_works', type_='foreignkey')
+        batch.drop_index(op.f('ix_appointments_recurring_work_id'))
+        batch.drop_column('recurring_work_id')
 
     op.drop_index(op.f('ix_recurring_works_source_appointment_id'), table_name='recurring_works')
     op.drop_index(op.f('ix_recurring_works_quote_request_id'), table_name='recurring_works')

@@ -77,8 +77,9 @@ def upgrade() -> None:
             ],
         )
 
-    op.alter_column("service_options", "is_active", server_default=None)
-    op.alter_column("service_options", "display_order", server_default=None)
+    with op.batch_alter_table("service_options") as batch:
+        batch.alter_column("is_active", server_default=None)
+        batch.alter_column("display_order", server_default=None)
 
 
 def downgrade() -> None:

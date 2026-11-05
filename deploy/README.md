@@ -76,15 +76,20 @@ Generate the key with `python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ## 4. Schema and admin account
 
+Set `TENANT_REGISTRY_FILE=tenants.json` in `.env`. Pre-create each tenant's independent
+PostgreSQL database, then set `ALPHA_DATABASE_URI` in the operator's shell to its
+SQLAlchemy URI (do not commit credentials). Use a real domain configured in DNS/TLS.
+
 ```bash
 cd /srv/quoterequests
-sudo -u quoterequests .venv/bin/python scripts/rehearse_migrations.py --smoke
-sudo -u quoterequests .venv/bin/flask --app wsgi db upgrade
-sudo -u quoterequests .venv/bin/flask --app wsgi create-admin
+sudo -u quoterequests .venv/bin/flask --app wsgi tenant create alpha --domain alpha.example.test --database-uri "$ALPHA_DATABASE_URI" --admin-email admin@alpha.example.test
+sudo -u quoterequests .venv/bin/flask --app wsgi tenant list
 ```
 
-The rehearsal proves the migrations before they touch the real database. Run it on the
-droplet, not just on your laptop.
+Repeat for each tenant, and verify migrations/backups on the deployment's PostgreSQL
+version before exposing hosts. The legacy rehearsal helper is for default single-tenant
+setups; it does not target explicit registries. Provisioning prompts for a hidden admin
+password and writes a protected registry file; restart workers after changes.
 
 ## 5. systemd
 
@@ -93,7 +98,7 @@ sudo cp deploy/quoterequests.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now quoterequests
 sudo systemctl status quoterequests --no-pager
-curl -I http://127.0.0.1:8000/          # expect a 200 from gunicorn
+curl -I -H "Host: alpha.example.test" http://127.0.0.1:8000/  # expect 200 for a registered host
 ```
 
 Logs: `journalctl -u quoterequests -f`.
@@ -120,12 +125,15 @@ sudo crontab -u quoterequests -e
 ```
 
 ```
-15 2 * * *  cd /srv/quoterequests && .venv/bin/python scripts/backup.py --out /srv/backups --keep 14 >> /var/log/quoterequests-backup.log 2>&1
-30 2 * * 0  cd /srv/quoterequests && .venv/bin/python scripts/restore_check.py >> /var/log/quoterequests-restore.log 2>&1
+15 2 * * *  cd /srv/quoterequests && .venv/bin/python scripts/backup.py --tenant alpha --out /srv/backups --keep 14 >> /var/log/quoterequests-backup.log 2>&1
+30 2 * * 0  cd /srv/quoterequests && .venv/bin/python scripts/restore_check.py --tenant alpha --root /srv/backups >> /var/log/quoterequests-restore.log 2>&1
 ```
 
 Put the backup directory on a DigitalOcean volume or sync it off the droplet - a backup
 that lives only on the machine it backs up is not a backup.
+Repeat explicitly for each configured tenant; preserve the protected registry file
+separately. Restore checks use scratch storage, never overwrite live tenant data.
+For an automatic single-tenant default, omit `--tenant`.
 
 ## 8. First-run verification
 
@@ -144,8 +152,9 @@ Work through `DEPLOYMENT_CHECKLIST.md` - particularly:
 
 ## 9. Ongoing
 
-- `sudo systemctl status quoterequests` after any code change; deploy with
-  `git pull && .venv/bin/pip install -r requirements-server.txt && flask --app wsgi db upgrade && sudo systemctl restart quoterequests`.
+- `sudo systemctl status quoterequests` after any code change; install updated
+  dependencies, run `flask --app wsgi tenant upgrade <slug>` explicitly for each tenant,
+  then restart workers. Never assume unqualified `db upgrade` migrates a fleet.
 - Watch `journalctl -u quoterequests` and nginx's error log for the first week.
 - Re-run the deployment checklist whenever a module flag changes.
 
@@ -163,9 +172,10 @@ Work through `DEPLOYMENT_CHECKLIST.md` - particularly:
   authorised private files from `/admin/media/`, and serves enabled tenant galleries
   from `/media/gallery/<filename>`. Existing legacy files must be placed in the correct
   tenant root manually before switching the tenant map.
-- **Fleet operations remain manual.** The database migration and backup/restore commands
-  above are legacy single-deployment commands, not tenant fleet tooling. Explicitly
-  migrate every tenant database and back up each database with its tenant instance
-  directory; tenant-aware CLI provisioning is deferred to Wave 4.
+- **Tenant-targeted operations.** Provision with `flask tenant create`, migrate with
+  `flask tenant upgrade <slug>` or `flask db -x tenant=<slug> upgrade`, and pass
+  `--tenant <slug>` to admin creation and backup/restore checks. Repeat per tenant;
+  unqualified commands fail closed with explicit registries. Restart workers after
+  changing the protected registry. See the main README for bootstrap and cutover steps.
 - **`client_max_body_size 26m`** is deliberately just above the app's 25 MB cap so the
   user gets the branded 413 page rather than nginx's default error.

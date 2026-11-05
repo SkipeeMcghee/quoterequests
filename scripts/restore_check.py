@@ -1,195 +1,251 @@
-"""Verify a backup actually restores.
-
-    python scripts/restore_check.py                  # newest backup in ./backups
-    python scripts/restore_check.py backups/<stamp>   # a specific one
-
-An untested backup is a rumour. This script:
-
-  1. checks the manifest and re-computes checksums,
-  2. reads the archive table of contents (pg_restore --list),
-  3. restores the dump into a throwaway schema next to the live data,
-  4. compares row counts against the manifest,
-  5. drops the throwaway schema.
-
-It never touches the existing schema. Creating the scratch schema is the only privilege
-it needs beyond reading the dump, so it works with a normal application role.
-"""
+"""Verify a tenant backup in scratch storage, never restore over live customer data."""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
+import shutil
+import sqlite3
 import subprocess
 import sys
+import tarfile
 import tempfile
+from contextlib import closing
 from pathlib import Path
+from uuid import uuid4
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-SCRATCH_SCHEMA = "restore_check"
-
-
-def pg_tool(name: str) -> str:
-    from scripts.backup import pg_tool as backup_tool
-
-    return backup_tool(name)
-
-
-def database_url() -> str:
-    from scripts.backup import database_url as backup_url
-
-    return backup_url()
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+from scripts.backup import operation_source, pg_tool, postgres_url, sha256
 
 
 def newest_backup(root: Path) -> Path:
-    runs = sorted((path for path in root.iterdir() if path.is_dir()), reverse=True)
+    runs = sorted((path for path in root.iterdir() if path.is_dir() and (path / "manifest.json").is_file()), reverse=True)
     if not runs:
         raise SystemExit(f"no backups in {root}")
     return runs[0]
 
 
+def manifest_file(root: Path, name: str) -> Path:
+    if not isinstance(name, str) or not name or name != Path(name).name or any(char in name for char in "\\/:"):
+        raise ValueError("Invalid backup manifest filename.")
+    path = root / name
+    if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
+        raise ValueError("Backup files must remain inside the backup directory.")
+    return path
+
+
+def restore_uploads(archive_path: Path, destination: Path, expected_files: int) -> None:
+    """Extract only regular files/directories, rejecting aliases, links and traversal."""
+    files = 0
+    names = set()
+    with tarfile.open(archive_path, "r:gz") as archive:
+        for member in archive:
+            parts = member.name.split("/")
+            if (
+                not member.name or any(part in ("", ".", "..") or part.endswith((".", " ")) for part in parts)
+                or "\\" in member.name or ":" in member.name
+                or not (member.isfile() or member.isdir())
+                or member.name.casefold() in names
+            ):
+                raise ValueError("Invalid or redirected path in upload archive.")
+            names.add(member.name.casefold())
+            path = destination.joinpath(*parts)
+            if not path.resolve().is_relative_to(destination.resolve()):
+                raise ValueError("Upload archive escapes scratch storage.")
+            if member.isdir():
+                path.mkdir(parents=True, exist_ok=True)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                source = archive.extractfile(member)
+                if source is None:
+                    raise ValueError("Upload archive entry has no file content.")
+                with source, path.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+                files += 1
+    if files != expected_files:
+        raise ValueError("Upload archive file count differs from the manifest.")
+
+
+def verify_counts(connection, counts: dict, schema: str | None = None) -> list[str]:
+    from sqlalchemy import text
+    from scripts.backup import COUNTED_TABLES
+    if set(counts) != set(COUNTED_TABLES) | {"alembic_version"}:
+        raise ValueError("Backup manifest must include all expected row counts and the migration revision.")
+    failures = []
+    prefix = f'"{schema}".' if schema else ""
+    for table, expected in counts.items():
+        if table == "alembic_version":
+            if expected == "missing":
+                continue
+            actual = connection.execute(text(f'select version_num from {prefix}"alembic_version"')).scalar_one()
+        else:
+            if table not in COUNTED_TABLES:
+                raise ValueError("Unknown table in backup row counts.")
+            if expected == "missing":
+                continue
+            actual = connection.execute(text(f'select count(*) from {prefix}"{table}"')).scalar_one()
+        if actual != expected:
+            failures.append(f"{table}: restored {actual!r}, expected {expected!r}")
+    return failures
+
+
+def restore_sqlite(dump: Path, scratch: Path, counts: dict) -> list[str]:
+    from sqlalchemy import create_engine
+    from sqlalchemy.engine import URL
+    restored = scratch / "database.sqlite3"
+    with closing(sqlite3.connect(f"{dump.resolve().as_uri()}?mode=ro", uri=True)) as source, closing(sqlite3.connect(restored)) as target:
+        source.backup(target)
+        if target.execute("pragma integrity_check").fetchone()[0] != "ok":
+            return ["SQLite integrity check failed"]
+    engine = create_engine(URL.create("sqlite", database=str(restored)))
+    try:
+        with engine.connect() as connection:
+            return verify_counts(connection, counts)
+    finally:
+        engine.dispose()
+
+
+def run_pg(arguments: list[str]):
+    result = subprocess.run(arguments, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if result.returncode:
+        raise RuntimeError(f"PostgreSQL restore tool failed: {result.stderr.strip()[:300]}")
+    return result
+
+
+def restore_postgres(dump: Path, engine, scratch: Path, counts: dict, keep: bool) -> list[str]:
+    from sqlalchemy import text
+    schema = f"restore_check_{uuid4().hex}"
+    url = postgres_url(engine)
+    # Parse the dump before creating even scratch database objects.
+    run_pg([pg_tool("pg_restore"), "--list", str(dump)])
+    plain = run_pg([pg_tool("pg_restore"), "--no-owner", "--no-acl", "-f", "-", str(dump)])
+    sql_file = scratch / "restore.sql"
+    sql_file.write_text(rewrites_schema(plain.stdout, schema), encoding="utf-8")
+    with engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    verified = False
+    try:
+        run_pg([pg_tool("psql"), "--dbname", url, "--quiet", "--no-psqlrc",
+                "-v", "ON_ERROR_STOP=1", "-f", str(sql_file)])
+        with engine.connect() as connection:
+            failures = verify_counts(connection, counts, schema)
+        verified = not failures
+        if keep and verified:
+            print(f"scratch schema kept: {schema}")
+        return failures
+    finally:
+        if not (keep and verified):
+            with engine.begin() as connection:
+                connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Restore a backup into a scratch schema and verify it.")
-    parser.add_argument("backup", nargs="?", help="backup directory (default: newest)")
-    parser.add_argument("--keep", action="store_true", help="keep the scratch schema")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("backup", nargs="?", help="Backup directory (default: newest for the selected tenant)")
+    parser.add_argument("--tenant")
+    parser.add_argument("--root", default=str(REPO_ROOT / "backups"), help="Backup root used by backup.py --out")
+    parser.add_argument("--keep", action="store_true", help="Keep successfully verified scratch data")
     args = parser.parse_args(argv)
 
-    import psycopg
+    root = Path(args.root)
+    # Validate selection before reading backups or using a slug as a filesystem path.
+    with operation_source(args.tenant) as (tenant, _, _, _):
+        selected_slug = tenant.slug
+        if args.tenant:
+            root /= tenant.slug
+    backup_dir = Path(args.backup) if args.backup else newest_backup(root)
+    manifest = json.loads((backup_dir / "manifest.json").read_text(encoding="utf-8"))
+    if manifest.get("tenant", "default") != selected_slug:
+        raise ValueError("Backup belongs to a different tenant; select its --tenant explicitly.")
 
-    backup_dir = Path(args.backup) if args.backup else newest_backup(REPO_ROOT / "backups")
-    manifest_path = backup_dir / "manifest.json"
-    if not manifest_path.exists():
-        raise SystemExit(f"no manifest in {backup_dir}")
+    paths = {}
+    for label in ("database", "uploads", "theme"):
+        if label not in manifest:
+            if label == "theme":
+                continue
+            raise ValueError(f"Backup manifest has no {label} entry.")
+        entry = manifest[label]
+        path = manifest_file(backup_dir, entry["file"])
+        if not path.is_file() or sha256(path) != entry["sha256"]:
+            print(f"RESTORE CHECK FAILED: {label} checksum mismatch or missing file")
+            return 1
+        paths[label] = path
 
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    dump_file = backup_dir / manifest["database"]["file"]
-    uploads_file = backup_dir / manifest["uploads"]["file"]
-    print(f"backup: {backup_dir}")
-
-    failures: list[str] = []
-
-    for label, path in (("database.dump", dump_file), ("uploads.tar.gz", uploads_file)):
-        if not path.exists():
-            failures.append(f"{label} missing")
-            continue
-        expected = manifest.get("uploads" if label.endswith("gz") else "database", {}).get("sha256")
-        actual = sha256(path)
-        status = "ok" if expected == actual else "CHECKSUM MISMATCH"
-        print(f"  {label:15s} {path.stat().st_size / 1024:8.0f} KB  sha256 {status}")
-        if expected != actual:
-            failures.append(f"{label} checksum mismatch")
-
-    toc = subprocess.run(
-        [pg_tool("pg_restore"), "--list", str(dump_file)],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    if toc.returncode != 0:
-        failures.append(f"pg_restore --list failed: {toc.stderr.strip()[:200]}")
-        entries = 0
-    else:
-        entries = len([line for line in toc.stdout.splitlines() if line and not line.startswith(";")])
-    print(f"  archive entries {entries}")
-
-    url = database_url()
-    with psycopg.connect(url, connect_timeout=10) as conn:
-        conn.autocommit = True
-        with conn.cursor() as cur:
-            cur.execute(f'DROP SCHEMA IF EXISTS "{SCRATCH_SCHEMA}" CASCADE')
-            cur.execute(f'CREATE SCHEMA "{SCRATCH_SCHEMA}"')
-
-    plain = subprocess.run(
-        [pg_tool("pg_restore"), "--no-owner", "--no-acl", "-f", "-", str(dump_file)],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    if plain.returncode != 0:
-        failures.append(f"pg_restore -f failed: {plain.stderr.strip()[:200]}")
-        sql = ""
-    else:
-        sql = rewrites_schema(plain.stdout, SCRATCH_SCHEMA)
-
-    if sql:
-        with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False, encoding="utf-8") as handle:
-            handle.write(sql)
-            sql_path = Path(handle.name)
-        try:
-            restore = subprocess.run(
-                [pg_tool("psql"), "--dbname", url, "--quiet", "--no-psqlrc", "-v", "ON_ERROR_STOP=1", "-f", str(sql_path)],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            if restore.returncode != 0:
-                failures.append(f"psql restore failed: {restore.stderr.strip()[:300]}")
-        finally:
-            sql_path.unlink(missing_ok=True)
-
-    if not failures:
-        with psycopg.connect(url, connect_timeout=10) as conn, conn.cursor() as cur:
-            print("  restored row counts:")
-            for table, expected in manifest.get("row_counts", {}).items():
-                if table == "alembic_version":
-                    continue
-                if not isinstance(expected, int):
-                    continue
-                cur.execute(f'select count(*) from "{SCRATCH_SCHEMA}"."{table}"')
-                actual = cur.fetchone()[0]
-                flag = "ok" if actual == expected else f"MISMATCH (backup had {expected})"
-                print(f"    {table:22s} {actual:6d}  {flag}")
-                if actual != expected:
-                    failures.append(f"{table}: restored {actual} rows, backup had {expected}")
-
-            cur.execute(f'select version_num from "{SCRATCH_SCHEMA}".alembic_version')
-            revision = cur.fetchone()[0]
-            print(f"  alembic revision {revision} (backup: {manifest.get('row_counts', {}).get('alembic_version')})")
-
-    if args.keep:
-        print(f"  scratch schema kept: {SCRATCH_SCHEMA}")
-    else:
-        with psycopg.connect(url, connect_timeout=10) as conn:
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                cur.execute(f'DROP SCHEMA IF EXISTS "{SCRATCH_SCHEMA}" CASCADE')
-        print("  scratch schema dropped")
-
-    if failures:
-        print("\nRESTORE CHECK FAILED")
-        for failure in failures:
-            print("  -", failure)
-        return 1
-
-    print("\nRESTORE CHECK PASSED")
-    return 0
+    scratch = Path(tempfile.mkdtemp(prefix="tenant-restore-"))
+    verified = False
+    try:
+        restore_uploads(paths["uploads"], scratch / "uploads", manifest["uploads"]["files"])
+        if "theme" in paths:
+            json.loads(paths["theme"].read_text(encoding="utf-8"))
+            shutil.copyfile(paths["theme"], scratch / "theme.json")
+        with operation_source(args.tenant) as (_, engine, _, _):
+            backend = engine.url.get_backend_name()
+            format_name = manifest["database"]["format"]
+            if format_name == "sqlite" and backend == "sqlite":
+                failures = restore_sqlite(paths["database"], scratch, manifest["row_counts"])
+            elif format_name == "pg_dump custom" and backend == "postgresql":
+                failures = restore_postgres(paths["database"], engine, scratch, manifest["row_counts"], args.keep)
+            else:
+                raise ValueError("Backup database format does not match the selected tenant.")
+        if failures:
+            print("RESTORE CHECK FAILED: " + "; ".join(failures))
+            return 1
+        verified = True
+        print("RESTORE CHECK PASSED")
+        if args.keep:
+            print(f"scratch files kept: {scratch}")
+        return 0
+    finally:
+        if not (args.keep and verified):
+            shutil.rmtree(scratch)
 
 
 def rewrites_schema(sql: str, schema: str) -> str:
-    """Re-point the dump at a scratch schema instead of public."""
+    """Re-point a trusted public-schema pg_dump at a unique scratch schema."""
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", schema):
+        raise ValueError("Invalid scratch schema name.")
+    def rewrite_ddl(chunk: str) -> str:
+        chunk = re.sub(r"^(?:CREATE SCHEMA public;|ALTER SCHEMA public OWNER|COMMENT ON SCHEMA public).*$", "", chunk, flags=re.MULTILINE)
+        def rewrite_sql(value: str) -> str:
+            value = value.replace("SET search_path = public", f"SET search_path = {schema}")
+            return re.sub(r'(?<![\w$])(?:public|"public")\.', f'{schema}.', value)
+        literals = re.compile(r"'(?:''|[^'])*'|\$\$.*?\$\$|\$(?P<tag>[a-zA-Z_]\w*)\$.*?\$(?P=tag)\$", re.DOTALL)
+        rewritten = []
+        position = 0
+        for match in literals.finditer(chunk):
+            rewritten.append(rewrite_sql(chunk[position:match.start()]))
+            literal = match.group()
+            # Sequence identities are SQL object references, not customer text.
+            if (
+                re.match(r"\s*::(?:pg_catalog\.)?regclass\b", chunk[match.end():])
+                or re.search(r"\b(?:setval|nextval|currval)\(\s*$", chunk[:match.start()])
+            ):
+                literal = re.sub(r"""^'(?:public|"public")\.""", f"'{schema}.", literal)
+            rewritten.append(literal)
+            position = match.end()
+        rewritten.append(rewrite_sql(chunk[position:]))
+        return "".join(rewritten)
 
-    sql = re.sub(r"^CREATE SCHEMA public;.*$", "", sql, flags=re.MULTILINE)
-    sql = re.sub(r"^ALTER SCHEMA public OWNER.*$", "", sql, flags=re.MULTILINE)
-    sql = re.sub(r"^COMMENT ON SCHEMA public.*$", "", sql, flags=re.MULTILINE)
-    sql = sql.replace("SET search_path = public", f"SET search_path = {schema}")
-    sql = sql.replace("public.", f"{schema}.")
-    header = f'SET search_path TO "{schema}";\n'
-    return header + sql
+    output = [f'SET search_path TO "{schema}";\n']
+    ddl = []
+    copying = False
+    for line in sql.splitlines(keepends=True):
+        if copying:
+            output.append(line)
+            if line.rstrip("\r\n") == r"\.":
+                copying = False
+        else:
+            ddl.append(line)
+            if re.match(r"^COPY .* FROM stdin;\s*$", line):
+                output.append(rewrite_ddl("".join(ddl)))
+                ddl.clear()
+                copying = True
+    output.append(rewrite_ddl("".join(ddl)))
+    return "".join(output)
 
 
 if __name__ == "__main__":

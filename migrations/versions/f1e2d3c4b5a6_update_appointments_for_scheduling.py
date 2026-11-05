@@ -22,21 +22,16 @@ def upgrade():
     op.add_column('appointments', sa.Column('start_time', sa.Time(), nullable=True))
     op.add_column('appointments', sa.Column('end_time', sa.Time(), nullable=True))
     op.create_index(op.f('ix_appointments_customer_id'), 'appointments', ['customer_id'], unique=False)
-    op.create_foreign_key(
-        'fk_appointments_customer_id_customers',
-        'appointments',
-        'customers',
-        ['customer_id'],
-        ['id'],
-        ondelete='SET NULL',
-    )
+    with op.batch_alter_table('appointments') as batch:
+        batch.create_foreign_key(
+            'fk_appointments_customer_id_customers', 'customers',
+            ['customer_id'], ['id'], ondelete='SET NULL',
+        )
 
 
 def downgrade():
-    op.drop_constraint('fk_appointments_customer_id_customers', 'appointments', type_='foreignkey')
-    op.drop_index(op.f('ix_appointments_customer_id'), table_name='appointments')
-    op.drop_column('appointments', 'end_time')
-    op.drop_column('appointments', 'start_time')
-    op.drop_column('appointments', 'scheduled_date')
-    op.drop_column('appointments', 'title')
-    op.drop_column('appointments', 'customer_id')
+    with op.batch_alter_table('appointments') as batch:
+        batch.drop_constraint('fk_appointments_customer_id_customers', type_='foreignkey')
+        batch.drop_index(op.f('ix_appointments_customer_id'))
+        for column in ('end_time', 'start_time', 'scheduled_date', 'title', 'customer_id'):
+            batch.drop_column(column)

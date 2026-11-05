@@ -162,6 +162,7 @@ def build_social_links() -> dict[str, dict[str, str | bool]]:
 class Config:
     TENANTS = None
     TENANTS_JSON = os.getenv("TENANTS_JSON", "")
+    TENANT_REGISTRY_FILE = os.getenv("TENANT_REGISTRY_FILE", "")
     TENANT_ALLOW_DEFAULT = False
     TENANT_DEFAULT_HOSTS = ("localhost", "127.0.0.1", "[::1]")
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
@@ -260,6 +261,7 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     TENANT_ALLOW_DEFAULT = True
     TENANTS_JSON = ""
+    TENANT_REGISTRY_FILE = ""
     TESTING = True
     WTF_CSRF_ENABLED = False
     RATE_LIMIT_ENABLED = False

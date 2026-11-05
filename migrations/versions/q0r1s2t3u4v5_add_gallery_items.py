@@ -35,9 +35,10 @@ def upgrade() -> None:
     op.create_index(op.f("ix_gallery_items_featured"), "gallery_items", ["featured"], unique=False)
     op.create_index(op.f("ix_gallery_items_is_active"), "gallery_items", ["is_active"], unique=False)
     op.create_index(op.f("ix_gallery_items_display_order"), "gallery_items", ["display_order"], unique=False)
-    op.alter_column("gallery_items", "featured", server_default=None)
-    op.alter_column("gallery_items", "is_active", server_default=None)
-    op.alter_column("gallery_items", "display_order", server_default=None)
+    with op.batch_alter_table("gallery_items") as batch:
+        batch.alter_column("featured", server_default=None)
+        batch.alter_column("is_active", server_default=None)
+        batch.alter_column("display_order", server_default=None)
 
 
 def downgrade() -> None:

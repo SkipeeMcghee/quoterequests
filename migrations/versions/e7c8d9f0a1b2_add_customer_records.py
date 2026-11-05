@@ -64,20 +64,18 @@ def upgrade():
 
     op.add_column('quote_requests', sa.Column('customer_id', sa.Integer(), nullable=True))
     op.create_index(op.f('ix_quote_requests_customer_id'), 'quote_requests', ['customer_id'], unique=False)
-    op.create_foreign_key(
-        'fk_quote_requests_customer_id_customers',
-        'quote_requests',
-        'customers',
-        ['customer_id'],
-        ['id'],
-        ondelete='SET NULL',
-    )
+    with op.batch_alter_table('quote_requests') as batch:
+        batch.create_foreign_key(
+            'fk_quote_requests_customer_id_customers', 'customers',
+            ['customer_id'], ['id'], ondelete='SET NULL',
+        )
 
 
 def downgrade():
-    op.drop_constraint('fk_quote_requests_customer_id_customers', 'quote_requests', type_='foreignkey')
-    op.drop_index(op.f('ix_quote_requests_customer_id'), table_name='quote_requests')
-    op.drop_column('quote_requests', 'customer_id')
+    with op.batch_alter_table('quote_requests') as batch:
+        batch.drop_constraint('fk_quote_requests_customer_id_customers', type_='foreignkey')
+        batch.drop_index(op.f('ix_quote_requests_customer_id'))
+        batch.drop_column('customer_id')
 
     op.drop_index(op.f('ix_customer_notes_customer_id'), table_name='customer_notes')
     op.drop_table('customer_notes')

@@ -7,7 +7,8 @@ per customer from a single config file.
 Server-rendered HTML, no SPA, no build step. Multi-tenancy supports host-selected
 databases, tenant-bound authentication, and tenant-specific branding, feature flags,
 integrations, themes, rate-limit buckets, and partitioned upload/media storage in one
-application instance. Tenant provisioning and fleet operations remain manual.
+application instance, with persistent CLI provisioning and tenant-targeted migrations
+and backup verification.
 
 ## What it does
 
@@ -88,7 +89,8 @@ Or start the bundled container: `docker-compose up -d`.
 
 ## Configuration
 
-Everything lives in `.env` (see `.env.example` for the full annotated list). The ones that
+Deployment defaults live in `.env`; tenant records use a protected registry file or JSON
+map (see `.env.example`). The settings that
 change behaviour rather than just branding:
 
 | Setting | Purpose |
@@ -102,7 +104,7 @@ change behaviour rather than just branding:
 | `TRUST_PROXY` | Set true only behind nginx, so client IPs and scheme are correct |
 | `SITE_THEME` | Deploy-time default palette; customers can change it later in admin |
 
-### Tenant routing (Waves 1-3)
+### Tenant routing (Waves 1-4)
 
 Development and testing automatically provide a `default` tenant using `DATABASE_URL`
 (the testing database in tests), limited to `localhost`, `127.0.0.1`, and `[::1]`.
@@ -167,11 +169,73 @@ with app.app_context(), tenant_context("alpha") as tenant:
 ```
 
 This selects ORM routing and tenant settings: `db.engine`, `db.create_all()`, and
-the existing migration commands do **not** automatically select that tenant.
+unqualified extension operations do **not** automatically select that tenant.
 For explicit engine work, use `app.extensions["tenancy"].engine_for(tenant)`.
-Provision and migrate each tenant database explicitly; automatic fleet migrations and
-tenant-aware CLI command options are deferred to Wave 4. Existing backup/restore scripts
-must not be assumed to cover every tenant database and instance storage directory.
+CLI/migration operations select tenants explicitly as described below; there is no
+automatic fleet-wide mutation.
+
+### Tenant provisioning and operations (Wave 4)
+
+Set `TENANT_REGISTRY_FILE=tenants.json` in `.env` to enable persistent provisioning.
+Relative paths resolve beneath Flask's instance directory. A missing/empty registry
+starts with no customer hosts and fails closed until tenants are provisioned; this mode
+disables the automatic local default. The file uses the same JSON mapping shown above.
+It may supplement a static `TENANTS_JSON` map, but duplicate slugs/domains are rejected.
+Keep registry/database credentials private, out of Git, and restrict filesystem access.
+
+```powershell
+python -m flask --app run.py tenant create alpha --domain alpha.example.test --admin-email admin@alpha.example.test
+python -m flask --app run.py tenant create beta --domain beta.example.test
+python -m flask --app run.py create-admin --tenant beta --email admin@beta.example.test
+python -m flask --app run.py tenant list
+python -m flask --app run.py tenant upgrade alpha
+# Equivalent Alembic selection, including current/migrate/downgrade operations:
+python -m flask --app run.py db -x tenant=alpha upgrade
+```
+
+Passwords are prompted invisibly. `--admin-password` (provisioning) or `--password`
+(admin creation) is available for automation, but avoid secrets in shell history.
+`create-admin` and `create-dev-admin` both accept `--tenant`; omitting it only works with
+the automatic default tenant. The UI demo seeder remains a disposable test-data tool,
+not a production fleet command.
+
+`tenant create` accepts repeated `--domain`, an optional `--settings` JSON object, and
+`--database-uri`. Without a URI it creates
+`instance/tenants/<slug>/tenant.sqlite3`; in-memory SQLite cannot be provisioned.
+For production, pre-create a dedicated PostgreSQL database and supply its SQLAlchemy
+URI through `--database-uri`; this command migrates the database, not PostgreSQL roles
+or server-level databases. It runs Alembic through the real migration head, creates all
+three upload-category directories, optionally seeds an admin, then atomically publishes
+the record. Known database reuse, duplicate aliases, invalid settings, and concurrent
+registry writes are rejected. Failed migrations do not publish a tenant; inspect any
+partially initialized SQLite database before retrying.
+
+Restart application workers after registry changes; provisioning does not hot-reload
+other workers. Configure DNS, nginx hosts, TLS, and tenant settings before exposing the
+new domain. Keep the instance path stable across CLI commands and server workers.
+
+```powershell
+python scripts\backup.py --tenant alpha --out backups --keep 14
+python scripts\restore_check.py --tenant alpha --root backups
+# Or verify a specific directory returned by backup.py:
+python scripts\restore_check.py --tenant alpha backups\alpha\<timestamp>
+```
+
+Backups live beneath `<out>/<slug>/<UTC timestamp>` and include a PostgreSQL custom dump
+or native SQLite snapshot, a tenant-only upload archive, optional `theme.json`, checksums,
+row counts, migration revision, and tenant identity. Retention is scoped to that tenant's
+completed backups. PostgreSQL dumps and counts share an exported snapshot; pause writes
+on the selected tenant while capturing files so database/media/theme state is consistent.
+The automatic default retains the legacy backup layout and needs no `--tenant` flag.
+
+Restore checks reject mismatched tenants/checksums/unsafe archive paths before restoring.
+They verify media/theme in temporary storage and database counts/revision in a temporary
+SQLite database or unique PostgreSQL scratch schema. They **never restore over live
+tenant data**. `--keep` retains successfully verified scratch data for inspection.
+Only use trusted application backups; PostgreSQL support assumes the application's
+`public` schema and requires `pg_dump`, `pg_restore`, and `psql` (configure `PG_BIN`).
+Back up the protected registry file separately; credential rotation and an actual
+production cutover remain explicit operator actions, not automated by restore checks.
 
 ### Tenant settings and appearance (Wave 2)
 
@@ -235,7 +299,7 @@ Existing files are **not automatically moved**. Before enabling an explicit tena
 manually place each tenant's files under its instance upload root, preserving the
 `quote_requests`, `customers`, and `gallery` subdirectories and database keys. Back up
 each tenant database together with its instance directory (including its theme file).
-Provisioning, migration, and fleet backup/restore CLI changes remain deferred to Wave 4.
+Tenant provisioning and targeted backup/restore verification are described above.
 
 ## Testing and quality gates
 
@@ -252,10 +316,15 @@ the feature-flag presets. CI runs both jobs on every push.
 ## Operating it
 
 ```powershell
-python scripts\rehearse_migrations.py --smoke   # prove migrations on Postgres before deploying
-python scripts\backup.py --keep 14              # dump + uploads + manifest
-python scripts\restore_check.py                 # restore into a scratch schema and verify
+python -m flask --app run.py tenant upgrade alpha
+python scripts\backup.py --tenant alpha --keep 14
+python scripts\restore_check.py --tenant alpha
 ```
+
+Repeat explicitly for each tenant; these commands never enumerate and mutate a fleet.
+The legacy `rehearse_migrations.py --smoke` helper is for default single-tenant setups,
+not explicit registries. Before production rollout, run the full test suite and verify
+tenant migrations/backups on the deployment's PostgreSQL version.
 
 Deployment runbook for a Linux host: [`deploy/README.md`](deploy/README.md).
 Per-deployment checklist: [`DEPLOYMENT_CHECKLIST.md`](DEPLOYMENT_CHECKLIST.md).

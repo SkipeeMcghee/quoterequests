@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -98,6 +100,17 @@ class TenantRegistry:
         configured = config.get("TENANTS")
         if configured is None and config.get("TENANTS_JSON"):
             configured = json.loads(str(config["TENANTS_JSON"]))
+        registry_file = config.get("TENANT_REGISTRY_FILE")
+        if registry_file:
+            records = read_tenant_records(Path(str(registry_file)))
+            if configured is not None and not isinstance(configured, Mapping):
+                raise ValueError("TENANTS must be a mapping.")
+            configured = dict(configured or {})
+            if configured.keys() & records.keys():
+                raise ValueError("Tenant slugs occur in both static configuration and the registry file.")
+            configured.update(records)
+            if not configured:
+                return cls([])
         if configured is None and config.get("TENANT_ALLOW_DEFAULT"):
             uri = config.get("SQLALCHEMY_DATABASE_URI")
             hosts = config.get("TENANT_DEFAULT_HOSTS")
@@ -282,6 +295,11 @@ def tenant_context(slug: str) -> Generator[Tenant]:
 
 
 def register_tenancy(app: Flask) -> None:
+    if registry_file := app.config.get("TENANT_REGISTRY_FILE"):
+        path = Path(registry_file)
+        if not path.is_absolute():
+            path = Path(app.instance_path) / path
+        app.config["TENANT_REGISTRY_FILE"] = str(path.resolve())
     registry = TenantRegistry.from_config(app.config)
     registry.configure_engines(app)
     app.extensions["tenancy"] = registry
@@ -291,7 +309,7 @@ def register_tenancy(app: Flask) -> None:
         g.pop("tenant", None)
         g.pop("_login_user", None)
         try:
-            tenant = registry.resolve(request.host)
+            tenant = get_registry().resolve(request.host)
         except (ValueError, UnicodeError):
             app.logger.warning("Rejected malformed tenant host.")
             return Response("Invalid host.", status=400, mimetype="text/plain")
@@ -299,3 +317,76 @@ def register_tenancy(app: Flask) -> None:
             app.logger.warning("Rejected unknown or disabled tenant host.")
             return Response("Unknown host.", status=404, mimetype="text/plain")
         g.tenant = tenant
+
+
+def read_tenant_records(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    records = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(records, dict):
+        raise ValueError("Tenant registry file must contain a JSON object.")
+    return records
+
+
+@contextmanager
+def tenant_registry_write_lock() -> Generator[Path, None, None]:
+    configured = current_app.config.get("TENANT_REGISTRY_FILE")
+    if not configured:
+        raise ValueError("Set TENANT_REGISTRY_FILE before provisioning tenants.")
+    path = Path(configured)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = path.with_name(path.name + ".lock")
+    try:
+        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise ValueError("Tenant registry is locked; verify no provisioning process is running.") from exc
+    os.close(descriptor)
+    try:
+        yield path
+    finally:
+        lock.unlink()
+
+
+def write_tenant_records(path: Path, records: Mapping[str, Any]) -> None:
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile("w", dir=path.parent, delete=False, encoding="utf-8") as handle:
+            temporary = Path(handle.name)
+            os.chmod(temporary, 0o600)
+            json.dump(records, handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+@contextmanager
+def tenant_operation(slug: str | None) -> Generator[Tenant, None, None]:
+    """Give CLI/scripts a fresh scoped session; explicit registries require a slug."""
+    app = current_app._get_current_object()
+    registry = get_registry()
+    selected = registry.default_slug if slug is None else slug
+    if selected is None:
+        raise ValueError("Specify --tenant when using an explicit tenant registry.")
+    with app.app_context(), tenant_context(selected) as tenant:
+        yield tenant
+
+
+def database_identity(database: Engine | str) -> tuple[object, ...]:
+    url = database.url if isinstance(database, Engine) else make_url(database)
+    if url.get_backend_name() == "sqlite":
+        if url.database in (None, "", ":memory:"):
+            return ("sqlite-memory", id(database))
+        path = Path(url.database)
+        if not path.is_absolute():
+            path = Path(current_app.instance_path) / path
+        resolved = str(path.resolve())
+        return ("sqlite", resolved.casefold() if os.name == "nt" else resolved)
+    host = (url.host or "").lower().rstrip(".")
+    try:
+        host = ip_address(host).compressed
+    except ValueError:
+        pass
+    return (url.get_backend_name(), host, url.port or 5432, url.database)

@@ -1,14 +1,15 @@
-"""Back up the database and the uploads folder into one restorable directory.
+"""Back up one tenant's database, uploads and optional theme into a checked directory.
 
     python scripts/backup.py                    # back up to ./backups/<timestamp>/
     python scripts/backup.py --out D:\\backups   # choose a destination root
     python scripts/backup.py --keep 7           # prune all but the newest 7
+    python scripts/backup.py --tenant alpha     # explicit registries require selection
 
 A backup is only worth anything if it can be restored, so every run also writes a
 manifest with checksums, the alembic revision and per-table row counts, and
 `scripts/restore_check.py` verifies a directory independently.
 
-Requires PostgreSQL client tools (pg_dump). Set PG_BIN if they are not on PATH.
+PostgreSQL requires pg_dump (set PG_BIN if needed); SQLite uses its native backup API.
 """
 
 from __future__ import annotations
@@ -17,11 +18,14 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tarfile
 from datetime import datetime, timezone
+from contextlib import closing, contextmanager
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -79,33 +83,28 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def row_counts(url: str) -> dict[str, int | str]:
-    import psycopg
+def row_counts(engine) -> dict[str, int | str]:
+    with engine.connect() as connection:
+        return _row_counts(connection)
 
+
+def _row_counts(connection) -> dict[str, int | str]:
+    from sqlalchemy import inspect, text
     counts: dict[str, int | str] = {}
-    try:
-        with psycopg.connect(url, connect_timeout=10) as conn, conn.cursor() as cur:
-            for table in COUNTED_TABLES:
-                try:
-                    cur.execute(f'select count(*) from "{table}"')
-                    counts[table] = cur.fetchone()[0]
-                except Exception:  # noqa: BLE001 - a missing table is data too
-                    conn.rollback()
-                    counts[table] = "missing"
-            try:
-                cur.execute("select version_num from alembic_version")
-                counts["alembic_version"] = cur.fetchone()[0]
-            except Exception:  # noqa: BLE001
-                conn.rollback()
-                counts["alembic_version"] = "missing"
-    except Exception as exc:  # noqa: BLE001
-        counts["error"] = f"{type(exc).__name__}: {exc}".splitlines()[0][:120]
+    tables = set(inspect(connection).get_table_names())
+    for table in COUNTED_TABLES:
+        counts[table] = connection.execute(text(f'select count(*) from "{table}"')).scalar_one() if table in tables else "missing"
+    counts["alembic_version"] = connection.execute(text("select version_num from alembic_version")).scalar_one() if "alembic_version" in tables else "missing"
     return counts
 
 
-def dump_database(url: str, target: Path, pg_dump: str) -> None:
+def dump_database(url: str, target: Path, pg_dump: str, *, snapshot: str | None = None) -> None:
+    arguments = [pg_dump, "--format=custom", "--schema=public", "--no-owner", "--no-acl", "--file", str(target)]
+    if snapshot is not None:
+        arguments.extend(["--snapshot", snapshot])
+    arguments.append(url)
     result = subprocess.run(
-        [pg_dump, "--format=custom", "--no-owner", "--no-acl", "--file", str(target), url],
+        arguments,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -115,76 +114,140 @@ def dump_database(url: str, target: Path, pg_dump: str) -> None:
         raise SystemExit(f"pg_dump failed: {result.stderr.strip()[:400]}")
 
 
-def archive_uploads(target: Path) -> tuple[int, int]:
+def archive_uploads(target: Path, uploads_dir: Path = UPLOADS_DIR) -> tuple[int, int]:
     files = 0
     total_bytes = 0
     with tarfile.open(target, "w:gz") as archive:
-        if UPLOADS_DIR.exists():
-            for path in sorted(UPLOADS_DIR.rglob("*")):
+        if uploads_dir.exists():
+            for path in sorted(uploads_dir.rglob("*")):
+                if path.is_symlink() or not path.resolve().is_relative_to(uploads_dir.resolve()):
+                    raise SystemExit("Upload archives must not contain redirected paths.")
                 if path.is_file():
-                    archive.add(path, arcname=path.relative_to(UPLOADS_DIR).as_posix())
+                    archive.add(path, arcname=path.relative_to(uploads_dir).as_posix(), recursive=False)
                     files += 1
                     total_bytes += path.stat().st_size
     return files, total_bytes
 
 
-def prune(root: Path, keep: int) -> list[str]:
-    runs = sorted((path for path in root.iterdir() if path.is_dir()), reverse=True)
+def prune(root: Path, keep: int, tenant_slug: str = "default") -> list[str]:
+    runs = sorted((
+        path for path in root.iterdir()
+        if path.is_dir() and not path.is_symlink()
+        and re.fullmatch(r"\d{8}T\d{6}(?:\d{6})?Z", path.name)
+        and (path / "manifest.json").is_file()
+        and json.loads((path / "manifest.json").read_text(encoding="utf-8")).get("tenant", "default") == tenant_slug
+    ), reverse=True)
     removed = []
     for path in runs[keep:]:
-        shutil.rmtree(path, ignore_errors=True)
+        shutil.rmtree(path)
         removed.append(path.name)
     return removed
+
+
+def operations_app():
+    from app import create_app
+    return create_app()
+
+
+@contextmanager
+def operation_source(slug: str | None):
+    from app.extensions import db
+    from app.tenancy import get_registry, is_default_tenant, tenant_operation, tenant_upload_root
+
+    app = operations_app()
+    try:
+        with app.app_context(), tenant_operation(slug) as tenant:
+            root = tenant_upload_root()
+            theme = Path(app.instance_path) / "theme.json" if is_default_tenant() else root.parent / "theme.json"
+            yield tenant, get_registry().engine_for(tenant), root, theme
+    finally:
+        with app.app_context():
+            db.session.remove()
+            for engine in set(db.engines.values()) | set(get_registry().engines.values()):
+                engine.dispose()
+
+
+def postgres_url(engine) -> str:
+    return engine.url.set(drivername="postgresql").render_as_string(hide_password=False)
+
+
+def dump_sqlite(engine, target: Path) -> None:
+    source = engine.raw_connection()
+    try:
+        with closing(sqlite3.connect(target)) as destination:
+            source.driver_connection.backup(destination)
+    finally:
+        source.close()
+
+
+def backup_tenant(root: Path, keep: int, tenant, engine, uploads_dir: Path, theme: Path) -> Path:
+    backend = engine.url.get_backend_name()
+    if backend not in ("postgresql", "sqlite"):
+        raise SystemExit("Backups support PostgreSQL and SQLite only.")
+    if root.resolve().is_relative_to(uploads_dir.resolve()):
+        raise SystemExit("The backup destination must be outside the upload tree.")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    target = root / stamp
+    target.mkdir(mode=0o700, parents=True, exist_ok=False)
+    db_file = target / ("database.sqlite3" if backend == "sqlite" else "database.dump")
+    uploads_file = target / "uploads.tar.gz"
+    print(f"backup: {target}")
+    if backend == "sqlite":
+        dump_sqlite(engine, db_file)
+    else:
+        from sqlalchemy import text
+        with engine.connect().execution_options(isolation_level="REPEATABLE READ") as connection, connection.begin():
+            snapshot_id = connection.execute(text("select pg_export_snapshot()")).scalar_one()
+            dump_database(postgres_url(engine), db_file, pg_tool("pg_dump"), snapshot=snapshot_id)
+            counts = _row_counts(connection)
+    files, upload_bytes = archive_uploads(uploads_file, uploads_dir)
+    # Counts come from the snapshot, not a live SQLite DB that could change after copying.
+    if backend == "sqlite":
+        from sqlalchemy import create_engine
+        from sqlalchemy.engine import URL
+        snapshot = create_engine(URL.create("sqlite", database=str(db_file)))
+        try:
+            counts = row_counts(snapshot)
+        finally:
+            snapshot.dispose()
+    manifest = {
+        "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "tenant": tenant.slug, "hosts": list(tenant.hosts),
+        "database": {"file": db_file.name, "bytes": db_file.stat().st_size,
+                     "sha256": sha256(db_file), "format": "sqlite" if backend == "sqlite" else "pg_dump custom"},
+        "uploads": {"file": uploads_file.name, "files": files, "bytes": uploads_file.stat().st_size,
+                    "sha256": sha256(uploads_file)},
+        "row_counts": counts,
+    }
+    if theme.exists():
+        if theme.is_symlink() or theme.resolve() != theme.absolute():
+            raise SystemExit("Theme backup must not redirect outside tenant storage.")
+        copied = target / "theme.json"
+        shutil.copyfile(theme, copied)
+        manifest["theme"] = {"file": copied.name, "sha256": sha256(copied)}
+    (target / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"  database: {db_file.name}; uploads: {files} files, {upload_bytes} bytes")
+    if keep:
+        prune(root, keep, tenant.slug)
+    return target
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Back up the database and uploads.")
     parser.add_argument("--out", default=str(REPO_ROOT / "backups"))
     parser.add_argument("--keep", type=int, default=14, help="backups to retain (0 = keep all)")
+    parser.add_argument("--tenant", help="Required for explicit tenant registries")
     args = parser.parse_args(argv)
 
-    url = database_url()
-    root = Path(args.out)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = root / stamp
-    target.mkdir(parents=True, exist_ok=True)
-
-    pg_dump = pg_tool("pg_dump")
-    db_file = target / "database.dump"
-    uploads_file = target / "uploads.tar.gz"
-
-    print(f"backup: {target}")
-    dump_database(url, db_file, pg_dump)
-    print(f"  database.dump  {db_file.stat().st_size / 1024:.0f} KB")
-
-    files, upload_bytes = archive_uploads(uploads_file)
-    print(f"  uploads.tar.gz {files} files, {upload_bytes / 1024:.0f} KB")
-
-    manifest = {
-        "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "database": {
-            "file": db_file.name,
-            "bytes": db_file.stat().st_size,
-            "sha256": sha256(db_file),
-            "format": "pg_dump custom",
-            "pg_dump": pg_dump,
-        },
-        "uploads": {
-            "file": uploads_file.name,
-            "files": files,
-            "bytes": uploads_file.stat().st_size,
-            "sha256": sha256(uploads_file),
-        },
-        "row_counts": row_counts(url),
-    }
-    (target / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    print(f"  manifest.json  {manifest['row_counts']}")
-
-    if args.keep:
-        removed = prune(root, args.keep)
-        if removed:
-            print(f"  pruned {len(removed)} old backup(s)")
-
+    if args.keep < 0:
+        parser.error("--keep cannot be negative.")
+    root = Path(args.out).resolve()
+    with operation_source(args.tenant) as (tenant, engine, uploads_dir, theme):
+        if args.tenant:
+            root /= tenant.slug
+            if root.resolve() != root:
+                raise SystemExit("Tenant backup roots must not redirect through symlinks.")
+        backup_tenant(root, args.keep, tenant, engine, uploads_dir, theme)
     return 0
 
 

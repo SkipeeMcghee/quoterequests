@@ -45,14 +45,12 @@ def upgrade():
             .values(request_number=request_type_counters[request_type])
         )
 
-    op.alter_column('quote_requests', 'request_number', nullable=False)
-    op.create_unique_constraint(
-        'uq_quote_requests_type_number',
-        'quote_requests',
-        ['request_type', 'request_number'],
-    )
+    with op.batch_alter_table('quote_requests') as batch:
+        batch.alter_column('request_number', nullable=False)
+        batch.create_unique_constraint('uq_quote_requests_type_number', ['request_type', 'request_number'])
 
 
 def downgrade():
-    op.drop_constraint('uq_quote_requests_type_number', 'quote_requests', type_='unique')
-    op.drop_column('quote_requests', 'request_number')
+    with op.batch_alter_table('quote_requests') as batch:
+        batch.drop_constraint('uq_quote_requests_type_number', type_='unique')
+        batch.drop_column('request_number')

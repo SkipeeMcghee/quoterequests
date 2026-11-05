@@ -30,8 +30,9 @@ DEFAULT_SERVICE_NAMES = [
 
 def upgrade():
     op.add_column('quote_requests', sa.Column('city', sa.String(length=255), nullable=True))
-    op.alter_column('quote_requests', 'phone', existing_type=sa.String(length=50), nullable=True)
-    op.alter_column('quote_requests', 'email', existing_type=sa.String(length=255), nullable=True)
+    with op.batch_alter_table('quote_requests') as batch:
+        batch.alter_column('phone', existing_type=sa.String(length=50), nullable=True)
+        batch.alter_column('email', existing_type=sa.String(length=255), nullable=True)
 
     op.create_table(
         'service_options',
@@ -85,13 +86,13 @@ def upgrade():
                 )
             )
 
-    op.alter_column('quote_requests', 'city', existing_type=sa.String(length=255), nullable=False)
-
-    op.drop_column('quote_requests', 'service_type')
-    op.drop_column('quote_requests', 'address')
-    op.drop_column('quote_requests', 'description')
-    op.drop_column('quote_requests', 'preferred_contact_method')
-    op.drop_column('quote_requests', 'preferred_contact_time')
+    with op.batch_alter_table('quote_requests') as batch:
+        batch.alter_column('city', existing_type=sa.String(length=255), nullable=False)
+        batch.drop_column('service_type')
+        batch.drop_column('address')
+        batch.drop_column('description')
+        batch.drop_column('preferred_contact_method')
+        batch.drop_column('preferred_contact_time')
 
 
 def downgrade():
@@ -137,5 +138,6 @@ def downgrade():
     op.drop_table('quote_request_service_options')
     op.drop_table('service_options')
 
-    op.alter_column('quote_requests', 'email', existing_type=sa.String(length=255), nullable=False)
-    op.alter_column('quote_requests', 'phone', existing_type=sa.String(length=50), nullable=False)
+    with op.batch_alter_table('quote_requests') as batch:
+        batch.alter_column('email', existing_type=sa.String(length=255), nullable=False)
+        batch.alter_column('phone', existing_type=sa.String(length=50), nullable=False)

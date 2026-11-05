@@ -1,7 +1,7 @@
 import logging
 from logging.config import fileConfig
 
-from flask import current_app
+from flask import current_app, g
 
 from alembic import context
 
@@ -16,6 +16,17 @@ logger = logging.getLogger('alembic.env')
 
 
 def get_engine():
+    from app.tenancy import get_registry
+
+    registry = get_registry()
+    slug = context.get_x_argument(as_dictionary=True).get('tenant')
+    tenant = registry.tenants.get(slug) if slug is not None else getattr(g, 'tenant', None)
+    if slug is not None and tenant is None:
+        raise ValueError("Unknown tenant for migration.")
+    if tenant is not None:
+        return registry.engine_for(tenant)
+    if registry.default_slug is None:
+        raise ValueError("Select a tenant: flask db -x tenant=<slug> upgrade.")
     try:
         # this works with Flask-SQLAlchemy<3 and Alchemical
         return current_app.extensions['migrate'].db.get_engine()
