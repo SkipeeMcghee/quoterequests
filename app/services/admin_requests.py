@@ -29,7 +29,7 @@ from app.models import (
     User,
 )
 from app.services.service_catalog import is_services_enabled, resolve_service_options_by_ids
-from app.services.uploads import save_customer_photos
+from app.services.uploads import delete_upload_file, save_customer_photos
 
 
 _APPOINTMENT_TITLE_UNSET = object()
@@ -1129,11 +1129,19 @@ def update_customer_info(
 
 def upload_customer_photos(customer_id: int, uploaded_files: list) -> list[CustomerPhoto]:
     customer = get_customer(customer_id)
-    photos = save_customer_photos(uploaded_files, customer_id)
-    for photo in photos:
-        photo.customer = customer
-        db.session.add(photo)
-    db.session.commit()
+    paths: list[str] = []
+    try:
+        photos = save_customer_photos(uploaded_files, customer_id)
+        paths = [photo.file_path for photo in photos]
+        for photo in photos:
+            photo.customer = customer
+            db.session.add(photo)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        for path in paths:
+            delete_upload_file(path, categories=("customers",))
+        raise
     return photos
 
 

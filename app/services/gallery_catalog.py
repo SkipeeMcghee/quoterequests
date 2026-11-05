@@ -69,6 +69,7 @@ def create_gallery_item(
         db.session.add(gallery_item)
         db.session.commit()
     except Exception:
+        db.session.rollback()
         delete_gallery_image(image_path)
         raise
     return gallery_item

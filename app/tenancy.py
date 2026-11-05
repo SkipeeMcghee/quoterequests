@@ -193,6 +193,21 @@ def get_current_tenant() -> Tenant:
     raise RuntimeError("An active tenant is required before accessing a customer database.")
 
 
+def is_default_tenant() -> bool:
+    return get_current_tenant().slug == get_registry().default_slug
+
+
+def tenant_upload_root() -> Path:
+    if is_default_tenant():
+        return Path(current_app.config["UPLOAD_FOLDER"]).resolve()
+    tenant = get_current_tenant()
+    root = Path(current_app.instance_path).resolve() / "tenants" / tenant.slug / "uploads"
+    if root.resolve() != root:
+        current_app.logger.error("Tenant upload root contains a redirected storage path.")
+        raise RuntimeError("Tenant upload roots must not redirect through symlinks.")
+    return root
+
+
 def current_tenant_settings() -> Mapping[str, Any]:
     tenant = get_current_tenant()
     overrides = tenant.settings

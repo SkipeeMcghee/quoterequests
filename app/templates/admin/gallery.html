@@ -49,11 +49,11 @@
             type="button"
             class="gallery-management-card__media gallery-management-card__media-button"
             data-gallery-lightbox-open
-            data-gallery-lightbox-src="{{ url_for('static', filename=item.image_path) }}"
+            data-gallery-lightbox-src="{{ media_url(item.image_path) }}"
             data-gallery-lightbox-alt="{{ item.alt_text }}"
             aria-label="Preview {{ item.title }}"
           >
-            <img src="{{ url_for('static', filename=item.image_path) }}" alt="{{ item.alt_text }}">
+            <img src="{{ media_url(item.image_path) }}" alt="{{ item.alt_text }}">
           </button>
 
           <div class="gallery-management-card__content">
@@ -181,7 +181,7 @@
               <li class="gallery-order-item" data-gallery-order-item data-item-id="{{ item.id }}">
                 <input type="hidden" name="item_id" value="{{ item.id }}">
                 <div class="gallery-order-item__thumb">
-                  <img src="{{ url_for('static', filename=item.image_path) }}" alt="{{ item.alt_text }}">
+                  <img src="{{ media_url(item.image_path) }}" alt="{{ item.alt_text }}">
                 </div>
                 <div class="gallery-order-item__copy">
                   <strong data-gallery-order-title>{{ item.title }}</strong>

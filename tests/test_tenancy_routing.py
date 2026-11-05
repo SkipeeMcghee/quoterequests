@@ -1,19 +1,25 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import date
+from io import BytesIO
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs
 
 import pytest
 from flask import g, jsonify, request as flask_request
 from flask_login import current_user, login_required
+from PIL import Image
 from sqlalchemy import event, text
 from sqlalchemy.exc import InvalidRequestError
+from werkzeug.datastructures import FileStorage
+from werkzeug.exceptions import BadRequest
 
 from app import create_app
 from app.extensions import csrf, db
-from app.models import Appointment, Customer, GalleryItem, QuoteRequest, ServiceOption, User
-from app.services import email_hooks, rate_limit, recaptcha, themes
+from app.models import Appointment, Customer, CustomerPhoto, GalleryItem, QuoteRequest, RequestPhoto, ServiceOption, User
+from app.services import email_hooks, media, rate_limit, recaptcha, themes, uploads
 from app.tenancy import (
     TenantRegistry,
     current_tenant_settings,
@@ -21,6 +27,7 @@ from app.tenancy import (
     normalize_host,
     tenant_config,
     tenant_context,
+    tenant_upload_root,
 )
 
 
@@ -654,3 +661,282 @@ def test_flat_application_logo_and_social_defaults_are_available_to_tenants(app)
     assert settings["SOCIAL_LINKS"]["facebook"]["url"] == "https://social.example.test/default"
     assert tenant_config("SOCIAL_FACEBOOK_ENABLED") is True
     assert tenant_config("SOCIAL_FACEBOOK_URL") == "https://social.example.test/default"
+
+
+MEDIA_SETTINGS = {
+    slug: {"ENABLE_GALLERY": True, "ENABLE_CUSTOMER_RECORDS": True}
+    for slug in ("alpha", "beta")
+}
+
+
+def png_bytes(color):
+    output = BytesIO()
+    Image.new("RGB", (2, 2), color).save(output, format="PNG")
+    return output.getvalue()
+
+
+@pytest.fixture()
+def tenant_media_files(tenant_app, monkeypatch):
+    monkeypatch.setattr(uploads, "uuid4", lambda: SimpleNamespace(hex="same"))
+    client = tenant_app.test_client()
+    files = {}
+    for slug, color in (("alpha", "red"), ("beta", "blue")):
+        content = png_bytes(color)
+        base_url = f"http://{slug}.example.test"
+        response = client.post("/quote-request", base_url=base_url, data={
+            "full_name": f"{slug} requester", "phone": "555-0100", "city": "Test City",
+            "photos": (BytesIO(content), "photo.png"),
+        }, content_type="multipart/form-data")
+        assert response.status_code == 302
+        assert response.headers["Location"].endswith("/thank-you")
+        assert login(client, slug).status_code == 302
+        response = client.post("/admin/customers/1/photos", base_url=base_url, data={
+            "customer-photos-photos": (BytesIO(content), "photo.png"),
+        }, content_type="multipart/form-data")
+        assert response.status_code == 302
+        with tenant_app.app_context(), tenant_context(slug):
+            GalleryItem.query.delete()
+            db.session.commit()
+        response = client.post("/admin/content/gallery", base_url=base_url, data={
+            "gallery-create-image": (BytesIO(content), "photo.png"),
+            "gallery-create-title": f"{slug} photo",
+            "gallery-create-service_id": "0",
+            "gallery-create-submit": "Upload Image",
+        }, content_type="multipart/form-data")
+        assert response.status_code == 302
+        with tenant_app.app_context(), tenant_context(slug):
+            assert QuoteRequest.query.one().id == Customer.query.one().id == GalleryItem.query.one().id == 1
+            files[slug] = {
+                "root": tenant_upload_root(), "content": content,
+                "request": RequestPhoto.query.one().file_path,
+                "customer": CustomerPhoto.query.one().file_path,
+                "gallery": GalleryItem.query.one().image_path,
+            }
+    return files
+
+
+@pytest.mark.parametrize("tenant_app", [MEDIA_SETTINGS], indirect=True)
+class TestTenantMedia:
+    def test_route_uploads_with_equal_ids_write_separate_tenant_directories(self, tenant_app, tenant_media_files):
+        for slug in ("alpha", "beta"):
+            data = tenant_media_files[slug]
+            assert data["root"] == Path(tenant_app.instance_path).resolve() / "tenants" / slug / "uploads"
+            for category in ("request", "customer", "gallery"):
+                key = data[category]
+                assert not Path(key).is_absolute()
+                assert "\\" not in key and key.startswith("uploads/")
+                assert slug not in key
+                assert (data["root"] / media.storage_key(key)).read_bytes() == data["content"]
+        assert tenant_media_files["alpha"]["root"] != tenant_media_files["beta"]["root"]
+        for category in ("request", "customer", "gallery"):
+            assert tenant_media_files["alpha"][category] == tenant_media_files["beta"][category]
+        assert not Path(tenant_app.config["UPLOAD_FOLDER"]).exists()
+
+    def test_private_media_serves_only_the_authenticated_tenants_bytes(self, tenant_app, tenant_media_files):
+        client = tenant_app.test_client()
+        for slug in ("alpha", "beta", "alpha"):
+            assert login(client, slug).status_code == 302
+            for category in ("request", "customer"):
+                key = media.storage_key(tenant_media_files[slug][category])
+                response = client.get(f"/admin/media/{key}", base_url=f"http://{slug}.example.test")
+                assert response.status_code == 200
+                assert response.data == tenant_media_files[slug]["content"]
+                assert "private" in response.headers["Cache-Control"]
+        anonymous = tenant_app.test_client()
+        assert anonymous.get("/admin/media/quote_requests/1/same-photo.png", base_url=f"http://{ALPHA}").status_code in (302, 401, 404)
+
+    def test_private_file_uploaded_only_to_beta_is_not_available_on_alpha(self, tenant_app, tenant_media_files):
+        with tenant_app.app_context(), tenant_context("beta"):
+            uploaded = uploads.save_customer_photos([
+                FileStorage(BytesIO(png_bytes("blue")), filename="beta-only.png", content_type="image/png"),
+            ], 1)
+            key = media.storage_key(uploaded[0].file_path)
+        client = tenant_app.test_client()
+        assert login(client, "alpha").status_code == 302
+        assert client.get(f"/admin/media/{key}", base_url=f"http://{ALPHA}").status_code == 404
+        assert login(client, "beta").status_code == 302
+        assert client.get(f"/admin/media/{key}", base_url=f"http://{BETA}").data == png_bytes("blue")
+
+    def test_public_gallery_urls_and_previews_use_tenant_media(self, tenant_app, tenant_media_files):
+        client = tenant_app.test_client()
+        for slug in ("alpha", "beta"):
+            key = tenant_media_files[slug]["gallery"]
+            with tenant_app.test_request_context("/", base_url=f"http://{slug}.example.test"):
+                assert tenant_app.preprocess_request() is None
+                url = media.media_url(key)
+            assert url == "/media/gallery/same-photo.png"
+            response = client.get(url, base_url=f"http://{slug}.example.test")
+            assert response.status_code == 200
+            assert response.data == tenant_media_files[slug]["content"]
+            assert f'src="{url}"' in client.get("/gallery", base_url=f"http://{slug}.example.test").get_data(as_text=True)
+            assert login(client, slug).status_code == 302
+            assert f'src="{url}"' in client.get("/admin/content/gallery", base_url=f"http://{slug}.example.test").get_data(as_text=True)
+        assert client.get("/media/customers/1/same-photo.png", base_url=f"http://{ALPHA}").status_code == 404
+
+    def test_directory_cleanup_cannot_delete_the_other_tenants_photos(self, tenant_app, tenant_media_files):
+        with tenant_app.app_context(), tenant_context("alpha"):
+            uploads.cleanup_request_photo_dir(1)
+            uploads.cleanup_customer_photo_dir(1)
+        alpha = tenant_media_files["alpha"]
+        beta = tenant_media_files["beta"]
+        for category in ("request", "customer"):
+            assert not (alpha["root"] / media.storage_key(alpha[category])).exists()
+            assert (beta["root"] / media.storage_key(beta[category])).read_bytes() == beta["content"]
+
+    def test_gallery_deletion_uses_the_tenant_root_and_rejects_escape_keys(self, tenant_app, tenant_media_files):
+        alpha = tenant_media_files["alpha"]
+        beta = tenant_media_files["beta"]
+        with tenant_app.app_context(), tenant_context("alpha"):
+            uploads.delete_gallery_image("../../beta/uploads/gallery/same-photo.png")
+            uploads.delete_gallery_image(str(beta["root"] / media.storage_key(beta["gallery"])))
+            uploads.delete_gallery_image(alpha["customer"])
+            assert (alpha["root"] / media.storage_key(alpha["customer"])).exists()
+            uploads.delete_gallery_image(alpha["gallery"])
+        assert not (alpha["root"] / media.storage_key(alpha["gallery"])).exists()
+        assert (beta["root"] / media.storage_key(beta["gallery"])).read_bytes() == beta["content"]
+
+    def test_partial_customer_batch_cleanup_preserves_existing_and_other_tenant_files(self, tenant_app, tenant_media_files):
+        with tenant_app.app_context(), tenant_context("alpha"):
+            with pytest.raises(BadRequest):
+                uploads.save_customer_photos([
+                    FileStorage(BytesIO(png_bytes("red")), filename="partial.png", content_type="image/png"),
+                    FileStorage(BytesIO(b"not an image"), filename="bad.png", content_type="image/png"),
+                ], 1)
+        for slug in ("alpha", "beta"):
+            data = tenant_media_files[slug]
+            assert (data["root"] / media.storage_key(data["customer"])).read_bytes() == data["content"]
+            assert not (data["root"] / "customers" / "1" / "same-partial.png").exists()
+
+    def test_customer_commit_failure_removes_only_the_new_tenant_upload(self, tenant_app, tenant_media_files, monkeypatch):
+        from app.services.admin_requests import upload_customer_photos
+
+        with tenant_app.app_context(), tenant_context("alpha"):
+            session = db.session()
+            def fail_commit():
+                raise RuntimeError("simulated commit failure")
+            monkeypatch.setattr(session, "commit", fail_commit)
+            with pytest.raises(RuntimeError, match="simulated commit failure"):
+                upload_customer_photos(1, [
+                    FileStorage(BytesIO(png_bytes("red")), filename="failed.png", content_type="image/png"),
+                ])
+            assert CustomerPhoto.query.count() == 1
+        for slug in ("alpha", "beta"):
+            data = tenant_media_files[slug]
+            assert (data["root"] / media.storage_key(data["customer"])).read_bytes() == data["content"]
+            assert not (data["root"] / "customers" / "1" / "same-failed.png").exists()
+
+    def test_gallery_failure_rolls_back_and_preserves_other_tenant_files(self, tenant_app, tenant_media_files):
+        from app.services.gallery_catalog import create_gallery_item
+
+        with tenant_app.app_context(), tenant_context("alpha"):
+            with pytest.raises(BadRequest):
+                create_gallery_item(
+                    image_file=FileStorage(BytesIO(png_bytes("red")), filename="failed.png", content_type="image/png"),
+                    title="",
+                )
+            assert GalleryItem.query.count() == 1
+        for slug in ("alpha", "beta"):
+            data = tenant_media_files[slug]
+            assert (data["root"] / media.storage_key(data["gallery"])).read_bytes() == data["content"]
+            assert not (data["root"] / "gallery" / "same-failed.png").exists()
+
+    def test_shared_static_uploads_are_blocked_even_if_the_file_exists(self, tenant_app, tmp_path, monkeypatch):
+        static_root = tmp_path / "shared-static"
+        gallery = static_root / "uploads" / "gallery"
+        gallery.mkdir(parents=True)
+        (gallery / "shared.png").write_bytes(png_bytes("blue"))
+        monkeypatch.setattr(tenant_app, "static_folder", str(static_root))
+        client = tenant_app.test_client()
+        for path in (
+            "/static/uploads/gallery/shared.png",
+            "/static/./uploads/gallery/shared.png",
+            "/static/uploads//gallery/shared.png",
+            "/static/uploads%5cgallery%5cshared.png",
+            "/static/uploads./gallery/shared.png",
+            "/static/uploads%20/gallery/shared.png",
+        ):
+            assert client.get(path, base_url=f"http://{ALPHA}").status_code == 404
+            assert client.get(path, base_url=f"http://{BETA}").status_code == 404
+
+    def test_resolved_gallery_links_cannot_expose_private_or_other_tenant_files(self, tenant_app, tenant_media_files, monkeypatch):
+        alpha = tenant_media_files["alpha"]
+        beta = tenant_media_files["beta"]
+        original_resolve = Path.resolve
+        redirects = {
+            alpha["root"] / "gallery" / "private.png": alpha["root"] / media.storage_key(alpha["request"]),
+            alpha["root"] / "gallery" / "other-tenant.png": beta["root"] / media.storage_key(beta["gallery"]),
+        }
+        def redirected(path, *args, **kwargs):
+            return redirects.get(path, original_resolve(path, *args, **kwargs))
+        monkeypatch.setattr(Path, "resolve", redirected)
+        client = tenant_app.test_client()
+        assert client.get("/media/gallery/private.png", base_url=f"http://{ALPHA}").status_code == 404
+        assert client.get("/media/gallery/other-tenant.png", base_url=f"http://{ALPHA}").status_code == 404
+
+    def test_partial_file_save_failure_removes_only_the_new_upload(self, tenant_app, tenant_media_files, monkeypatch):
+        file = FileStorage(BytesIO(png_bytes("red")), filename="failed.png", content_type="image/png")
+        def fail_save(target):
+            Path(target).write_bytes(b"partial file")
+            raise OSError("simulated file save failure")
+        monkeypatch.setattr(file, "save", fail_save)
+        with tenant_app.app_context(), tenant_context("alpha"):
+            with pytest.raises(OSError, match="simulated file save failure"):
+                uploads.save_customer_photos([file], 1)
+        for slug in ("alpha", "beta"):
+            data = tenant_media_files[slug]
+            assert (data["root"] / media.storage_key(data["customer"])).read_bytes() == data["content"]
+            assert not (data["root"] / "customers" / "1" / "same-failed.png").exists()
+
+    @pytest.mark.parametrize("key", [
+        "../beta/uploads/gallery/photo.png", "/gallery/photo.png",
+        r"C:\uploads\gallery\photo.png", "gallery/photo.png:alternate",
+        "gallery/../customers/1/photo.png", "gallery//photo.png", "gallery/\x00photo.png",
+    ])
+    def test_media_resolver_rejects_malformed_storage_keys(self, tenant_app, key):
+        with tenant_app.app_context(), tenant_context("alpha"):
+            assert media.resolve_public_file(key) is None
+            assert media.resolve_private_file(key) is None
+
+
+@pytest.mark.parametrize("tenant_app", [MEDIA_SETTINGS], indirect=True)
+def test_quote_upload_failure_rolls_back_only_alpha_storage(tenant_app, monkeypatch):
+    monkeypatch.setattr(uploads, "uuid4", lambda: SimpleNamespace(hex="same"))
+    client = tenant_app.test_client()
+    data = {"full_name": "Beta requester", "phone": "555-0100", "city": "Test City"}
+    response = client.post("/quote-request", base_url=f"http://{BETA}", data={
+        **data, "photos": (BytesIO(png_bytes("blue")), "photo.png"),
+    }, content_type="multipart/form-data")
+    assert response.status_code == 302
+    response = client.post("/quote-request", base_url=f"http://{ALPHA}", data={
+        **data, "photos": [
+            (BytesIO(png_bytes("red")), "photo.png"),
+            (BytesIO(b"not an image"), "bad.png"),
+        ],
+    }, content_type="multipart/form-data")
+    assert response.status_code == 200
+    with tenant_app.app_context(), tenant_context("alpha"):
+        assert QuoteRequest.query.count() == 0
+        assert not (tenant_upload_root() / "quote_requests" / "1").exists()
+    with tenant_app.app_context(), tenant_context("beta"):
+        assert QuoteRequest.query.one().id == 1
+        assert (tenant_upload_root() / "quote_requests" / "1" / "same-photo.png").read_bytes() == png_bytes("blue")
+
+
+@pytest.mark.parametrize("tenant_app", [{
+    "alpha": {"ENABLE_GALLERY": False}, "beta": {"ENABLE_GALLERY": True},
+}], indirect=True)
+def test_public_gallery_media_enforces_each_tenants_feature_flag(tenant_app):
+    urls = {}
+    for slug in ("alpha", "beta"):
+        with tenant_app.app_context(), tenant_context(slug):
+            key = uploads.save_gallery_image(FileStorage(
+                BytesIO(png_bytes("red")), filename="gallery.png", content_type="image/png",
+            ))
+            GalleryItem.query.one().image_path = key
+            db.session.commit()
+        with tenant_app.test_request_context("/", base_url=f"http://{slug}.example.test"):
+            assert tenant_app.preprocess_request() is None
+            urls[slug] = media.media_url(key)
+    client = tenant_app.test_client()
+    assert client.get(urls["alpha"], base_url=f"http://{ALPHA}").status_code == 404
+    assert client.get(urls["beta"], base_url=f"http://{BETA}").status_code == 200

@@ -1,5 +1,6 @@
 from pathlib import Path
 from collections.abc import Mapping
+from posixpath import normpath
 
 from flask import Flask, abort, flash, jsonify, make_response, redirect, render_template, render_template_string, request, url_for
 from flask_login import current_user
@@ -20,7 +21,7 @@ from app.services.themes import (
     get_active_slug as get_active_theme_slug,
 )
 from app.services.media import media_url
-from app.tenancy import current_tenant_settings, get_registry, register_tenancy
+from app.tenancy import current_tenant_settings, get_registry, is_default_tenant, register_tenancy
 
 
 def create_app(config_name: str | None = None, config_overrides: Mapping[str, object] | None = None) -> Flask:
@@ -31,10 +32,9 @@ def create_app(config_name: str | None = None, config_overrides: Mapping[str, ob
         app.config.update(config_overrides)
     config_object.validate()
 
-    _ensure_runtime_directories(app)
-
     register_proxy_fix(app)
     register_tenancy(app)
+    _ensure_runtime_directories(app)
     register_extensions(app)
     register_models()
     register_blueprints(app)
@@ -166,21 +166,23 @@ def _describe_service(service_name) -> str:
 
 
 def register_private_upload_guard(app: Flask) -> None:
-    """Keep request/customer photos out of the public static route.
+    """Block shared static uploads, retaining only the default tenant's public gallery."""
 
-    The files have to live under static/assets for the existing storage layout to keep
-    working, so the static route is blocked for the private categories and the admin
-    media route serves them to signed-in users instead.
-    """
-
-    from app.services.media import PRIVATE_UPLOAD_ROOTS
-
-    blocked_prefixes = tuple(f"/static/uploads/{root}/" for root in PRIVATE_UPLOAD_ROOTS)
+    from app.services.media import is_private_upload
 
     @app.before_request
     def block_public_uploads():
-        if request.path.startswith(blocked_prefixes):
+        if request.endpoint != "static":
+            return
+        filename = str((request.view_args or {}).get("filename", ""))
+        filename = filename.replace("\\", "/")
+        # Windows aliases trailing dots/spaces to otherwise distinct path names.
+        if any(part not in (".", "..") and part.endswith((".", " ")) for part in filename.split("/")):
             abort(404)
+        normalized = normpath(filename).lstrip("/").casefold()
+        if normalized == "uploads" or normalized.startswith("uploads/"):
+            if not is_default_tenant() or is_private_upload(normalized):
+                abort(404)
 
 
 def register_proxy_fix(app: Flask) -> None:
@@ -296,4 +298,5 @@ def register_error_handlers(app: Flask) -> None:
 
 def _ensure_runtime_directories(app: Flask) -> None:
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
-    Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)
+    if app.extensions["tenancy"].default_slug is not None:
+        Path(app.config["UPLOAD_FOLDER"]).mkdir(parents=True, exist_ok=True)

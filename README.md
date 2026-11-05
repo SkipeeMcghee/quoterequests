@@ -6,9 +6,8 @@ per customer from a single config file.
 
 Server-rendered HTML, no SPA, no build step. Multi-tenancy supports host-selected
 databases, tenant-bound authentication, and tenant-specific branding, feature flags,
-integrations, themes, and rate-limit buckets in one application instance.
-Upload/media storage is still deployment-wide pending Wave 3; this is not yet a fully
-isolated multi-tenant deployment.
+integrations, themes, rate-limit buckets, and partitioned upload/media storage in one
+application instance. Tenant provisioning and fleet operations remain manual.
 
 ## What it does
 
@@ -103,7 +102,7 @@ change behaviour rather than just branding:
 | `TRUST_PROXY` | Set true only behind nginx, so client IPs and scheme are correct |
 | `SITE_THEME` | Deploy-time default palette; customers can change it later in admin |
 
-### Tenant routing (Waves 1-2)
+### Tenant routing (Waves 1-3)
 
 Development and testing automatically provide a `default` tenant using `DATABASE_URL`
 (the testing database in tests), limited to `localhost`, `127.0.0.1`, and `[::1]`.
@@ -171,8 +170,8 @@ This selects ORM routing and tenant settings: `db.engine`, `db.create_all()`, an
 the existing migration commands do **not** automatically select that tenant.
 For explicit engine work, use `app.extensions["tenancy"].engine_for(tenant)`.
 Provision and migrate each tenant database explicitly; automatic fleet migrations and
-tenant-aware CLI command options are not part of these waves. Do not serve independent
-production clients until upload/media storage isolation is completed in Wave 3.
+tenant-aware CLI command options are deferred to Wave 4. Existing backup/restore scripts
+must not be assumed to cover every tenant database and instance storage directory.
 
 ### Tenant settings and appearance (Wave 2)
 
@@ -204,12 +203,44 @@ Explicit tenants persist appearance in `instance/tenants/<slug>/theme.json`; the
 read the legacy shared theme file. The automatic local/test tenant retains
 `instance/theme.json` for compatibility. Rate-limit counters use
 `tenant_slug:bucket:client_ip`; they remain in-memory and per worker, not a distributed
-quota. Upload/media paths are unchanged by this wave.
+quota.
+
+### Tenant uploads and media (Wave 3)
+
+Explicit tenants store files beneath `instance/tenants/<slug>/uploads`, separately from
+the shared static tree. Uploads, deletion, directory cleanup, and failure rollback all
+resolve through the active tenant's root, including outside requests within
+`tenant_context`. Tenant roots must not redirect through symlinks; resolved file paths
+must remain inside their permitted tenant/category boundaries.
+
+Database keys remain relative and unchanged in shape:
+`uploads/quote_requests/<id>/<filename>`, `uploads/customers/<id>/<filename>`, and
+`uploads/gallery/<filename>`. They contain neither absolute filesystem paths nor tenant
+directory prefixes. Equal record IDs and filenames across tenants remain isolated.
+
+- Private request/customer photos use the authenticated `/admin/media/<path>` endpoint
+  with private caching and noindex headers.
+- Explicit tenant gallery images use `/media/gallery/<filename>`, generated through
+  `media_url`. This public endpoint resolves only gallery files and requires the active
+  tenant's `ENABLE_GALLERY` flag.
+- Explicit tenants cannot access shared `/static/uploads/` URLs. The nginx deployment
+  configuration blocks the entire legacy static-upload prefix; shared code and branding
+  assets remain served from static storage.
+
+The automatic local/test default tenant keeps `UPLOAD_FOLDER` and legacy public static
+gallery URLs for single-tenant compatibility. This fallback does not apply to explicit
+tenant maps, even when they contain only one tenant.
+
+Existing files are **not automatically moved**. Before enabling an explicit tenant map,
+manually place each tenant's files under its instance upload root, preserving the
+`quote_requests`, `customers`, and `gallery` subdirectories and database keys. Back up
+each tenant database together with its instance directory (including its theme file).
+Provisioning, migration, and fleet backup/restore CLI changes remain deferred to Wave 4.
 
 ## Testing and quality gates
 
 ```powershell
-python -m pytest -q                 # 207 tests
+python -m pytest -q
 python scripts\ui_sweep.py          # every route, 390/768/1440, screenshots + report
 ```
 
@@ -233,10 +264,11 @@ Architecture notes: [`PROJECT.md`](PROJECT.md).
 
 ## Security notes
 
-- **Private uploads.** Request and customer photos live under `app/static/uploads/` but
-  the static route 404s those prefixes; they are served by an authenticated
-  `/admin/media/<path>` route with traversal checks, `Cache-Control: private` and
-  `X-Robots-Tag: noindex`. Gallery images stay public on purpose.
+- **Private uploads.** Explicit tenants have separate instance upload roots; the
+  automatic local/test tenant retains the legacy upload folder. Shared static uploads
+  are blocked for explicit tenants. Private files use the authenticated
+  `/admin/media/<path>` route with containment checks, `Cache-Control: private` and
+  `X-Robots-Tag: noindex`. Tenant gallery media is public only when enabled.
 - **Sessions.** Deactivated accounts lose access on their next request; Flask-Login only
   checks `is_active` at login time, so the user loader enforces it every time.
 - **Rate limiting.** In-app fixed windows for anonymous forms and login. Counters are per

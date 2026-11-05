@@ -1,20 +1,17 @@
 """Access rules for uploaded files.
 
-Uploads live under `app/static/uploads`, which means Flask's static route would serve
-them to anyone who guesses a URL. Gallery images are meant to be public; request and
-customer photos are not - they are somebody's home, often with a gate code in the
-filename metadata.
-
-So: private categories are blocked on the static route and served through an
-authenticated admin route instead. `media_url()` is the single place that decides which
-is which, so templates never build these URLs by hand.
+Explicit tenants store uploads outside the shared static tree. Private categories
+require authentication; gallery images use a tenant-aware public endpoint. The
+automatic local/test tenant retains its legacy public static gallery URLs.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from flask import url_for
+from flask import current_app, url_for
+
+from app.tenancy import is_default_tenant, tenant_upload_root
 
 # First path segment under uploads/ that must never be served by the static route.
 PRIVATE_UPLOAD_ROOTS = ("quote_requests", "customers")
@@ -56,25 +53,52 @@ def media_url(relative_path: str) -> str:
     if is_private_upload(normalized):
         return url_for("admin.uploaded_media", storage_path=storage_key(normalized))
 
+    if upload_category(normalized) == "gallery" and not is_default_tenant():
+        return url_for("main.public_media", storage_path=storage_key(normalized))
+
     return url_for("static", filename=normalized)
 
 
-def resolve_private_file(upload_folder: str, storage_path: str) -> Path | None:
-    """Absolute path for a private upload, or None if it escapes the uploads root."""
+def resolve_upload_path(
+    relative_path: str,
+    *,
+    categories: tuple[str, ...] = (*PRIVATE_UPLOAD_ROOTS, "gallery"),
+) -> Path | None:
+    """Resolve a logical upload key beneath the active tenant's storage root."""
 
-    key = storage_key(storage_path)
-    if not key or upload_category(key) not in PRIVATE_UPLOAD_ROOTS:
+    if not relative_path or relative_path.startswith(("/", "\\")):
+        current_app.logger.warning("Rejected an empty or absolute upload key.")
+        return None
+    parts = relative_path.replace("\\", "/").split("/")
+    if parts[0] == "uploads":
+        parts = parts[1:]
+    if (
+        not parts or parts[0] not in categories
+        or any(part in ("", ".", "..") or ":" in part for part in parts)
+        or any(ord(char) < 32 for char in relative_path)
+    ):
+        current_app.logger.warning("Rejected an invalid upload key or category.")
         return None
 
-    root = Path(upload_folder).resolve()
-    candidate = (root / key).resolve()
+    root = tenant_upload_root()
+    candidate = root.joinpath(*parts).resolve()
 
     try:
-        candidate.relative_to(root)
+        resolved_parts = candidate.relative_to(root).parts
     except ValueError:
+        current_app.logger.warning("Rejected an upload path outside the tenant storage root.")
         return None
-
-    if not candidate.is_file():
+    if not resolved_parts or resolved_parts[0] not in categories:
+        current_app.logger.warning("Rejected an upload path outside its allowed category.")
         return None
-
     return candidate
+
+
+def resolve_private_file(storage_path: str) -> Path | None:
+    candidate = resolve_upload_path(storage_path, categories=PRIVATE_UPLOAD_ROOTS)
+    return candidate if candidate is not None and candidate.is_file() else None
+
+
+def resolve_public_file(storage_path: str) -> Path | None:
+    candidate = resolve_upload_path(storage_path, categories=("gallery",))
+    return candidate if candidate is not None and candidate.is_file() else None

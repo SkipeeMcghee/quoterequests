@@ -158,7 +158,14 @@ Work through `DEPLOYMENT_CHECKLIST.md` - particularly:
 - **Loopback binding.** gunicorn listens on 127.0.0.1:8000; nothing reaches it except
   nginx. Never expose 8000 in the firewall.
 - **Uploads stay private through two layers.** nginx returns 404 for
-  `/static/uploads/quote_requests/` and `/static/uploads/customers/`, and the app blocks
-  the same prefixes and serves authorised files from `/admin/media/`.
+  all `/static/uploads/` paths. Explicit tenants store files in
+  `instance/tenants/<slug>/uploads`; the app also blocks shared static uploads, serves
+  authorised private files from `/admin/media/`, and serves enabled tenant galleries
+  from `/media/gallery/<filename>`. Existing legacy files must be placed in the correct
+  tenant root manually before switching the tenant map.
+- **Fleet operations remain manual.** The database migration and backup/restore commands
+  above are legacy single-deployment commands, not tenant fleet tooling. Explicitly
+  migrate every tenant database and back up each database with its tenant instance
+  directory; tenant-aware CLI provisioning is deferred to Wave 4.
 - **`client_max_body_size 26m`** is deliberately just above the app's 25 MB cap so the
   user gets the branded 413 page rather than nginx's default error.

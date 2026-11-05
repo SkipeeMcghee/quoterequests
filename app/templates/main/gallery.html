@@ -16,7 +16,7 @@
         type="button"
         class="gallery-tile{% if item.featured %} gallery-tile--featured{% endif %}"
         data-gallery-public-open
-        data-gallery-public-src="{{ url_for('static', filename=item.image_path) }}"
+        data-gallery-public-src="{{ media_url(item.image_path) }}"
         data-gallery-public-alt="{{ item.alt_text }}"
         data-gallery-public-title="{{ item.title }}"
         data-gallery-public-caption="{{ item.normalized_caption or '' }}"
@@ -24,7 +24,7 @@
         aria-label="View {{ item.title }}"
       >
         <span class="gallery-tile__media">
-          <img src="{{ url_for('static', filename=item.image_path) }}" alt="{{ item.alt_text }}" {% if loop.index <= 2 %}loading="eager"{% else %}loading="lazy"{% endif %}>
+          <img src="{{ media_url(item.image_path) }}" alt="{{ item.alt_text }}" {% if loop.index <= 2 %}loading="eager"{% else %}loading="lazy"{% endif %}>
         </span>
       </button>
     {% endfor %}

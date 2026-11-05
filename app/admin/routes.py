@@ -3379,7 +3379,7 @@ def uploaded_media(storage_path: str):
 
     from app.services.media import resolve_private_file
 
-    file_path = resolve_private_file(current_app.config["UPLOAD_FOLDER"], storage_path)
+    file_path = resolve_private_file(storage_path)
     if file_path is None:
         raise NotFound()
 

@@ -1,4 +1,4 @@
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, redirect, render_template, request, send_file, url_for
 from werkzeug.exceptions import BadRequest, NotFound
 
 from app.forms.quote_request import QuoteRequestForm
@@ -7,6 +7,7 @@ from app.services.gallery_catalog import list_public_gallery_items, require_gall
 from app.services.quotes import create_quote_request
 from app.services.recaptcha import should_render_recaptcha, verify_recaptcha_submission
 from app.services.service_catalog import require_services_enabled
+from app.services.media import resolve_public_file
 from app.tenancy import tenant_config
 
 
@@ -133,6 +134,17 @@ def gallery_page():
     if not gallery_items:
         raise NotFound()
     return render_template("main/gallery.html", gallery_items=gallery_items)
+
+
+@bp.get("/media/<path:storage_path>")
+def public_media(storage_path: str):
+    require_gallery_enabled()
+    file_path = resolve_public_file(storage_path)
+    if file_path is None:
+        raise NotFound()
+    response = send_file(file_path, conditional=True)
+    response.headers["Cache-Control"] = "public, max-age=604800"
+    return response
 
 
 @bp.get("/faq")
