@@ -25,15 +25,15 @@ DEFAULT_TEST_SERVICES = (
 
 @pytest.fixture()
 def app(tmp_path: Path):
-    app = create_app("testing")
-    app.config.update(
+    app = create_app("testing", dict(
         SECRET_KEY="test-key",
         SQLALCHEMY_DATABASE_URI=f"sqlite+pysqlite:///{tmp_path / 'test.db'}",
         UPLOAD_FOLDER=str(tmp_path / "uploads"),
         RECAPTCHA_ENABLED=False,
         RECAPTCHA_SITE_KEY="",
         RECAPTCHA_SECRET_KEY="",
-    )
+        TENANTS_JSON="",
+    ))
 
     with app.app_context():
         db.drop_all()
@@ -48,6 +48,8 @@ def app(tmp_path: Path):
         yield app
         db.session.remove()
         db.drop_all()
+        for engine in app.extensions["tenancy"].engines.values():
+            engine.dispose()
 
 
 @pytest.fixture()

@@ -8,7 +8,7 @@ from app import create_app
 
 def _app_with_proxy(monkeypatch, trusted: bool):
     monkeypatch.setattr(config_module.TestingConfig, "TRUST_PROXY", trusted, raising=False)
-    app = create_app("testing")
+    app = create_app("testing", {"TENANT_DEFAULT_HOSTS": ("localhost", "customer.example.com")})
     app.config.update(SECRET_KEY="***", WTF_CSRF_ENABLED=False)
 
     @app.route("/__whoami")

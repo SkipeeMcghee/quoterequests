@@ -1,4 +1,5 @@
 from pathlib import Path
+from collections.abc import Mapping
 
 from flask import Flask, abort, flash, jsonify, make_response, redirect, render_template, render_template_string, request, url_for
 from flask_login import current_user
@@ -7,7 +8,7 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.auth import bp as auth_bp
 from app.config import config_by_name
-from app.extensions import csrf, db, login_manager, migrate
+from app.extensions import csrf, db, login_manager, migrate, teardown_tenant_request
 from app.main import bp as main_bp
 from app.admin import bp as admin_bp
 from app.cli import register_cli
@@ -19,16 +20,21 @@ from app.services.themes import (
     get_active_slug as get_active_theme_slug,
 )
 from app.services.media import media_url
+from app.tenancy import get_registry, register_tenancy
 
 
-def create_app(config_name: str | None = None) -> Flask:
+def create_app(config_name: str | None = None, config_overrides: Mapping[str, object] | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=True)
     config_object = config_by_name[config_name or "default"]
     app.config.from_object(config_object)
+    if config_overrides is not None:
+        app.config.update(config_overrides)
     config_object.validate()
 
     _ensure_runtime_directories(app)
 
+    register_proxy_fix(app)
+    register_tenancy(app)
     register_extensions(app)
     register_models()
     register_blueprints(app)
@@ -37,7 +43,6 @@ def create_app(config_name: str | None = None) -> Flask:
     register_context_processors(app)
     register_private_upload_guard(app)
     register_rate_limiting(app)
-    register_proxy_fix(app)
     register_error_handlers(app)
     register_cli(app)
 
@@ -46,9 +51,12 @@ def create_app(config_name: str | None = None) -> Flask:
 
 def register_extensions(app: Flask) -> None:
     db.init_app(app)
+    with app.app_context():
+        get_registry().bind_engines(app, db.engine)
     migrate.init_app(app, db)
     login_manager.init_app(app)
     csrf.init_app(app)
+    app.teardown_request(teardown_tenant_request)
 
 
 def register_blueprints(app: Flask) -> None:
@@ -79,15 +87,11 @@ def register_legacy_admin_routes(app: Flask) -> None:
 
 def register_login_manager() -> None:
     from app.models import User
+    from app.services.auth import load_tenant_user
 
     @login_manager.user_loader
     def load_user(user_id: str) -> User | None:
-        user = db.session.get(User, int(user_id))
-        # A deactivated account must not keep a live session: Flask-Login only checks
-        # is_active at login time, so revoke it here on every request instead.
-        if user is None or not user.is_active:
-            return None
-        return user
+        return load_tenant_user(user_id)
 
 
 def _get_site_services(app: Flask):

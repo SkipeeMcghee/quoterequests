@@ -40,9 +40,9 @@ def login(client, app, admin_user):
     """Sign in without repeating a password literal in every test."""
 
     with app.app_context():
-        user_id = User.query.filter_by(email=admin_user).first().id
+        user_id = User.query.filter_by(email=admin_user).first().get_id()
     with client.session_transaction() as session:
-        session["_user_id"] = str(user_id)
+        session["_user_id"] = user_id
         session["_fresh"] = True
 
 

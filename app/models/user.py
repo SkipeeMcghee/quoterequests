@@ -6,6 +6,7 @@ from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
+from app.tenancy import get_current_tenant
 
 
 class User(UserMixin, db.Model):
@@ -18,6 +19,9 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     notes = db.relationship("RequestNote", back_populates="author", lazy="dynamic")
+
+    def get_id(self) -> str:
+        return f"{get_current_tenant().slug}:{self.id}"
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)

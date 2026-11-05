@@ -29,9 +29,9 @@ from app.services.admin_requests import merge_customers
 
 def sign_in(client, app, email="admin@example.com"):
     with app.app_context():
-        user_id = User.query.filter_by(email=email).first().id
+        user_id = User.query.filter_by(email=email).first().get_id()
     with client.session_transaction() as session:
-        session["_user_id"] = str(user_id)
+        session["_user_id"] = user_id
         session["_fresh"] = True
 
 

@@ -4,8 +4,10 @@ A reusable Flask starter for service businesses: a public marketing site, a quot
 request intake, and an internal operations dashboard — with the optional parts switchable
 per customer from a single config file.
 
-Server-rendered HTML, no SPA, no build step, one database. Deployed as a template: each
-customer gets their own copy, their own database, their own branding and feature set.
+Server-rendered HTML, no SPA, no build step. Wave 1 of multi-tenancy supports
+host-selected databases and tenant-bound authentication in one application instance.
+Branding, feature flags, uploads, and themes are still deployment-wide; this is not yet
+a fully isolated multi-tenant deployment.
 
 ## What it does
 
@@ -90,7 +92,7 @@ change behaviour rather than just branding:
 
 | Setting | Purpose |
 |---|---|
-| `SECRET_KEY` | Unique per customer. Never reuse the dev key. |
+| `SECRET_KEY` | Strong deployment signing key. Never reuse the dev key. |
 | `DATABASE_URL` | `postgresql+psycopg://user:pass@host:5432/db` |
 | `ENABLE_*` | Which modules this deployment includes |
 | `RATE_LIMIT_*` | Anonymous form and login throttling |
@@ -98,6 +100,66 @@ change behaviour rather than just branding:
 | `RECAPTCHA_*` | Spam protection on the public forms |
 | `TRUST_PROXY` | Set true only behind nginx, so client IPs and scheme are correct |
 | `SITE_THEME` | Deploy-time default palette; customers can change it later in admin |
+
+### Tenant routing (Wave 1)
+
+Development and testing automatically provide a `default` tenant using `DATABASE_URL`
+(the testing database in tests), limited to `localhost`, `127.0.0.1`, and `[::1]`.
+Other hosts fail closed. Production requires an explicit tenant map; there is no
+fallback to a customer database for unknown or disabled hosts.
+`DATABASE_URL` remains required in production for the default extension/maintenance
+binding; HTTP customer sessions never fall back to that database.
+
+Set `TENANTS_JSON` in the environment, or supply an equivalent `TENANTS` mapping through
+`create_app(..., config_overrides={...})` **before** extensions initialize:
+
+```json
+{
+  "alpha": {
+    "hosts": ["alpha.example.test"],
+    "database_uri": "sqlite+pysqlite:///alpha.db",
+    "enabled": true
+  },
+  "beta": {
+    "hosts": ["beta.example.test"],
+    "database_uri": "sqlite+pysqlite:///beta.db",
+    "enabled": true
+  }
+}
+```
+
+Use separate PostgreSQL database URLs in production, supplied through protected
+configuration rather than committed files. Registry data is loaded at startup, outside
+the customer session router; restart workers after changing it. Explicit tenant maps
+disable the automatic local default. Host matching ignores ports and case, accepts a
+trailing dot, and treats `www.` as an alias. Conflicting aliases fail at startup.
+Only enable `TRUST_PROXY` behind the configured trusted proxy; forwarded host handling
+runs before tenant selection. Configure nginx domains and certificates accordingly.
+
+Customer ORM queries and SQL executed through `db.session` use the active tenant.
+Each database pool defaults to two connections, no overflow, a 30-second checkout
+timeout, pre-ping, and 30-minute recycling, per worker. In-memory SQLite uses its
+single-connection static pool. Request teardown removes the session and rolls back
+uncommitted work. Authentication and remember cookies contain tenant-qualified user
+IDs; existing unqualified login sessions must sign in again.
+
+Non-request database work with an explicit tenant map requires a fresh application
+context:
+
+```python
+from app.tenancy import tenant_context
+
+with app.app_context(), tenant_context("alpha") as tenant:
+    # ORM operations here use alpha's database.
+    ...
+```
+
+This selects ORM routing only: `db.engine`, `db.create_all()`, and
+the existing migration commands do **not** automatically select that tenant.
+For explicit engine work, use `app.extensions["tenancy"].engine_for(tenant)`.
+Provision and migrate each tenant database explicitly; automatic fleet migrations and
+tenant-aware CLI command options are not part of Wave 1. Do not serve independent
+production clients until upload, theme, and tenant-settings isolation is completed.
 
 ## Testing and quality gates
 

@@ -83,6 +83,10 @@ def build_social_links() -> dict[str, dict[str, str | bool]]:
 
 
 class Config:
+    TENANTS = None
+    TENANTS_JSON = os.getenv("TENANTS_JSON", "")
+    TENANT_ALLOW_DEFAULT = False
+    TENANT_DEFAULT_HOSTS = ("localhost", "127.0.0.1", "[::1]")
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
     WTF_CSRF_TIME_LIMIT = 8 * 60 * 60
     RECAPTCHA_ENABLED = parse_bool_env("RECAPTCHA_ENABLED", False)
@@ -156,6 +160,7 @@ class Config:
 
 
 class DevelopmentConfig(Config):
+    TENANT_ALLOW_DEFAULT = True
     DEBUG = True
     ENABLE_GALLERY = parse_bool_env("ENABLE_GALLERY", False)
     ENABLE_SERVICES = parse_bool_env("ENABLE_SERVICES", True)
@@ -171,6 +176,8 @@ class DevelopmentConfig(Config):
 
 
 class TestingConfig(Config):
+    TENANT_ALLOW_DEFAULT = True
+    TENANTS_JSON = ""
     TESTING = True
     WTF_CSRF_ENABLED = False
     RATE_LIMIT_ENABLED = False
