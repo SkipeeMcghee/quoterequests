@@ -1,244 +1,165 @@
 # Quote Request System
 
-## What This App Does
+A reusable Flask starter for service businesses: a public marketing site, a quote/work
+request intake, and an internal operations dashboard — with the optional parts switchable
+per customer from a single config file.
 
-Quote Request System is a reusable Flask starter for service businesses that need a public quote request form and a lightweight internal admin workflow.
+Server-rendered HTML, no SPA, no build step, one database. Deployed as a template: each
+customer gets their own copy, their own database, their own branding and feature set.
 
-Version 1 is server-rendered and intentionally simple:
+## What it does
 
-- public quote request form
-- thank-you page after submission
-- optional image uploads
-- admin login/logout
-- dashboard listing quote requests
-- request detail page
-- status updates
-- internal notes
-- email notification hooks for later integration
+**Public site**
 
-The goal is to provide a clean base you can reuse across service businesses without rebuilding the same workflow from scratch.
+- Landing page, services, gallery, about, contact, FAQ, privacy, terms
+- Quote request form with photo uploads and optional reCAPTCHA
+- Schedule-work request form (when scheduling is enabled)
+- 100-palette theme library, switchable at runtime from the admin
+- Private customer photos are never served from the public static tree
 
-## Tech Stack
+**Admin**
 
-- Flask
-- PostgreSQL
-- SQLAlchemy
-- Flask-Migrate
-- Flask-Login
-- Flask-WTF
-- Jinja templates
-- Server-rendered HTML/CSS
-- Pytest for test coverage
+- Request queue with filters, sorting and per-request detail
+- Quote tracking (send, accept, decline) with draft autosave
+- Customer records: contact fields, addresses, notes, photos, merge duplicates
+- Scheduling: appointments, staff assignment, availability board, calendar
+- Recurring work with generated events and impact previews
+- Service catalogue and gallery/content management
+- CSV/Excel import with previews
+- Appearance picker for the theme library
 
-## Project Structure
+## Module flags
 
-```text
-app/
-  __init__.py          # application factory and bootstrap
-  cli.py               # CLI commands for admin user creation
-  config.py            # environment-aware settings
-  extensions.py        # db, login manager, csrf, migrate
-  admin/               # admin routes
-  auth/                # login/logout routes
-  forms/               # WTForms classes
-  main/                # public routes
-  models/              # SQLAlchemy models
-  services/            # business logic and integrations
-  static/              # CSS and uploaded files
-  templates/           # Jinja templates
-migrations/            # Alembic migration files
-tests/                 # focused application tests
-run.py                 # local Flask entrypoint
-wsgi.py                # production WSGI entrypoint
-docker-compose.yml     # optional local PostgreSQL container
-requirements.txt
-README.md
-```
+Every optional module is a feature flag, so one deployment only carries what it sells.
 
-## Environment Variables
+| Flag | Turns on |
+|---|---|
+| `ENABLE_SERVICES` | Service catalogue, public services page, service admin |
+| `ENABLE_GALLERY` | Public gallery and gallery management |
+| `ENABLE_SCHEDULING` | Schedule-work form and appointments |
+| `ENABLE_STAFF_MANAGEMENT` | Staff records, availability board, assignment |
+| `ENABLE_CUSTOMER_RECORDS` | Customer profiles, merge, history |
+| `ENABLE_CALENDAR` | Month and day calendar views |
+| `ENABLE_RECURRING_WORK` | Recurring plans and generated events |
 
-Copy [.env.example](c:/xampp/htdocs/quoterequests/.env.example) to `.env` and update as needed.
+Flags are enforced server-side, not just in the navigation: a disabled module's routes
+return 404 (admin) or redirect (public), and a crafted POST creates nothing.
 
-Supported variables:
+## Tech stack
 
-- `FLASK_APP`: Flask entrypoint. Default: `run.py`
-- `FLASK_ENV`: Flask environment. Default: `development`
-- `SECRET_KEY`: Flask secret key. Required for real environments.
-- `DATABASE_URL`: PostgreSQL connection string.
-- `ADMIN_NOTIFICATION_EMAIL`: target email for admin notification hooks.
-- `DEFAULT_FROM_EMAIL`: default sender for future email integration.
-- `COMPANY_NAME`: brand name shown in the UI.
+Flask 3.1 · PostgreSQL (SQLite for tests) · SQLAlchemy + Flask-Migrate · Flask-Login ·
+Flask-WTF · Jinja templates · one stylesheet · plain JavaScript in `app/static/js/` ·
+pytest · GitHub Actions · gunicorn + nginx in production.
 
-Example:
-
-```env
-FLASK_APP=run.py
-FLASK_ENV=development
-SECRET_KEY=change-me
-DATABASE_URL=postgresql+psycopg://quote_requests:quote_requests@localhost:5432/quote_requests
-ADMIN_NOTIFICATION_EMAIL=admin@example.com
-DEFAULT_FROM_EMAIL=noreply@example.com
-COMPANY_NAME=Service Company
-```
-
-## Local Setup
-
-### 1. Create and activate a virtual environment
-
-PowerShell:
+## Quick start (Windows)
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-```
 
-### 2. Configure environment variables
+# optional: only needed to run the UI sweep
+python -m pip install playwright
 
-For a quick local shell session in PowerShell:
-
-```powershell
-$env:FLASK_APP = "run.py"
-$env:FLASK_ENV = "development"
-$env:SECRET_KEY = "dev-secret-key"
-$env:DATABASE_URL = "postgresql+psycopg://quote_requests:quote_requests@localhost:5432/quote_requests"
-```
-
-If you prefer, store these in a local `.env` file and load them through your shell or editor workflow.
-
-## Database Setup
-
-Development is PostgreSQL-first. Tests use SQLite separately for speed and isolation.
-
-### Option A: Native PostgreSQL
-
-Create the role and database manually:
-
-```sql
-CREATE USER quote_requests WITH PASSWORD 'quote_requests';
-CREATE DATABASE quote_requests OWNER quote_requests;
-```
-
-### Option B: Docker Compose
-
-Use [docker-compose.yml](c:/xampp/htdocs/quoterequests/docker-compose.yml):
-
-```powershell
-docker-compose up -d
-```
-
-This starts PostgreSQL with:
-
-- database: `quote_requests`
-- user: `quote_requests`
-- password: `quote_requests`
-- host: `localhost`
-- port: `5432`
-
-## Migration Commands
-
-Apply migrations:
-
-```powershell
+copy .env.example .env      # then edit: SECRET_KEY, DATABASE_URL, BUSINESS_*
 python -m flask --app run.py db upgrade
-```
-
-Create a new migration after schema changes:
-
-```powershell
-python -m flask --app run.py db revision -m "describe change"
-```
-
-Show current migration head:
-
-```powershell
-python -m flask --app run.py db heads
-```
-
-## How To Run The App
-
-After PostgreSQL is running and migrations are applied:
-
-```powershell
+python -m flask --app run.py create-admin
 python -m flask --app run.py run
 ```
 
-The local development server will be available at:
+Then open <http://127.0.0.1:5000/>. The admin lives at `/admin`.
 
-- `http://127.0.0.1:5000/quote-request`
-- `http://127.0.0.1:5000/auth/login`
+If your database is already behind the migration head, `db upgrade` is the fix — the app
+does not migrate itself on boot.
 
-## How To Create An Admin User
+### Database
 
-Interactive admin creation:
+Native PostgreSQL:
 
-```powershell
-python -m flask --app run.py create-admin
+```sql
+CREATE USER quote_requests WITH PASSWORD 'change-me';
+CREATE DATABASE quote_requests OWNER quote_requests;
 ```
 
-Quick local development admin with defaults:
+Or start the bundled container: `docker-compose up -d`.
+
+## Configuration
+
+Everything lives in `.env` (see `.env.example` for the full annotated list). The ones that
+change behaviour rather than just branding:
+
+| Setting | Purpose |
+|---|---|
+| `SECRET_KEY` | Unique per customer. Never reuse the dev key. |
+| `DATABASE_URL` | `postgresql+psycopg://user:pass@host:5432/db` |
+| `ENABLE_*` | Which modules this deployment includes |
+| `RATE_LIMIT_*` | Anonymous form and login throttling |
+| `EMAIL_ENABLED`, `SMTP_*` | Transactional email (Brevo-compatible); off by default |
+| `RECAPTCHA_*` | Spam protection on the public forms |
+| `TRUST_PROXY` | Set true only behind nginx, so client IPs and scheme are correct |
+| `SITE_THEME` | Deploy-time default palette; customers can change it later in admin |
+
+## Testing and quality gates
 
 ```powershell
-python -m flask --app run.py create-dev-admin
+python -m pytest -q                 # 207 tests
+python scripts\ui_sweep.py          # every route, 390/768/1440, screenshots + report
 ```
 
-Default quick dev credentials:
+The sweep boots its own seeded SQLite database, logs in through the real form, and reports
+horizontal overflow, WCAG contrast failures, broken images, unlabeled controls, JS errors
+and failed requests — with a full-page screenshot per route per width. `--matrix` sweeps
+the feature-flag presets. CI runs both jobs on every push.
 
-- email: `admin@local.test`
-- password: `TempPass123!`
-
-You can also override them:
+## Operating it
 
 ```powershell
-python -m flask --app run.py create-dev-admin --email you@example.com --password "YourPassword123!"
+python scripts\rehearse_migrations.py --smoke   # prove migrations on Postgres before deploying
+python scripts\backup.py --keep 14              # dump + uploads + manifest
+python scripts\restore_check.py                 # restore into a scratch schema and verify
 ```
 
-## What Is Included In Version 1
+Deployment runbook for a Linux host: [`deploy/README.md`](deploy/README.md).
+Per-deployment checklist: [`DEPLOYMENT_CHECKLIST.md`](DEPLOYMENT_CHECKLIST.md).
+Page-by-page UI finish line: [`PAGE-INVENTORY.md`](PAGE-INVENTORY.md).
+Architecture notes: [`PROJECT.md`](PROJECT.md).
 
-Included now:
+## Security notes
 
-- Flask application factory
-- blueprint structure: `main`, `auth`, `admin`
-- PostgreSQL-backed runtime configuration
-- Flask-Migrate migration setup
-- public quote request form
-- thank-you page
-- image upload handling with extension and content validation
-- admin authentication with hashed passwords
-- admin dashboard
-- request detail page
-- status updates
-- internal notes
-- CLI admin bootstrap commands
-- email hook stubs
-- focused pytest coverage for the main flows
+- **Private uploads.** Request and customer photos live under `app/static/uploads/` but
+  the static route 404s those prefixes; they are served by an authenticated
+  `/admin/media/<path>` route with traversal checks, `Cache-Control: private` and
+  `X-Robots-Tag: noindex`. Gallery images stay public on purpose.
+- **Sessions.** Deactivated accounts lose access on their next request; Flask-Login only
+  checks `is_active` at login time, so the user loader enforces it every time.
+- **Rate limiting.** In-app fixed windows for anonymous forms and login. Counters are per
+  worker process, so the effective limit is roughly `workers × limit` — a spam speed bump
+  beside reCAPTCHA, not a security boundary.
+- **Merge safety.** Merging duplicate customers moves every customer-owned record
+  (photos, recurring plans, appointments, requests, fields, notes, addresses) before the
+  duplicate is deleted.
 
-Not included in version 1:
+## Project structure
 
-- React frontend
-- JSON API layer
-- multi-tenancy
-- CRM features
-- customer portal
-- payments
-- scheduling
-- SMS
-- advanced analytics
-- SaaS billing
-
-## Testing
-
-Run the focused test suite:
-
-```powershell
-python -m pytest tests/test_quote_requests.py -q
+```text
+app/
+  __init__.py         # factory, error handlers, upload guard, rate limiting, ProxyFix
+  cli.py              # admin bootstrap commands
+  config.py           # environment-aware settings
+  data/themes.json    # 100-palette theme library
+  admin/ auth/ main/  # blueprints
+  forms/ models/      # WTForms and SQLAlchemy models
+  services/           # email, media access, rate limiting, themes, imports, business logic
+  static/js/          # page and component JavaScript (extracted from templates)
+  static/css/app.css  # single stylesheet, token-driven
+  templates/          # Jinja templates
+deploy/               # gunicorn, systemd, nginx, first-boot runbook
+migrations/           # Alembic
+scripts/              # ui_sweep, rehearse_migrations, backup, restore_check
+tests/                # 207 tests
 ```
 
-Or run all tests:
+## Not included
 
-```powershell
-python -m pytest
-```
-
-Note: tests use SQLite and temporary files so they stay fast and isolated from the local PostgreSQL development database.
+React/SPA frontend, JSON API layer, multi-tenancy (one deployment per customer), payments,
+customer portal, SMS, SaaS billing.
