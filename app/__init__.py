@@ -2,7 +2,7 @@ from pathlib import Path
 from collections.abc import Mapping
 from posixpath import normpath
 
-from flask import Flask, abort, flash, jsonify, make_response, redirect, render_template, render_template_string, request, url_for
+from flask import Flask, abort, flash, g, jsonify, make_response, redirect, render_template, render_template_string, request, url_for
 from flask_login import current_user
 from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -62,6 +62,8 @@ def register_extensions(app: Flask) -> None:
 
 
 def register_blueprints(app: Flask) -> None:
+    from app.superadmin import bp as superadmin_bp
+    app.register_blueprint(superadmin_bp, url_prefix=app.config["SUPERADMIN_PATH"])
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
@@ -211,6 +213,8 @@ def register_rate_limiting(app: Flask) -> None:
 
     @app.before_request
     def enforce_rate_limits():
+        if getattr(g, "platform_control", False):
+            return None  # Dedicated platform login limiter runs before CSRF.
         verdict = check_rate_limit()
         if verdict is None:
             return None
@@ -223,6 +227,8 @@ def register_rate_limiting(app: Flask) -> None:
 def register_context_processors(app: Flask) -> None:
     @app.context_processor
     def inject_feature_flags() -> dict[str, object]:
+        if getattr(g, "platform_control", False):
+            return {}
         settings = current_tenant_settings()
         return {
             "enable_gallery": settings.get("ENABLE_GALLERY", False),
@@ -254,6 +260,10 @@ def register_context_processors(app: Flask) -> None:
 def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(CSRFError)
     def handle_csrf_error(error: CSRFError):
+        if getattr(g, "platform_control", False):
+            from app.superadmin.routes import audit
+            audit("csrf", outcome="rejected")
+            return "Invalid CSRF token.", 400
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return jsonify({"ok": False, "error": "That page sat too long and its security token expired. Reload and try again."}), 400
 
@@ -285,6 +295,8 @@ def register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(404)
     def handle_not_found(error):
+        if getattr(g, "platform_control", False):
+            return "Not found.", 404
         if request.path.startswith("/admin") and not current_user.is_authenticated:
             return redirect(url_for("admin.admin_entry"))
         return render_template("errors/404.html"), 404

@@ -114,6 +114,9 @@ change behaviour rather than just branding:
 | `RECAPTCHA_*` | Spam protection on the public forms |
 | `TRUST_PROXY` | Set true only behind nginx, so client IPs and scheme are correct |
 | `SITE_THEME` | Deploy-time default palette; customers can change it later in admin |
+| `SUPERADMIN_PASSWORD` | Platform master password; unset/blank disables the entire control prefix with 404 |
+| `SUPERADMIN_HOST` | Optional dedicated control hostname; other hosts get 404 before CSRF/authentication |
+| `SUPERADMIN_PATH` | Non-root control prefix; defaults to `/platform/control` |
 
 ### Tenant routing (Waves 1-4)
 
@@ -154,8 +157,9 @@ Set `TENANTS_JSON` in the environment, or supply an equivalent `TENANTS` mapping
 ```
 
 Use separate PostgreSQL database URLs in production, supplied through protected
-configuration rather than committed files. Registry data is loaded at startup, outside
-the customer session router; restart workers after changing it. Explicit tenant maps
+configuration rather than committed files. Registry data is loaded outside
+the customer session router; file changes reload before subsequent HTTP requests in
+each worker. In-flight requests retain their original snapshot. Explicit tenant maps
 disable the automatic local default. Host matching ignores ports and case, accepts a
 trailing dot, and treats `www.` as an alias. Conflicting aliases fail at startup.
 Only enable `TRUST_PROXY` behind the configured trusted proxy; forwarded host handling
@@ -186,6 +190,72 @@ CLI/migration operations select tenants explicitly as described below; there is 
 automatic fleet-wide mutation.
 
 ### Tenant provisioning and operations (Wave 4)
+
+### Super-Admin Fleet Control (T5.6 / Deploy Gate #17)
+
+Set a strong `SUPERADMIN_PASSWORD`, `TENANT_REGISTRY_FILE=tenants.json`, and preferably
+a dedicated `SUPERADMIN_HOST` such as `control.platform.test`. Serve it over TLS with
+its own DNS/certificate and proxy host routing. The configured `SUPERADMIN_PATH`
+(default `/platform/control`) is a standalone, server-rendered operator page: no
+tenant DB binding, tenant navigation, or tenant-login authorization is used. Blank or
+unset master passwords return 404, as do all non-permitted hosts when a control host
+is set. Leaving the host blank deliberately permits the control path on any valid
+hostname; use a dedicated host in production. A hostname setting alone does not
+provision DNS, nginx server names, certificates, or firewall rules.
+
+The page inventories all registered tenants, including disabled tenants, with schema
+head status, row counts, redacted database details, upload bytes/files, palette ID,
+business identity and feature flags. Health is degraded for unavailable/incomplete
+tenant databases or pending migrations. Inventory is synchronous/read-only; very large
+fleets or upload trees can make refreshes slower. Disabled tenants remain available
+for targeted maintenance but never serve customer requests.
+
+Inline forms provision a dedicated database (SQLite by default; supply an existing,
+independent PostgreSQL database in production), migrate to head, create storage, and
+optionally create an admin and seed demo data. Admin email/password must be supplied
+together or both omitted. Identity/domain/flag edits and enable/disable actions write
+the private registry atomically and reload workers on their next request. Move static
+tenant definitions into the registry file before editing them here; static definitions
+are inventoried and support maintenance, but their deployment-owned identity/status
+cannot be overwritten from the dashboard. Changing domains clears stale canonical
+origin overrides. PostgreSQL database creation and DNS/TLS remain infrastructure tasks.
+
+Upgrade and backup actions target only the selected tenant. Backups use the same
+checksummed database/upload/theme routine as the backup script, retain seven artifacts
+per slug under the instance directory's platform-backups area, and display the created
+artifact path. Continue scheduling backups/off-host copies and restore verification.
+Demo reset is rendered/permitted only for `DEMO_TENANT=True` and requires the exact
+slug confirmation; it preserves admin accounts while replacing demo business data.
+Provisioning failures are not published, but migrations/storage creation are not a
+distributed transaction: inspect and remove any orphan new-tenant artifacts before retrying.
+
+Launch tenant admin uses a signed, 60-second, single-use token scoped to the selected
+tenant and active admin account. It redirects only to a registered tenant host over
+HTTPS, never an arbitrary canonical origin. Consumption is recorded atomically in a
+separate platform SQLite ledger shared by workers in the instance directory. Multi-host
+deployments must share this durable ledger (or replace it with a shared transactional
+store). Tokens are rejected when replayed, expired, tampered with, used on another
+tenant, or after master/signing-key rotation. The tenant admin shows a persistent
+impersonation warning and CSRF-protected Exit Impersonation button. No master session
+proof is carried into the tenant session. Keep cookies host-only and never share a
+session cookie domain across tenants.
+
+Master login has an independent `_superadmin_authenticated` HMAC session proof,
+constant-time password verification, CSRF protection, and an always-on platform IP
+limiter using `RATE_LIMIT_LOGIN_REQUESTS` / `RATE_LIMIT_LOGIN_WINDOW_SECONDS`. Like the
+existing limiter, counters are process-local and reset on restart; add proxy-level
+throttling/network access controls for a hard multi-worker limit. Raw forwarded IP
+headers are ignored unless processed by the configured trusted proxy. Every action
+records a structured `superadmin.<action>` event, target slug and outcome, without
+passwords or handoff tokens. Configure proxy access logs to omit query strings on the
+handoff endpoint so bearer tokens are not logged. Platform pages and handoff responses
+are no-store/no-referrer; hide the control host behind VPN/allowlists where possible.
+
+Verification: the superadmin regression suite exercises the fail-closed boundary,
+CSRF/throttling, real provisioning/migrations, live registry changes, isolated backups
+and demo resets, and durable handoff replay rejection.
+
+### CLI tenant provisioning
 
 Set `TENANT_REGISTRY_FILE=tenants.json` in `.env` to enable persistent provisioning.
 Relative paths resolve beneath Flask's instance directory. A missing/empty registry
@@ -232,8 +302,8 @@ the record. Known database reuse, duplicate aliases, invalid settings, and concu
 registry writes are rejected. Failed migrations do not publish a tenant; inspect any
 partially initialized SQLite database before retrying.
 
-Restart application workers after registry changes; provisioning does not hot-reload
-other workers. Configure DNS, nginx hosts, TLS, and tenant settings before exposing the
+Registry file changes reload before subsequent HTTP requests in each worker.
+Configure DNS, nginx hosts, TLS, and tenant settings before exposing the
 new domain. Keep the instance path stable across CLI commands and server workers.
 
 ```powershell
@@ -264,8 +334,8 @@ production cutover remain explicit operator actions, not automated by restore ch
 Each tenant's optional `settings` mapping overrides application defaults. Read settings
 through `tenant_config(key, default=None)` or the read-only `current_tenant_settings()`
 mapping from `app.tenancy`; neither changes `app.config` nor the process environment.
-Nested logo/social mappings are read-only too. Settings are snapshotted at startup, so
-restart workers after changing the registry. JSON flags must be booleans, not strings;
+Nested logo/social mappings are read-only too. Settings are snapshotted per request;
+file-backed registry changes reload before the next request. JSON flags must be booleans, not strings;
 invalid types, ranges, unsupported settings, and non-HTTPS canonical origins fail startup.
 
 Supported settings include:

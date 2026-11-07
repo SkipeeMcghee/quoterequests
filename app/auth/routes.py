@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from flask.typing import ResponseReturnValue
 
@@ -48,6 +48,7 @@ def login():
 @login_required
 def logout():
     logout_user()
+    session.pop("_superadmin_impersonating", None)
     flash("Signed out.", "success")
     return redirect(url_for("admin.admin_entry"))
 

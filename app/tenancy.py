@@ -4,6 +4,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -187,10 +188,12 @@ class TenantRegistry:
 
 
 def get_registry() -> TenantRegistry:
-    return current_app.extensions["tenancy"]
+    return getattr(g, "_operator_registry", None) or getattr(g, "_request_registry", None) or current_app.extensions["tenancy"]
 
 
 def get_current_tenant() -> Tenant:
+    if getattr(g, "platform_control", False):
+        raise RuntimeError("Platform control has no customer database binding.")
     tenant = getattr(g, "tenant", None)
     if tenant is not None:
         return tenant
@@ -295,6 +298,13 @@ def tenant_context(slug: str) -> Generator[Tenant]:
 
 
 def register_tenancy(app: Flask) -> None:
+    prefix = str(app.config.get("SUPERADMIN_PATH") or "/platform/control").rstrip("/")
+    if not prefix.startswith("/") or prefix == "" or any(char in prefix for char in "?#\\") or "//" in prefix or any(part in (".", "..") for part in prefix.split("/")):
+        raise ValueError("SUPERADMIN_PATH must be an absolute, non-root URL prefix.")
+    app.config["SUPERADMIN_PATH"] = prefix
+    if app.config.get("SUPERADMIN_HOST"):
+        app.config["SUPERADMIN_HOST"] = normalize_host(app.config["SUPERADMIN_HOST"])
+    app.extensions["tenant_registry_refresh_lock"] = threading.RLock()
     if registry_file := app.config.get("TENANT_REGISTRY_FILE"):
         path = Path(registry_file)
         if not path.is_absolute():
@@ -303,13 +313,31 @@ def register_tenancy(app: Flask) -> None:
     registry = TenantRegistry.from_config(app.config)
     registry.configure_engines(app)
     app.extensions["tenancy"] = registry
+    app.extensions["tenant_registry_stamp"] = _registry_stamp(app)
 
     @app.before_request
     def resolve_tenant():
         g.pop("tenant", None)
         g.pop("_login_user", None)
+        g.pop("platform_control", None)
+        prefix = app.config["SUPERADMIN_PATH"]
+        if request.path == prefix or request.path.startswith(prefix + "/"):
+            password = app.config.get("SUPERADMIN_PASSWORD", "")
+            host = app.config.get("SUPERADMIN_HOST")
+            try:
+                permitted = not host or normalize_host(request.host) == host
+            except (ValueError, UnicodeError):
+                permitted = False
+            if not isinstance(password, str) or not password.strip() or not permitted:
+                return Response("Not found.", status=404, mimetype="text/plain")
+            g.platform_control = True
+            refresh_registry(app)
+            from app.superadmin.routes import login_limit
+            return login_limit()
         if request.endpoint == "healthz" and request.method in ("GET", "HEAD") and request.args.get("db") != "1":
             return
+        refresh_registry(app)
+        g._request_registry = app.extensions["tenancy"]
         try:
             tenant = get_registry().resolve(request.host)
         except (ValueError, UnicodeError):
@@ -319,6 +347,43 @@ def register_tenancy(app: Flask) -> None:
             app.logger.warning("Rejected unknown or disabled tenant host.")
             return Response("Unknown host.", status=404, mimetype="text/plain")
         g.tenant = tenant
+
+
+def _registry_stamp(app: Flask):
+    path = app.config.get("TENANT_REGISTRY_FILE")
+    if not path:
+        return None
+    try:
+        stat = Path(path).stat()
+        return (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+    except FileNotFoundError:
+        return None
+
+
+def refresh_registry(app: Flask, *, force: bool = False) -> None:
+    """Atomically reload file-backed records; in-flight requests retain their snapshot."""
+    with app.extensions["tenant_registry_refresh_lock"]:
+        stamp = _registry_stamp(app)
+        if not force and stamp == app.extensions.get("tenant_registry_stamp"):
+            return
+        old = app.extensions["tenancy"]
+        candidate = TenantRegistry.from_config(app.config)
+        from app.extensions import db
+        candidate.bind_engines(app, db.engine)
+        engines = dict(candidate.engines)
+        for slug, engine in list(engines.items()):
+            previous = old.tenants.get(slug)
+            if previous and previous.database_uri == candidate.tenants[slug].database_uri and slug in old.engines:
+                if engine is not old.engines[slug]:
+                    engine.dispose()
+                engines[slug] = old.engines[slug]
+        candidate.engines = MappingProxyType(engines)
+        app.extensions["tenancy"] = candidate
+        app.extensions["tenant_registry_stamp"] = stamp
+        # dispose() releases idle connections, not checked-out in-flight connections.
+        for engine in set(old.engines.values()) - set(engines.values()):
+            if engine is not db.engine:
+                engine.dispose()
 
 
 def read_tenant_records(path: Path) -> dict[str, Any]:

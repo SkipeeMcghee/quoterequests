@@ -15,6 +15,15 @@
     {% endif %}
   </head>
   <body>
+    {% if request.blueprint == 'admin' and current_user.is_authenticated and session.get('_superadmin_impersonating') == current_user.get_id().split(':')[0] %}
+      <aside role="alert" style="background:#ffe08a;color:#241d00;padding:10px 16px;border-bottom:2px solid #8a6500;display:flex;gap:16px;align-items:center;justify-content:space-between">
+        <strong>Super-Admin Impersonation Session — Acting as {{ business_name }}</strong>
+        <form action="{{ url_for('admin.exit_impersonation') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit">Exit Impersonation</button>
+        </form>
+      </aside>
+    {% endif %}
     <a class="skip-link" href="#main">Skip to main content</a>
     <div class="page-shell">
       {% block site_header %}

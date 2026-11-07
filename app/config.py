@@ -165,6 +165,10 @@ class Config:
     TENANTS = None
     TENANTS_JSON = os.getenv("TENANTS_JSON", "")
     TENANT_REGISTRY_FILE = os.getenv("TENANT_REGISTRY_FILE", "")
+    SUPERADMIN_PASSWORD = os.getenv("SUPERADMIN_PASSWORD", "")
+    SUPERADMIN_HOST = os.getenv("SUPERADMIN_HOST", "").strip()
+    SUPERADMIN_PATH = os.getenv("SUPERADMIN_PATH", "/platform/control").strip() or "/platform/control"
+    SUPERADMIN_HANDOFF_TTL_SECONDS = 60
     TENANT_ALLOW_DEFAULT = False
     TENANT_DEFAULT_HOSTS = ("localhost", "127.0.0.1", "[::1]")
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me")

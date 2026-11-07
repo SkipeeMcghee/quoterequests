@@ -120,6 +120,24 @@ Use that generated value as the production `SECRET_KEY` for that customer.
 
 ## Production Sanity Checks
 
+### Deploy Gate #17 â€” Super-Admin security boundary (T5.6)
+
+- Leave `SUPERADMIN_PASSWORD` unset/blank unless fleet control is intentionally enabled.
+  Verify GET and POST to `SUPERADMIN_PATH` (default `/platform/control`) return **404**.
+- When enabled, use a strong master password, a dedicated `SUPERADMIN_HOST`, TLS,
+  host-only session cookies, and proxy-level network restrictions/throttling.
+- Verify the control prefix returns **404 on every tenant domain**, including when
+  signed into that tenant. A tenant User/remember cookie must never grant platform access.
+- Verify invalid password, missing CSRF, and excessive login POSTs are rejected.
+- Verify target-only provisioning/edit/toggle/migration/backup/reset operations and
+  `superadmin.<action>` audit events; do not log master passwords or token query strings.
+- Verify impersonation is tenant-scoped, expires within 60 seconds, and cannot replay
+  across workers. All workers must share the platform handoff ledger in the instance
+  directory; multi-host deployment needs shared transactional storage.
+- Verify the warning banner and Exit Impersonation work on tenant admin pages.
+- Run the superadmin tests and full pytest suite before deployment. Provisioned domains
+  also need real DNS, proxy server-name configuration and certificates.
+
 1. Confirm the customer site is using its own `SECRET_KEY`.
 2. Confirm the site is pointing at the correct production database.
 3. Confirm the correct logo, business name, and contact info are showing.
@@ -149,15 +167,15 @@ quietly instead of blocking quote submissions.
 
 Required settings:
 
-- `EMAIL_ENABLED` — `true` to send at all.
-- `SMTP_HOST` / `SMTP_PORT` — for Brevo, `smtp-relay.brevo.com` and `587`.
-- `SMTP_USERNAME` / `SMTP_PASSWORD` — the Brevo SMTP login and **SMTP key** (not the
+- `EMAIL_ENABLED` ï¿½ `true` to send at all.
+- `SMTP_HOST` / `SMTP_PORT` ï¿½ for Brevo, `smtp-relay.brevo.com` and `587`.
+- `SMTP_USERNAME` / `SMTP_PASSWORD` ï¿½ the Brevo SMTP login and **SMTP key** (not the
   account password, and not the API key used for the HTTP API).
-- `SMTP_USE_TLS` — `true` for port 587 (STARTTLS). `SMTP_USE_SSL` is for implicit TLS
+- `SMTP_USE_TLS` ï¿½ `true` for port 587 (STARTTLS). `SMTP_USE_SSL` is for implicit TLS
   on 465; never set both.
-- `DEFAULT_FROM_EMAIL` — must be a sender Brevo has verified for that customer domain.
-- `ADMIN_NOTIFICATION_EMAIL` — where new requests are announced.
-- `EMAIL_FROM_NAME`, `EMAIL_REPLY_TO` — display name and optional reply address.
+- `DEFAULT_FROM_EMAIL` ï¿½ must be a sender Brevo has verified for that customer domain.
+- `ADMIN_NOTIFICATION_EMAIL` ï¿½ where new requests are announced.
+- `EMAIL_FROM_NAME`, `EMAIL_REPLY_TO` ï¿½ display name and optional reply address.
 
 Domain setup (Brevo): add the customer domain under Senders & Domains, publish the DKIM
 and SPF records, and wait for verification before the first send. Mail from an

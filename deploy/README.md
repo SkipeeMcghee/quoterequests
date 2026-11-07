@@ -89,7 +89,7 @@ sudo -u quoterequests .venv/bin/flask --app wsgi tenant list
 Repeat for each tenant, and verify migrations/backups on the deployment's PostgreSQL
 version before exposing hosts. The legacy rehearsal helper is for default single-tenant
 setups; it does not target explicit registries. Provisioning prompts for a hidden admin
-password and writes a protected registry file; restart workers after changes.
+password and writes a protected registry file; workers reload it before their next HTTP request.
 
 ## 5. systemd
 
@@ -175,7 +175,7 @@ Work through `DEPLOYMENT_CHECKLIST.md` - particularly:
 - **Tenant-targeted operations.** Provision with `flask tenant create`, migrate with
   `flask tenant upgrade <slug>` or `flask db -x tenant=<slug> upgrade`, and pass
   `--tenant <slug>` to admin creation and backup/restore checks. Repeat per tenant;
-  unqualified commands fail closed with explicit registries. Restart workers after
-  changing the protected registry. See the main README for bootstrap and cutover steps.
+  unqualified commands fail closed with explicit registries. Workers reload changes to
+  the protected registry before their next HTTP request. See the main README for bootstrap and cutover steps.
 - **`client_max_body_size 26m`** is deliberately just above the app's 25 MB cap so the
   user gets the branded 413 page rather than nginx's default error.

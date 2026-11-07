@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Super-Admin Fleet Control</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f1f3f5;color:#18212b;font:13px system-ui,sans-serif}main{padding:12px}h1{font-size:19px;margin:0}h2{font-size:15px;margin:8px 0}header,.summary,.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}header{justify-content:space-between;margin-bottom:12px}.summary{background:#18212b;color:white;padding:10px;margin-bottom:12px;gap:20px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;background:white}th,td{text-align:left;vertical-align:top;border:1px solid #cbd2d9;padding:8px}th{background:#e2e7ec}td{min-width:160px}td.identity{min-width:280px}label{display:block;margin:4px 0}input:not([type=checkbox]),textarea{width:100%;padding:5px;border:1px solid #aab4be;border-radius:2px}input[type=checkbox]{vertical-align:middle}button{padding:5px 8px;border:1px solid #8b98a5;border-radius:2px;background:#edf1f4;color:#18212b;cursor:pointer}button:hover{background:#dce5ed}a{color:#064b88;overflow-wrap:anywhere}.mono{font:12px ui-monospace,monospace;overflow-wrap:anywhere}.badge{display:inline-block;font-size:11px;padding:2px 5px;background:#e2e7ec;border:1px solid #bcc5cf}.enabled,.ok{background:#d8f0dd;color:#164c24}.disabled,.degraded{background:#ffe0d8;color:#772718}.flash{padding:8px;border:1px solid #aab4be;background:white;margin:8px 0}.flash-error{background:#ffe0d8}.create{border:1px solid #bcc5cf;background:white;margin-top:12px;padding:10px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}.flags label{white-space:nowrap;font-size:11px}dl{margin:4px 0}dt{color:#536171}dd{margin:0 0 6px}small{color:#536171}.login{max-width:420px;background:white;border:1px solid #bcc5cf;padding:16px;margin:40px auto}.actions form{margin:0}.danger{border-color:#aa4936}details summary{cursor:pointer;font-weight:600;margin-bottom:6px}caption{text-align:left;font-size:15px;font-weight:600;padding:8px 0}
+  </style>
+</head>
+<body><main id="main">
+{% macro token() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+{% if not authenticated %}
+  <section class="login"><h1>Super-Admin Fleet Control</h1><p>Platform operator authentication</p>
+  {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+  <form method="post">{{ token() }}<input type="hidden" name="action" value="login">
+    <label>Master password<input type="password" name="password" autocomplete="current-password" required></label>
+    <button type="submit">Sign in</button>
+  </form></section>
+{% else %}
+  <header><h1>Super-Admin Fleet Control</h1><div class="actions"><a href="{{ url_for('superadmin.dashboard') }}">Refresh inventory</a>
+    <form method="post">{{ token() }}<button name="action" value="logout">Logout</button></form></div></header>
+  {% for category,message in get_flashed_messages(with_categories=true) %}<div role="status" class="flash flash-{{ category }}">{{ message }}</div>{% endfor %}
+  <section class="summary" aria-label="Fleet summary">
+    <span>Total <strong>{{ rows|length }}</strong></span><span>Enabled <strong>{{ enabled }}</strong></span>
+    <span>Disabled <strong>{{ rows|length - enabled }}</strong></span>
+    <span>Platform health <strong class="badge {{ health }}">{{ health }}</strong></span>
+    <span>Registry <span class="mono">{{ registry_path }}</span> · {{ registry_status }}</span>
+  </section>
+  <div class="scroll"><table><caption>Tenant Master Table</caption><thead><tr><th>Identity / configuration</th><th>Domains</th><th>Database / schema</th><th>Uploads / theme</th><th>Operator actions</th></tr></thead><tbody>
+  {% for row in rows %}{% set tenant = row.tenant %}
+    <tr id="tenant-{{ tenant.slug }}">
+      <td class="identity"><strong>{{ tenant.slug }} · {{ row.settings.get('BUSINESS_NAME', tenant.slug) }}</strong>
+        <span class="badge {{ 'enabled' if tenant.enabled else 'disabled' }}">{{ 'enabled' if tenant.enabled else 'disabled' }}</span>
+        {% if row.settings.get('DEMO_TENANT') %}<span class="badge">DEMO</span>{% endif %}
+        <details><summary>Edit identity, domains &amp; flags</summary>
+          <form method="post">{{ token() }}<input type="hidden" name="slug" value="{{ tenant.slug }}"><input type="hidden" name="action" value="edit">
+          {% for field in identities %}<label>{{ field }}<input name="{{ field }}" value="{{ row.settings.get(field, '') }}"></label>{% endfor %}
+          <label>Domains (comma-separated)<input name="domains" value="{{ tenant.hosts|join(', ') }}" required></label>
+          <div class="flags">{% for flag in flags %}<label><input type="checkbox" name="{{ flag }}" {% if row.settings.get(flag) %}checked{% endif %}> {{ flag }}</label>{% endfor %}</div>
+          <button type="submit">Save tenant settings</button></form>
+        </details>
+        <div class="flags">{% for flag in flags %}{% if row.settings.get(flag) %}<span class="badge">{{ flag }}</span> {% endif %}{% endfor %}</div>
+      </td>
+      <td>{% for host in tenant.hosts %}<div><a href="https://{{ host }}" target="_blank" rel="noopener noreferrer">{{ host }}</a></div>{% endfor %}
+        <dl><dt>Canonical URL</dt><dd><a href="{{ row.canonical_url }}" target="_blank" rel="noopener noreferrer">{{ row.canonical_url or 'not configured' }}</a></dd></dl>
+      </td>
+      <td><strong>{{ row.backend }}</strong><div class="mono">{{ row.database }}</div>
+        <dl><dt>Database bytes</dt><dd>{{ row.database_bytes if row.database_bytes is not none else '—' }}</dd><dt>Migration revision</dt><dd class="mono">{{ row.revision or '—' }}</dd><dt>Migration status</dt><dd>{{ row.migration_status }}</dd></dl>
+        {% for name,count in row.counts.items() %}<div>{{ name }}: <strong>{{ count if count is not none else '—' }}</strong></div>{% endfor %}
+        {% if row.error %}<p role="alert" class="badge degraded">{{ row.error }}</p>{% endif %}
+      </td>
+      <td><div class="mono">{{ row.upload_root or '—' }}</div><dl><dt>Files / disk bytes</dt><dd>{{ row.upload_files }} / {{ row.upload_bytes }}</dd><dt>Theme palette ID</dt><dd class="mono">{{ row.theme or '—' }}</dd></dl></td>
+      <td><div class="actions">
+        {% for action,label in [('toggle','Disable' if tenant.enabled else 'Enable'),('upgrade','Upgrade to head'),('backup','Create backup')] %}
+          <form method="post">{{ token() }}<input type="hidden" name="slug" value="{{ tenant.slug }}"><button name="action" value="{{ action }}">{{ label }}</button></form>
+        {% endfor %}
+        {% if tenant.enabled %}<form method="post">{{ token() }}<input type="hidden" name="slug" value="{{ tenant.slug }}"><button name="action" value="impersonate">Launch tenant admin</button></form>{% endif %}
+        {% if row.settings.get('DEMO_TENANT') %}<form method="post">{{ token() }}<input type="hidden" name="slug" value="{{ tenant.slug }}"><label>Confirm demo reset: enter {{ tenant.slug }}<input name="confirmation" required autocomplete="off" pattern="{{ tenant.slug }}"></label><button class="danger" name="action" value="reset_demo">Reset &amp; reseed demo</button></form>{% endif %}
+      </div></td>
+    </tr>
+  {% else %}<tr><td colspan="5">No registered tenants. Provision below.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <section class="create"><h2>Create / Provision Tenant</h2><form method="post">{{ token() }}<input type="hidden" name="action" value="create">
+    <div class="grid"><div><label>Slug<input name="slug" pattern="[a-z0-9][a-z0-9_-]*" required></label><label>Domains (comma-separated)<input name="domains" required></label><label>Database URI (optional; dedicated SQLite by default)<input name="database_uri" autocomplete="off"></label></div>
+    <div>{% for field in identities %}<label>{{ field }}<input name="{{ field }}" {% if field == 'BUSINESS_NAME' %}required{% endif %}></label>{% endfor %}</div>
+    <div><label>Initial admin email (optional)<input type="email" name="admin_email" autocomplete="off"></label><label>Initial admin password (optional)<input type="password" name="admin_password" autocomplete="new-password"></label><small>Supply both admin fields or neither.</small>
+    <label><input type="checkbox" name="demo_tenant"> Disposable demo tenant (email disabled)</label><label><input type="checkbox" name="seed_demo"> Seed demo data</label></div>
+    <div class="flags">{% for flag in flags %}<label><input type="checkbox" name="{{ flag }}"> {{ flag }}</label>{% endfor %}</div></div>
+    <button type="submit">Provision database, storage &amp; registry</button>
+  </form></section>
+{% endif %}
+</main></body></html>

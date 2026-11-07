@@ -26,6 +26,9 @@ class JsonFormatter(logging.Formatter):
             event["tenant"] = getattr(getattr(g, "tenant", None), "slug", None)
         if record.exc_info and record.exc_info[0]:
             event["exception_type"] = record.exc_info[0].__name__
+        for key in ("event", "target_tenant", "outcome", "actor"):
+            if hasattr(record, key):
+                event[key] = getattr(record, key)
         return json.dumps(event)
 
 
