@@ -32,6 +32,8 @@ from app.config import (
 def _freeze_settings(value: Any) -> Any:
     if isinstance(value, Mapping):
         return MappingProxyType({key: _freeze_settings(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_settings(item) for item in value)
     return value
 
 
@@ -298,6 +300,8 @@ def tenant_context(slug: str) -> Generator[Tenant]:
 
 
 def register_tenancy(app: Flask) -> None:
+    from app.services.public_pages import DEFAULT_PRESET, validate_public_settings
+    validate_public_settings(app.config.get("SITE_PRESET", DEFAULT_PRESET), app.config.get("PUBLIC_PAGES_CONFIG", {}))
     prefix = str(app.config.get("SUPERADMIN_PATH") or "/platform/control").rstrip("/")
     if not prefix.startswith("/") or prefix == "" or any(char in prefix for char in "?#\\") or "//" in prefix or any(part in (".", "..") for part in prefix.split("/")):
         raise ValueError("SUPERADMIN_PATH must be an absolute, non-root URL prefix.")
@@ -320,6 +324,7 @@ def register_tenancy(app: Flask) -> None:
         g.pop("tenant", None)
         g.pop("_login_user", None)
         g.pop("platform_control", None)
+        g.pop("_public_pages_manifest", None)
         prefix = app.config["SUPERADMIN_PATH"]
         if request.path == prefix or request.path.startswith(prefix + "/"):
             password = app.config.get("SUPERADMIN_PASSWORD", "")

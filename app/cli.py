@@ -11,6 +11,7 @@ from sqlalchemy.engine import URL
 
 from app.extensions import db
 from app.models import User
+from app.services.public_pages import DEFAULT_PRESET, preset_names, validate_public_settings
 from app.tenancy import (
     TenantRegistry, database_identity, get_registry, read_tenant_records,
     tenant_operation, tenant_registry_write_lock, tenant_upload_root, write_tenant_records,
@@ -84,20 +85,28 @@ def register_cli(app: Flask) -> None:
     @click.option("--domain", multiple=True, required=True)
     @click.option("--database-uri", help="Existing PostgreSQL database URI; defaults to a dedicated SQLite file.")
     @click.option("--settings", default="{}", help="JSON object of tenant settings.")
+    @click.option("--preset", type=click.Choice(preset_names()), help="Optional public site preset.")
     @click.option("--demo", is_flag=True, help="Mark as disposable demo and disable email notifications.")
     @click.option("--admin-email")
     @click.option("--admin-password", help="Omit to enter a hidden password prompt.")
     def create_tenant(slug: str, domain: tuple[str, ...], database_uri: str | None,
-                      settings: str, demo: bool, admin_email: str | None, admin_password: str | None) -> None:
+                      settings: str, preset: str | None, demo: bool, admin_email: str | None, admin_password: str | None) -> None:
         if admin_password and not admin_email:
             raise click.ClickException("--admin-password requires --admin-email.")
         if admin_email and admin_password is None:
             admin_password = click.prompt("Admin password", hide_input=True, confirmation_prompt=True)
         try:
             overrides = json.loads(settings)
+            if not isinstance(overrides, dict):
+                raise ValueError("Tenant settings must be a JSON object.")
+            if preset is not None:
+                overrides["SITE_PRESET"] = preset
+            public_config = {**app.config, **overrides}
+            validate_public_settings(
+                public_config.get("SITE_PRESET", DEFAULT_PRESET),
+                _plain_settings(public_config.get("PUBLIC_PAGES_CONFIG", {})),
+            )
             if demo:
-                if not isinstance(overrides, dict):
-                    raise ValueError("Tenant settings must be a JSON object.")
                 overrides.update(DEMO_TENANT=True, EMAIL_ENABLED=False)
             with tenant_registry_write_lock() as path:
                 records = read_tenant_records(path)
@@ -154,12 +163,16 @@ def register_cli(app: Flask) -> None:
                         item.dispose()
         except (ValueError, OSError) as exc:
             raise click.ClickException(str(exc)) from exc
-        click.echo(f"Tenant {slug} provisioned. Restart application workers to load the registry.")
+        click.echo(f"Tenant {slug} provisioned. Registry changes load before subsequent HTTP requests in each worker.")
 
 
 def _plain_settings(value):
     from collections.abc import Mapping
-    return {key: _plain_settings(item) for key, item in value.items()} if isinstance(value, Mapping) else value
+    if isinstance(value, Mapping):
+        return {key: _plain_settings(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain_settings(item) for item in value]
+    return value
 
 
 @contextmanager

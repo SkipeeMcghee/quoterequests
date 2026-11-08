@@ -1,14 +1,20 @@
 {% extends "site_base.html" %}
 {% from "_time_selects.html" import render_time_select %}
+{% from "main/_public_sections.html" import render_paragraphs, render_sections with context %}
+{% set page = public_current_page|default({}, true) %}
 
-{% block title %}Schedule Work | {{ business_name }}{% endblock %}
+{% block title %}{% if page.get('title', 'Schedule Some Work') == 'Schedule Some Work' %}Schedule Work{% else %}{{ page.get('title') }}{% endif %} | {{ business_name }}{% endblock %}
 
 {% block content %}
 <main id="main" class="shell narrow-shell">
   <section class="section-intro">
     <p class="eyebrow">Schedule some work</p>
-    <h1>Request a scheduled visit</h1>
-    <p>Share the scope and your preferred timing so {{ business_name }} can follow up about scheduling in {{ service_area }}.</p>
+    <h1>{% if page.get('title', 'Schedule Some Work') == 'Schedule Some Work' %}Request a scheduled visit{% else %}{{ page.get('title') }}{% endif %}</h1>
+    {% if 'text' in page %}
+      {{ render_paragraphs(page) }}
+    {% else %}
+      <p>Share the scope and your preferred timing so {{ business_name }} can follow up about scheduling in {{ service_area }}.</p>
+    {% endif %}
   </section>
 
   <div class="hero-panel">
@@ -101,6 +107,7 @@
       </div>
     </form>
   </div>
+  {{ render_sections(page) }}
 </main>
 {% endblock %}
 

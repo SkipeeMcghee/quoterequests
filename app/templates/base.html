@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Quote Requests{% endblock %}</title>
+    {% block meta_description %}{% endblock %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
     {% if theme_css %}
       <style>

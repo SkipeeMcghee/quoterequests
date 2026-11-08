@@ -36,6 +36,30 @@ Only enabled features appear; your setup contact controls which modules are avai
 - **Appearance:** select a theme in the appearance screen, preview it, and save. This
   changes your site's theme, not another business's site.
 
+## Public pages and presets
+
+Ask the platform operator to choose **local_service_business** (the compatible default
+with optional gallery/about/FAQ), **specialty_contractor** (project/trust content and
+Our Process), or **minimal_quote_funnel** (home, contact and quote intake). Presets do
+not change your theme or enable disabled business modules.
+
+The operator's fleet dashboard has a preset selector and a **PUBLIC_PAGES_CONFIG**
+JSON textarea for each tenant and for provisioning. It shows saved overrides, not
+the complete merged preset. Blank or `{}` resets those overrides; omitted fields
+preserve existing settings. `[]` clears home blocks, not all public pages. Validation
+rejects invalid content before saving; a database outage does not hide these controls.
+
+Content can arrange home blocks, change standard-page titles/navigation/visibility,
+and add custom pages at `/p/<slug>`. Service area is at `/service-area` (also
+`/directions`); quote intake also accepts `/request-quote`. All text is escaped:
+even rich-text sections do not accept raw HTML or executable Markdown. CTA links must
+be absolute local paths or HTTP(S) URLs. Module flags remain master gates.
+
+For the exact manifest schema and merge/empty-list rules, see the
+[public preset documentation](../README.md#public-presets-and-manifest). Preview all
+navigation, service-area details, quote links, and custom-page copy on your own domain
+before publishing. These are operator settings, not the tenant appearance picker.
+
 ## What the optional modules control
 
 | Module | Purpose |

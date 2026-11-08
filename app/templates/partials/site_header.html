@@ -1,6 +1,6 @@
 <header class="site-header site-header--brochure">
   <div class="site-header__lead">
-    <a class="brand brand--logo" href="{{ url_for('main.index') }}" aria-label="{{ business_name }} home">
+    <a class="brand brand--logo" {% if public_page_enabled('home') %}href="{{ url_for('main.index') }}" aria-label="{{ business_name }} home"{% else %}aria-label="{{ business_name }}"{% endif %}>
       {% if site_logo.path %}
         <img class="brand__image" src="{{ url_for('static', filename=site_logo.path) }}" alt="{{ site_logo.alt or business_name }}">
       {% else %}
@@ -15,19 +15,15 @@
 
   <div class="site-header__nav-group">
     <nav class="site-nav site-nav--brochure" aria-label="Primary navigation">
-      <a href="{{ url_for('main.index') }}" {% if request.endpoint == 'main.index' %}aria-current="page"{% endif %}>Home</a>
-      {% if enable_services %}
-        <a href="{{ url_for('main.services_page') }}" {% if request.endpoint == 'main.services_page' %}aria-current="page"{% endif %}>Services</a>
-      {% endif %}
-      {% if has_public_gallery %}
-        <a href="{{ url_for('main.gallery_page') }}" {% if request.endpoint == 'main.gallery_page' %}aria-current="page"{% endif %}>Gallery</a>
-      {% endif %}
-      <a href="{{ url_for('main.about_page') }}" {% if request.endpoint == 'main.about_page' %}aria-current="page"{% endif %}>About</a>
-      <a href="{{ url_for('main.contact_page') }}" {% if request.endpoint == 'main.contact_page' %}aria-current="page"{% endif %}>Contact</a>
+      {% for link in public_nav_links %}
+        <a href="{{ link.get('url') }}" {% if request.path == link.get('url') %}aria-current="page"{% endif %}>{{ link.get('label') }}</a>
+      {% endfor %}
     </nav>
 
     <div class="site-header__actions">
-      <a class="btn btn-primary btn-small" href="{{ url_for('main.quote_request') }}">Get a Quote</a>
+      {% if public_page_enabled('quote_request') %}
+        <a class="btn btn-primary btn-small" href="{{ url_for('main.quote_request') }}">Get a Quote</a>
+      {% endif %}
       <div class="site-utility-nav">
         <a href="tel:{{ phone }}">{{ phone }}</a>
         <a href="mailto:{{ email }}">{{ email }}</a>

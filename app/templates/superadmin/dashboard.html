@@ -32,10 +32,14 @@
       <td class="identity"><strong>{{ tenant.slug }} · {{ row.settings.get('BUSINESS_NAME', tenant.slug) }}</strong>
         <span class="badge {{ 'enabled' if tenant.enabled else 'disabled' }}">{{ 'enabled' if tenant.enabled else 'disabled' }}</span>
         {% if row.settings.get('DEMO_TENANT') %}<span class="badge">DEMO</span>{% endif %}
+        <div>Public preset <span class="mono">{{ row.preset }}</span></div>
         <details><summary>Edit identity, domains &amp; flags</summary>
           <form method="post">{{ token() }}<input type="hidden" name="slug" value="{{ tenant.slug }}"><input type="hidden" name="action" value="edit">
           {% for field in identities %}<label>{{ field }}<input name="{{ field }}" value="{{ row.settings.get(field, '') }}"></label>{% endfor %}
           <label>Domains (comma-separated)<input name="domains" value="{{ tenant.hosts|join(', ') }}" required></label>
+          <label>SITE_PRESET<select name="SITE_PRESET">{% for preset in presets %}<option value="{{ preset }}" {% if preset == row.preset %}selected{% endif %}>{{ preset }}</option>{% endfor %}</select></label>
+          <label>PUBLIC_PAGES_CONFIG (JSON overrides)<textarea name="PUBLIC_PAGES_CONFIG" rows="10" class="mono">{{ row.settings.get('PUBLIC_PAGES_CONFIG', {})|tojson(indent=2) }}</textarea></label>
+          <small>Saved overrides only, not the merged preset. Blank or {} resets overrides; [] clears home blocks. Text is escaped, never raw HTML.</small>
           <div class="flags">{% for flag in flags %}<label><input type="checkbox" name="{{ flag }}" {% if row.settings.get(flag) %}checked{% endif %}> {{ flag }}</label>{% endfor %}</div>
           <button type="submit">Save tenant settings</button></form>
         </details>
@@ -63,6 +67,8 @@
   <section class="create"><h2>Create / Provision Tenant</h2><form method="post">{{ token() }}<input type="hidden" name="action" value="create">
     <div class="grid"><div><label>Slug<input name="slug" pattern="[a-z0-9][a-z0-9_-]*" required></label><label>Domains (comma-separated)<input name="domains" required></label><label>Database URI (optional; dedicated SQLite by default)<input name="database_uri" autocomplete="off"></label></div>
     <div>{% for field in identities %}<label>{{ field }}<input name="{{ field }}" {% if field == 'BUSINESS_NAME' %}required{% endif %}></label>{% endfor %}</div>
+    <div><label>SITE_PRESET<select name="SITE_PRESET">{% for preset in presets %}<option value="{{ preset }}" {% if preset == 'local_service_business' %}selected{% endif %}>{{ preset }}</option>{% endfor %}</select></label>
+    <label>PUBLIC_PAGES_CONFIG (optional JSON overrides)<textarea name="PUBLIC_PAGES_CONFIG" rows="10" class="mono">{}</textarea></label><small>Leave {} to use the preset. Master module flags still apply.</small></div>
     <div><label>Initial admin email (optional)<input type="email" name="admin_email" autocomplete="off"></label><label>Initial admin password (optional)<input type="password" name="admin_password" autocomplete="new-password"></label><small>Supply both admin fields or neither.</small>
     <label><input type="checkbox" name="demo_tenant"> Disposable demo tenant (email disabled)</label><label><input type="checkbox" name="seed_demo"> Seed demo data</label></div>
     <div class="flags">{% for flag in flags %}<label><input type="checkbox" name="{{ flag }}"> {{ flag }}</label>{% endfor %}</div></div>

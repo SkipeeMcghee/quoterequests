@@ -6,6 +6,7 @@ refresh_registry(app, force=True). Authorization and audit belong to the caller.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
@@ -26,6 +27,7 @@ from app.cli import MIGRATIONS, _create_admin_user
 from app.extensions import db
 from app.services import themes
 from app.services.demo import seed_demo
+from app.services.public_pages import DEFAULT_PRESET, preset_names, validate_public_settings
 from app.tenancy import (
     Tenant,
     TenantRegistry,
@@ -167,7 +169,47 @@ def _settings(form, existing: Mapping[str, Any] | None = None) -> dict[str, Any]
         value = _value(form, key)
         if value is not _MISSING:
             settings[key] = _boolean(value)
+    preset = _value(form, "SITE_PRESET")
+    if preset is not _MISSING:
+        preset = _string(preset)
+        if preset not in preset_names():
+            raise _ValidationError("Choose a known public site preset.")
+        settings["SITE_PRESET"] = preset
+    manifest = _value(form, "PUBLIC_PAGES_CONFIG")
+    if manifest is not _MISSING:
+        try:
+            if isinstance(manifest, str):
+                manifest = json.loads(manifest, object_pairs_hook=_unique_public_object,
+                                      parse_constant=_invalid_public_constant) if manifest.strip() else {}
+            elif isinstance(manifest, (Mapping, list)):
+                manifest = _plain(manifest)
+            else:
+                raise ValueError()
+        except ValueError:
+            raise _ValidationError("Public pages manifest must be valid JSON without duplicate keys or nonfinite numbers.") from None
+        settings["PUBLIC_PAGES_CONFIG"] = manifest
+    candidate = {**current_app.config, **settings}
+    try:
+        validate_public_settings(
+            candidate.get("SITE_PRESET", DEFAULT_PRESET),
+            _plain(candidate.get("PUBLIC_PAGES_CONFIG", {})),
+        )
+    except ValueError:
+        raise _ValidationError("Invalid public site preset or pages manifest; check the documented schema and safe URLs.") from None
     return settings
+
+
+def _unique_public_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate manifest key.")
+        result[key] = value
+    return result
+
+
+def _invalid_public_constant(value):
+    raise ValueError("Nonfinite manifest number.")
 
 
 def _storage_path(path: Path) -> Path:
@@ -420,8 +462,16 @@ def fleet_rows() -> list[dict[str, Any]]:
         heads = None
     rows = []
     for tenant in registry.tenants.values():
+        # Keep editable content available even if engine binding/inspection fails.
+        settings = {key: app.config[key] for key in (*IDENTITY_FIELDS, *FEATURE_FLAGS,
+                    "DEMO_TENANT", "CANONICAL_ORIGIN", "SITE_PRESET", "PUBLIC_SITE_PRESET")
+                    if key in app.config}
+        settings.update(_plain(tenant.settings))
+        settings["PUBLIC_PAGES_CONFIG"] = _plain(tenant.settings.get("PUBLIC_PAGES_CONFIG", {}))
+        preset = settings.get("SITE_PRESET", settings.get("PUBLIC_SITE_PRESET", DEFAULT_PRESET))
         row = {
-            "tenant": tenant, "settings": {}, "canonical_url": "",
+            "tenant": tenant, "settings": _display_settings(settings), "canonical_url": settings.get("CANONICAL_ORIGIN", ""),
+            "preset": preset,
             "database": _redacted_database(tenant.database_uri), "backend": "unknown",
             "database_bytes": None, "revision": None, "migration_status": "unknown",
             "counts": {name: None for name in _COUNTED_TABLES},
@@ -432,6 +482,9 @@ def fleet_rows() -> list[dict[str, Any]]:
             with operator_context(tenant, registry=registry) as target:
                 settings = current_tenant_settings()
                 row["settings"] = _display_settings(settings)
+                row["settings"]["PUBLIC_PAGES_CONFIG"] = _plain(tenant.settings.get("PUBLIC_PAGES_CONFIG", {}))
+                public_settings = {**app.config, **settings}
+                row["preset"] = public_settings.get("SITE_PRESET", public_settings.get("PUBLIC_SITE_PRESET", DEFAULT_PRESET))
                 row["canonical_url"] = settings.get("CANONICAL_ORIGIN", "")
                 uploads = _storage_path(tenant_upload_root())
                 row["upload_root"] = str(uploads)

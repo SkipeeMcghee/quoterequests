@@ -2,7 +2,7 @@ from pathlib import Path
 from collections.abc import Mapping
 from posixpath import normpath
 
-from flask import Flask, abort, flash, g, jsonify, make_response, redirect, render_template, render_template_string, request, url_for
+from flask import Flask, abort, flash, g, has_request_context, jsonify, make_response, redirect, render_template, render_template_string, request, url_for
 from flask_login import current_user
 from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -230,7 +230,18 @@ def register_context_processors(app: Flask) -> None:
         if getattr(g, "platform_control", False):
             return {}
         settings = current_tenant_settings()
+        from app.services import public_pages
+        page_key = {
+            "main.index": "home", "main.services_page": "services", "main.gallery_page": "gallery",
+            "main.contact_page": "contact", "main.service_area_page": "service_area",
+            "main.about_page": "about", "main.faq_page": "faq",
+            "main.quote_request": "quote_request", "main.schedule_work": "schedule_work",
+        }.get(request.endpoint if has_request_context() else None)
         return {
+            "public_nav_links": public_pages.navigation_links() if has_request_context() else [],
+            "public_page_enabled": public_pages.page_enabled,
+            "public_page_config": public_pages.page_config,
+            "public_current_page": public_pages.page_config(page_key) if page_key else {},
             "enable_gallery": settings.get("ENABLE_GALLERY", False),
             "enable_services": settings.get("ENABLE_SERVICES", False),
             "enable_scheduling": settings.get("ENABLE_SCHEDULING", False),

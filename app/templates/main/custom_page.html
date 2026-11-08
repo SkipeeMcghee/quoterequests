@@ -1,0 +1,16 @@
+{% extends "site_base.html" %}
+{% from "main/_public_sections.html" import render_sections with context %}
+
+{% block title %}{{ custom_public_page.get('title') }} | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main id="main" class="shell brochure-shell">
+  <section class="section-intro">
+    <h1>{{ custom_public_page.get('title') }}</h1>
+    {% for paragraph in (custom_public_page.get('text') or '').splitlines() %}
+      {% if paragraph.strip() %}<p>{{ paragraph }}</p>{% endif %}
+    {% endfor %}
+  </section>
+  {{ render_sections(custom_public_page) }}
+</main>
+{% endblock %}

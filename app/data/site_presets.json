@@ -1,0 +1,76 @@
+{
+  "local_service_business": {
+    "home_blocks": ["hero", "services_preview", "service_area", "quote_cta"],
+    "pages": {
+      "home": {"enabled": true, "show_in_nav": true, "order": 0},
+      "services": {"enabled": true, "show_in_nav": true, "order": 10},
+      "gallery": {"enabled": true, "show_in_nav": true, "order": 20},
+      "service_area": {"enabled": true, "show_in_nav": false, "order": 30},
+      "about": {"enabled": true, "show_in_nav": true, "order": 40},
+      "contact": {"enabled": true, "show_in_nav": true, "order": 50},
+      "faq": {"enabled": true, "show_in_nav": false, "order": 60},
+      "quote_request": {"enabled": true, "show_in_nav": false, "order": 70},
+      "schedule_work": {"enabled": true, "show_in_nav": false, "order": 80}
+    },
+    "custom_pages": []
+  },
+  "specialty_contractor": {
+    "home_blocks": [
+      "hero",
+      {
+        "type": "trust_highlights",
+        "title": "A straightforward project experience",
+        "items": [
+          {"title": "Clear scope", "text": "Discuss the work and priorities before getting started."},
+          {"title": "Practical planning", "text": "Agree on the next steps and keep communication clear."},
+          {"title": "Thoughtful follow-up", "text": "Review questions and project details together."}
+        ]
+      },
+      "gallery_preview",
+      "services_preview",
+      "quote_cta"
+    ],
+    "pages": {
+      "home": {"enabled": true, "show_in_nav": true, "order": 0},
+      "gallery": {"enabled": true, "show_in_nav": true, "order": 10},
+      "services": {"enabled": true, "show_in_nav": true, "order": 20},
+      "service_area": {"enabled": true, "show_in_nav": true, "order": 30},
+      "about": {"enabled": true, "show_in_nav": true, "order": 40},
+      "contact": {"enabled": true, "show_in_nav": true, "order": 50},
+      "quote_request": {"enabled": true, "show_in_nav": false, "order": 70},
+      "schedule_work": {"enabled": true, "show_in_nav": false, "order": 80},
+      "faq": {"enabled": true, "show_in_nav": false, "order": 90}
+    },
+    "custom_pages": [
+      {
+        "slug": "our-process",
+        "title": "Our Process",
+        "nav_label": "Our Process",
+        "show_in_nav": true,
+        "enabled": true,
+        "order": 60,
+        "meta_description": "Learn how to share project details, review the scope, and plan the next steps.",
+        "sections": [
+          {"type": "text", "title": "Start with a conversation", "paragraphs": ["Tell us what you have in mind and what matters most to you.", "We review the details together before confirming a plan."]},
+          {"type": "checklist", "title": "Helpful project details", "checklist": ["Describe the work and location.", "Share photos or measurements if available.", "Let us know your preferred timing."]},
+          {"type": "quote_cta", "title": "Ready to discuss your project?", "text": "Share a few details and we can work through the next steps."}
+        ]
+      }
+    ]
+  },
+  "minimal_quote_funnel": {
+    "home_blocks": ["hero", "quote_cta"],
+    "pages": {
+      "home": {"enabled": true, "show_in_nav": true, "order": 0},
+      "contact": {"enabled": true, "show_in_nav": true, "order": 10},
+      "quote_request": {"enabled": true, "show_in_nav": true, "order": 20},
+      "services": {"enabled": false, "show_in_nav": false},
+      "gallery": {"enabled": false, "show_in_nav": false},
+      "service_area": {"enabled": false, "show_in_nav": false},
+      "about": {"enabled": false, "show_in_nav": false},
+      "faq": {"enabled": false, "show_in_nav": false},
+      "schedule_work": {"enabled": false, "show_in_nav": false}
+    },
+    "custom_pages": []
+  }
+}

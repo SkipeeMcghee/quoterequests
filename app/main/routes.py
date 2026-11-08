@@ -9,6 +9,7 @@ from app.services.recaptcha import should_render_recaptcha, verify_recaptcha_sub
 from app.services.service_catalog import require_services_enabled
 from app.services.media import resolve_public_file
 from app.tenancy import tenant_config
+from app.services import public_pages
 
 
 HOME_TRUST_POINTS = (
@@ -104,31 +105,39 @@ def _validate_recaptcha(form: QuoteRequestForm, recaptcha_action: str) -> bool:
 
 @bp.get("/")
 def index():
+    public_pages.require_page("home")
+    blocks = public_pages.home_blocks()
     return render_template(
         "main/index.html",
         trust_points=HOME_TRUST_POINTS,
         testimonials=TESTIMONIALS,
+        public_home_blocks=blocks,
+        gallery_preview_items=list_public_gallery_items()[:6] if any(block["type"] == "gallery_preview" for block in blocks) else (),
     )
 
 
 @bp.get("/services")
 def services_page():
+    public_pages.require_page("services")
     require_services_enabled()
     return render_template("main/services.html")
 
 
 @bp.get("/about")
 def about_page():
+    public_pages.require_page("about")
     return render_template("main/about.html")
 
 
 @bp.get("/contact")
 def contact_page():
+    public_pages.require_page("contact")
     return render_template("main/contact.html")
 
 
 @bp.get("/gallery")
 def gallery_page():
+    public_pages.require_page("gallery")
     require_gallery_enabled()
     gallery_items = list_public_gallery_items()
     if not gallery_items:
@@ -149,6 +158,7 @@ def public_media(storage_path: str):
 
 @bp.get("/faq")
 def faq_page():
+    public_pages.require_page("faq")
     return render_template("main/faq.html", faq_items=FAQ_ITEMS)
 
 
@@ -167,8 +177,10 @@ def for_ai_systems():
     return render_template("main/for_ai_systems.html")
 
 
+@bp.route("/request-quote", methods=["GET", "POST"])
 @bp.route("/quote-request", methods=["GET", "POST"])
 def quote_request():
+    public_pages.require_page("quote_request")
     form = QuoteRequestForm()
     if form.validate_on_submit():
         if _validate_recaptcha(form, QUOTE_REQUEST_RECAPTCHA_ACTION):
@@ -185,8 +197,11 @@ def quote_request():
 
 @bp.route("/schedule-work", methods=["GET", "POST"])
 def schedule_work():
+    if not public_pages.page_config("schedule_work")["enabled"]:
+        raise NotFound()
     if not tenant_config("ENABLE_SCHEDULING"):
         return redirect(url_for("main.quote_request"))
+    public_pages.require_page("schedule_work")
 
     form = QuoteRequestForm()
     if form.validate_on_submit():
@@ -205,3 +220,15 @@ def schedule_work():
 @bp.get("/thank-you")
 def thank_you():
     return render_template("main/thank_you.html")
+
+
+@bp.get("/service-area")
+@bp.get("/directions")
+def service_area_page():
+    public_pages.require_page("service_area")
+    return render_template("main/service_area.html", standard_page=public_pages.page_config("service_area"))
+
+
+@bp.get("/p/<slug>")
+def custom_page(slug):
+    return render_template("main/custom_page.html", custom_public_page=public_pages.custom_page(slug))

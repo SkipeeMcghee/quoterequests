@@ -14,7 +14,8 @@ and backup verification.
 
 **Public site**
 
-- Landing page, services, gallery, about, contact, FAQ, privacy, terms
+- Preset-driven landing page, services, gallery, service area/directions, about,
+  contact, FAQ, custom content pages, privacy and terms
 - Quote request form with photo uploads and optional reCAPTCHA
 - Schedule-work request form (when scheduling is enabled)
 - 100-palette theme library, switchable at runtime from the admin
@@ -46,8 +47,9 @@ defaults for local development and single-client compatibility.
 | `ENABLE_CALENDAR` | Month and day calendar views |
 | `ENABLE_RECURRING_WORK` | Recurring plans and generated events |
 
-Flags are enforced server-side, not just in the navigation: a disabled module's routes
-return 404 (admin) or redirect (public), and a crafted POST creates nothing.
+Flags are enforced server-side, not just in the navigation: disabled modules cannot
+be enabled by a public manifest, and a crafted POST creates nothing. Public manifest
+page gates return 404 when disabled; existing module guards remain in force.
 
 ## Tech stack
 
@@ -114,9 +116,66 @@ change behaviour rather than just branding:
 | `RECAPTCHA_*` | Spam protection on the public forms |
 | `TRUST_PROXY` | Set true only behind nginx, so client IPs and scheme are correct |
 | `SITE_THEME` | Deploy-time default palette; customers can change it later in admin |
+| `SITE_PRESET` | Public layout/content preset; defaults to `local_service_business` |
+| `PUBLIC_PAGES_CONFIG` | Validated JSON manifest overriding the selected public preset |
 | `SUPERADMIN_PASSWORD` | Platform master password; unset/blank disables the entire control prefix with 404 |
 | `SUPERADMIN_HOST` | Optional dedicated control hostname; other hosts get 404 before CSRF/authentication |
 | `SUPERADMIN_PATH` | Non-root control prefix; defaults to `/platform/control` |
+
+### Public presets and manifest
+
+Select `local_service_business` (backwards-compatible default, retaining optional
+gallery/about/FAQ), `specialty_contractor` (trust/gallery emphasis and an Our Process
+custom page), or `minimal_quote_funnel` (home/contact/quote intake). Presets do not
+change CSS, themes, or master module flags. Tenant settings override deployment
+defaults. CLI `tenant create --preset <name>` optionally stores `SITE_PRESET`;
+omitting it preserves defaults or the selector in `--settings`. The dashboard offers
+the same three choices and a JSON textarea showing **persisted overrides**, not the
+merged preset. Omitted optional fields preserve existing values; a blank textarea or
+`{}` resets manifest overrides. Invalid presets/manifests are rejected before database
+creation or registry persistence. `--settings` must always be a JSON object.
+
+`PUBLIC_PAGES_CONFIG` accepts an object with these fields (or a top-level ordered
+list shorthand for `home_blocks`):
+
+- `home_blocks`: ordered list of type strings or objects with a required `type`.
+  Types: `hero`, `services_preview`, `trust_highlights`, `gallery_preview`,
+  `service_area`, `quote_cta`, `custom_richtext`.
+- `pages`: mapping keyed by `home`, `services`, `gallery`, `service_area`, `contact`,
+  `about`, `faq`, `quote_request`, `schedule_work`; alternatively a replacement list
+  of objects with `key` plus page fields. A replacement list disables omitted pages
+  except home; explicitly disabling home is allowed. Page fields: `enabled`,
+  `show_in_nav` (JSON booleans), `order` (integer), `title`, `nav_label`,
+  `meta_description`, `text`, `hours`, `coverage`, `address`, `directions` (text), `sections`.
+- `custom_pages`: replacement list of objects requiring an unreserved lowercase,
+  hyphenated `slug` (at most 80 characters) and nonempty `title`; optional
+  `nav_label`, `show_in_nav`, `enabled`, `order`, `meta_description`, `sections`
+  and the same other page fields. Defaults: enabled, hidden from navigation,
+  order 100, nav label from title, empty sections/meta description.
+- `sections`: ordered list of objects requiring `type`: `hero`, `text`,
+  `custom_richtext`, `feature_cards`, `checklist`, `faq`, `cta`, `quote_cta`.
+  Aliases: `paragraphs` → `text`, `faq_accordion` → `faq`, `cta_banner` → `cta`.
+  Blocks/sections accept `enabled`, `order`, and text fields `title`, `text`, `body`,
+  `subtitle`, `eyebrow`, `cta_label`, `cta_url`, `hours`, `coverage`, `address`,
+  `directions`; `paragraphs`/`checklist` are string lists, and `items` is a list of
+  objects containing text fields `title`, `text`, `question`, `answer`, `label`, `url`.
+
+Maps deep-merge; lists replace, and empty lists clear inherited content. `pages: []`
+keeps only the implicit home page; `custom_pages: []` removes preset custom pages;
+`home_blocks: []` (or a top-level `[]`) clears all home blocks. Navigation sorts by
+integer `order`, preserving declaration order on ties; blocks/sections retain list
+order. All copy is **plain escaped text**, including `custom_richtext`: no raw HTML
+or executable Markdown. CTA/item URLs must be absolute local paths (`/contact`) or
+HTTP(S) URLs without credentials, never protocol-relative or script URLs; blank CTA
+URLs suppress links. Missing CTA URLs default to an enabled quote page, then contact.
+Master gates `ENABLE_SERVICES`, `ENABLE_GALLERY`, `ENABLE_SCHEDULING` still apply;
+gallery previews/navigation additionally require public gallery items. Disabled
+manifest pages are hidden and unavailable. Unknown fields/types, duplicate page keys
+or slugs, unsafe URLs, and oversized manifests are rejected.
+
+Public routes include `/service-area` with `/directions` as an alias,
+`/p/<slug>` for enabled custom pages, and `/request-quote` as an alias for
+`/quote-request`. Review the selected preset's links and copy before publishing.
 
 ### Tenant routing (Waves 1-4)
 
@@ -205,7 +264,8 @@ provision DNS, nginx server names, certificates, or firewall rules.
 
 The page inventories all registered tenants, including disabled tenants, with schema
 head status, row counts, redacted database details, upload bytes/files, palette ID,
-business identity and feature flags. Health is degraded for unavailable/incomplete
+business identity, effective public preset and feature flags. Preset/content settings
+remain editable even when a tenant database is unavailable. Health is degraded for unavailable/incomplete
 tenant databases or pending migrations. Inventory is synchronous/read-only; very large
 fleets or upload trees can make refreshes slower. Disabled tenants remain available
 for targeted maintenance but never serve customer requests.
@@ -213,7 +273,7 @@ for targeted maintenance but never serve customer requests.
 Inline forms provision a dedicated database (SQLite by default; supply an existing,
 independent PostgreSQL database in production), migrate to head, create storage, and
 optionally create an admin and seed demo data. Admin email/password must be supplied
-together or both omitted. Identity/domain/flag edits and enable/disable actions write
+together or both omitted. Identity/domain/flag/preset/manifest edits and enable/disable actions write
 the private registry atomically and reload workers on their next request. Move static
 tenant definitions into the registry file before editing them here; static definitions
 are inventoried and support maintenance, but their deployment-owned identity/status
@@ -291,7 +351,7 @@ Non-demo resets require **both** `--force --confirm <exact slug>` and are destru
 Take a tenant backup first. The separate UI sweep seeder remains disposable test tooling.
 
 `tenant create` accepts repeated `--domain`, `--demo` (disposable with email disabled),
-an optional `--settings` JSON object, and
+an optional `--settings` JSON object, `--preset` (one of the three public presets), and
 `--database-uri`. Without a URI it creates
 `instance/tenants/<slug>/tenant.sqlite3`; in-memory SQLite cannot be provisioned.
 For production, pre-create a dedicated PostgreSQL database and supply its SQLAlchemy
@@ -349,6 +409,7 @@ Supported settings include:
   `EMAIL_REPLY_TO`, and optional `SMTP_*` overrides. Overriding business identity also
   supplies tenant sender-name/address defaults unless explicitly overridden.
 - `RECAPTCHA_*`, `SITE_THEME`, and `RATE_LIMIT_*`.
+- `SITE_PRESET` and `PUBLIC_PAGES_CONFIG` (public layout/content; see schema above).
 
 `CANONICAL_ORIGIN` is an HTTPS origin without a path, credentials, query, or fragment.
 For explicit tenants it defaults to HTTPS on the first registered host, never the incoming

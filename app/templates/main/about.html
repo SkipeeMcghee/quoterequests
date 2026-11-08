@@ -1,13 +1,19 @@
 {% extends "site_base.html" %}
+{% from "main/_public_sections.html" import render_paragraphs, render_sections with context %}
+{% set page = public_current_page|default({}, true) %}
 
-{% block title %}About | {{ business_name }}{% endblock %}
+{% block title %}{{ page.get('title', 'About') }} | {{ business_name }}{% endblock %}
 
 {% block content %}
 <main id="main" class="shell brochure-shell">
   <section class="section-intro">
     <p class="eyebrow">About</p>
-    <h1>About {{ business_name }}</h1>
-    <p>Customers usually want clear communication, dependable follow-up, and work that fits the property. That is the standard this site is built to communicate.</p>
+    <h1>{% if page.get('title', 'About') == 'About' %}About {{ business_name }}{% else %}{{ page.get('title') }}{% endif %}</h1>
+    {% if 'text' in page %}
+      {{ render_paragraphs(page) }}
+    {% else %}
+      <p>Customers usually want clear communication, dependable follow-up, and work that fits the property. That is the standard this site is built to communicate.</p>
+    {% endif %}
   </section>
 
   <section class="brochure-grid brochure-grid--two">
@@ -46,9 +52,10 @@
       <p class="subtle-text">Send the details and we’ll review the request with the same straightforward approach shown throughout the site.</p>
     </div>
     <div class="form-actions">
-      <a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>
-      <a href="{{ url_for('main.contact_page') }}" class="btn btn-secondary">Contact</a>
+      {% if public_page_enabled('quote_request') %}<a href="{{ url_for('main.quote_request') }}" class="btn btn-primary">Get a Quote</a>{% endif %}
+      {% if public_page_enabled('contact') %}<a href="{{ url_for('main.contact_page') }}" class="btn btn-secondary">Contact</a>{% endif %}
     </div>
   </section>
+  {{ render_sections(page) }}
 </main>
 {% endblock %}

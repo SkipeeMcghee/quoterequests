@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -45,7 +46,7 @@ TENANT_INTEGER_SETTINGS = frozenset({
 TENANT_STRING_SETTINGS = frozenset({
     "BUSINESS_NAME", "COMPANY_NAME", "TAGLINE", "BUSINESS_PHONE", "BUSINESS_EMAIL",
     "SERVICE_AREA", "BUSINESS_ADDRESS", "STAFF_COMPENSATION_CURRENCY", "COMPENSATION_CURRENCY",
-    "SITE_LOGO_PATH", "SITE_LOGO_ALT", "SITE_THEME", "CANONICAL_ORIGIN",
+    "SITE_LOGO_PATH", "SITE_LOGO_ALT", "SITE_THEME", "CANONICAL_ORIGIN", "SITE_PRESET",
     "ADMIN_NOTIFICATION_EMAIL", "DEFAULT_FROM_EMAIL", "EMAIL_FROM_NAME", "EMAIL_REPLY_TO",
     "SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD", "RECAPTCHA_SITE_KEY",
     "RECAPTCHA_SECRET_KEY", "RECAPTCHA_VERIFY_URL",
@@ -53,7 +54,7 @@ TENANT_STRING_SETTINGS = frozenset({
 })
 TENANT_SETTING_KEYS = (
     TENANT_BOOLEAN_SETTINGS | TENANT_INTEGER_SETTINGS | TENANT_STRING_SETTINGS
-    | {"RECAPTCHA_MIN_SCORE", "SITE_LOGO", "SOCIAL_LINKS"}
+    | {"RECAPTCHA_MIN_SCORE", "SITE_LOGO", "SOCIAL_LINKS", "PUBLIC_PAGES_CONFIG"}
 )
 
 
@@ -84,6 +85,8 @@ def validate_tenant_settings(settings: Mapping[str, Any]) -> None:
             valid = type(value) is int and value > 0 and (key != "SMTP_PORT" or value <= 65535)
         elif key == "RECAPTCHA_MIN_SCORE":
             valid = type(value) in (int, float) and 0 <= value <= 1
+        elif key == "PUBLIC_PAGES_CONFIG":
+            valid = isinstance(value, (dict, list))
         elif key in ("SITE_LOGO", "SOCIAL_LINKS"):
             if not isinstance(value, Mapping):
                 raise ValueError(f"Tenant {key} must be a mapping.")
@@ -104,6 +107,9 @@ def validate_tenant_settings(settings: Mapping[str, Any]) -> None:
             raise ValueError(f"Invalid value type or range for tenant setting {key}.")
         if key == "CANONICAL_ORIGIN":
             normalize_canonical_origin(value)
+    if "SITE_PRESET" in settings or "PUBLIC_PAGES_CONFIG" in settings:
+        from app.services.public_pages import DEFAULT_PRESET, validate_public_settings
+        validate_public_settings(settings.get("SITE_PRESET", DEFAULT_PRESET), settings.get("PUBLIC_PAGES_CONFIG", {}))
 
 
 def get_required_env(name: str) -> str:
@@ -205,6 +211,8 @@ class Config:
     COMPENSATION_CURRENCY = STAFF_COMPENSATION_CURRENCY
     CANONICAL_ORIGIN = os.getenv("CANONICAL_ORIGIN", "").strip()
     SITE_THEME = os.getenv("SITE_THEME", "").strip()
+    SITE_PRESET = os.getenv("SITE_PRESET", "local_service_business").strip() or "local_service_business"
+    PUBLIC_PAGES_CONFIG = json.loads(os.getenv("PUBLIC_PAGES_CONFIG", "").strip() or "{}")
     SITE_LOGO = {
         "path": normalize_static_asset_path(os.getenv("SITE_LOGO_PATH", DEFAULT_SITE_LOGO_PATH), DEFAULT_SITE_LOGO_PATH),
         "alt": os.getenv("SITE_LOGO_ALT", "").strip(),

@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 
+{% block meta_description %}
+  {% set meta_page = custom_public_page|default(standard_page|default(page_config|default(public_current_page|default({}, true), true), true), true) %}
+  {% if meta_page.get('meta_description') %}
+    <meta name="description" content="{{ meta_page.get('meta_description') }}">
+  {% endif %}
+{% endblock %}
+
 {% block site_header %}
   {% include "partials/site_header.html" %}
 {% endblock %}

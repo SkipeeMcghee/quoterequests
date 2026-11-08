@@ -1,13 +1,15 @@
 ﻿{% extends "site_base.html" %}
+{% from "main/_public_sections.html" import render_sections with context %}
+{% set page = standard_page|default(page_config|default(public_current_page|default({}, true), true), true) %}
 
-{% block title %}Get a Quote | {{ business_name }}{% endblock %}
+{% block title %}{{ page.get('title') or 'Get a Quote' }} | {{ business_name }}{% endblock %}
 
 {% block content %}
 <main id="main" class="shell narrow-shell">
   <section class="section-intro">
     <p class="eyebrow">Quote request</p>
-    <h1>Tell us about your project</h1>
-    <p>Share a few details so {{ business_name }} can review the work, prepare an estimate, and reply the way you prefer.</p>
+    <h1>{{ page.get('title') or 'Tell us about your project' }}</h1>
+    <p>{{ page.get('text') or 'Share a few details so ' ~ business_name ~ ' can review the work, prepare an estimate, and reply the way you prefer.' }}</p>
   </section>
 
   <div class="hero-panel">
@@ -92,6 +94,7 @@
       </div>
     </form>
   </div>
+  {{ render_sections(page) }}
 </main>
 {% endblock %}
 

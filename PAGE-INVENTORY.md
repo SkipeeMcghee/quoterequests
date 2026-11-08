@@ -8,7 +8,7 @@ How to use it: pick a page, walk its states at 390 / 768 / 1440, tick it off.
 unlabeled controls, heading order, JS errors) for every route automatically —
 this file covers the part a script can't see.
 
-Last updated: 2026-11-04 (baseline `550baa1` + Phase 1 polish).
+Last updated: 2026-11-07 (public preset/manifest and fleet-control inventory).
 
 ## States every page needs
 
@@ -28,19 +28,28 @@ Last updated: 2026-11-04 (baseline `550baa1` + Phase 1 polish).
 
 | Route | Gated by | Notes / states to check |
 |---|---|---|
-| `/` | — | Home. Services list empty (services flag off), gallery teaser empty, long tagline. |
-| `/services` | `ENABLE_SERVICES` | Empty catalogue, one service, 20 services, long description. |
-| `/gallery` | `ENABLE_GALLERY` | Empty gallery, single item, 30 items, lightbox open/close, keyboard escape. |
-| `/about` | — | Static copy, long body text. |
-| `/contact` | — | Static copy, mailto/tel links. |
-| `/faq` | — | Static copy; check disclosure widgets if added later. |
-| `/quote-request` | — | Empty form, validation errors, 20-photo limit, reCAPTCHA failure, success -> `/thank-you`. |
-| `/schedule-work` | `ENABLE_SCHEDULING` | Same as above plus preferred date/time; time selects when only hour is chosen. |
+| `/` | Manifest `home` | Ordered preset blocks, empty block list, services flag off, empty gallery teaser, long tagline. |
+| `/services` | Manifest `services` + `ENABLE_SERVICES` | Empty catalogue, one service, 20 services, long description. |
+| `/gallery` | Manifest `gallery` + `ENABLE_GALLERY` | Empty gallery, single item, 30 items, lightbox open/close, keyboard escape; empty gallery hidden in navigation. |
+| `/service-area`, `/directions` | Manifest `service_area` | Coverage, hours, address, directions, optional sections, blank fields and long copy; alias parity. |
+| `/about` | Manifest `about` | Optional compatible-default page, long body text, custom sections. |
+| `/contact` | Manifest `contact` | Contact copy, mailto/tel links, custom sections. |
+| `/faq` | Manifest `faq` | Optional compatible-default page, FAQ sections, long answers. |
+| `/p/<slug>` | Enabled custom page with validated slug | Title/meta/nav label/order, hidden navigation, empty sections, hero/text/cards/checklist/FAQ/CTA; unknown or disabled slug 404. |
+| `/quote-request`, `/request-quote` | Manifest `quote_request` | Empty form, validation errors, 20-photo limit, reCAPTCHA failure, success -> `/thank-you`; alias parity. |
+| `/schedule-work` | Manifest `schedule_work` + `ENABLE_SCHEDULING` | Same as above plus preferred date/time; time selects when only hour is chosen. |
 | `/thank-you` | — | Post-submit confirmation. |
 | `/privacy-policy`, `/terms` | — | Placeholder legal copy per customer — replaced at deployment. |
 | `/for-ai-systems` | — | Static. Headings now sentence case. |
 | 404 | — | Branded page, link back home, admin paths redirect to login instead. |
 | 500 | — | Branded page, never raises a second error, logs the traceback. |
+
+Public review matrix: `local_service_business` (compatible default, optional
+gallery/about/FAQ retained), `specialty_contractor`, `minimal_quote_funnel`.
+Verify map deep-merges, list replacement, empty-list clearing, stable navigation
+ordering, master feature gates and disabled-page 404s. Copy must remain escaped plain
+text (no raw HTML/executable Markdown); CTA links accept only absolute local or HTTP(S)
+URLs. See [manifest schema](README.md#public-presets-and-manifest).
 
 ## Admin pages (all require login)
 
@@ -65,6 +74,12 @@ Last updated: 2026-11-04 (baseline `550baa1` + Phase 1 polish).
 | `/admin/settings/services` | `ENABLE_SERVICES` | Empty, archived services, reorder mode. |
 | `/admin/imports/<type>/template.xlsx` | — | File download, not a page (sweep skips it). |
 | `/admin/settings/appearance` | — | Internal theme library: dropdown of 100 palettes, swatch grid, applied server-side to every page. Check: long option list, active swatch highlight, applying then reloading. |
+
+## Platform operator page (independent master authentication)
+
+| Route | Gated by | Notes / states to check |
+|---|---|---|
+| `/platform/control` (configurable) | `SUPERADMIN_PASSWORD`, optional `SUPERADMIN_HOST`, master session | Login remains independent of tenant context; authenticated-only three-preset choices. Provision/edit preset and pretty-JSON saved overrides; blank resets to {}; absent optional fields preserve values. Invalid JSON/schema/URLs fail safely before persistence. Fleet shows effective preset/settings even for broken databases. Existing maintenance, demo-reset, handoff and identity/flag controls unchanged. |
 
 ## Known gaps logged here, not yet fixed
 - `QuoteRequestForm` defines `preferred_time` fields but `quote_request.html` never

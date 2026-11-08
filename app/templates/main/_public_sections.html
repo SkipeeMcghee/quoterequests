@@ -1,0 +1,80 @@
+{# Engine-validated content and URLs. All content strings remain escaped. #}
+{% macro render_paragraphs(section) -%}
+  {% set paragraphs = section.get('paragraphs') or (section.get('text') or section.get('body') or '').splitlines() %}
+  {% for paragraph in paragraphs %}
+    {% if paragraph.strip() %}<p class="subtle-text">{{ paragraph }}</p>{% endif %}
+  {% endfor %}
+{%- endmacro %}
+
+{% macro render_content(section, heading_level=2) -%}
+  {% set kind = section.get('type') %}
+  {% set level = heading_level if heading_level in [1, 2, 3, 4, 5, 6] else 2 %}
+  {% if section.get('eyebrow') %}<p class="eyebrow">{{ section.get('eyebrow') }}</p>{% endif %}
+  {% if section.get('title') %}<h{{ level }}>{{ section.get('title') }}</h{{ level }}>{% endif %}
+  {% if section.get('subtitle') %}<p class="subtle-text">{{ section.get('subtitle') }}</p>{% endif %}
+  {{ render_paragraphs(section) }}
+  {% if section.get('coverage') or section.get('address') or section.get('hours') or section.get('directions') %}
+    {{ render_business_details(section) }}
+  {% endif %}
+  {% if kind == 'feature_cards' %}
+    <div class="brochure-grid brochure-grid--three">
+      {% for item in section.get('items', ()) %}
+        <article class="brochure-card brochure-card--accent">
+          {% if item.get('title') %}<strong>{{ item.get('title') }}</strong>{% endif %}
+          {% for paragraph in (item.get('text') or '').splitlines() %}
+            {% if paragraph.strip() %}<p class="subtle-text">{{ paragraph }}</p>{% endif %}
+          {% endfor %}
+          {% if item.get('url') %}<a class="text-link" href="{{ item.get('url') }}">{{ item.get('label') or item.get('title') or 'Learn more' }}</a>{% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% elif kind == 'checklist' %}
+    <ul>
+      {% for item in section.get('checklist', ()) %}<li>{{ item }}</li>{% endfor %}
+      {% for item in section.get('items', ()) %}<li>{{ item.get('text') or item.get('label') or item.get('title') }}</li>{% endfor %}
+    </ul>
+  {% elif kind == 'faq' %}
+    <div class="faq-list">
+      {% for item in section.get('items', ()) %}
+        <details class="faq-item">
+          <summary>{{ item.get('question') or item.get('title') }}</summary>
+          {% for paragraph in (item.get('answer') or item.get('text') or '').splitlines() %}
+            {% if paragraph.strip() %}<p class="subtle-text">{{ paragraph }}</p>{% endif %}
+          {% endfor %}
+        </details>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {% if kind in ['hero', 'cta', 'quote_cta'] and section.get('cta_url') %}
+    <div class="form-actions"><a class="btn btn-primary" href="{{ section.get('cta_url') }}">{{ section.get('cta_label') or 'Get a Quote' }}</a></div>
+  {% endif %}
+{%- endmacro %}
+
+{% macro render_sections(page) -%}
+  {% for section in page.get('sections', ()) %}
+    {% if section.get('enabled', true) %}
+      <section class="{% if section.get('type') in ['cta', 'quote_cta'] %}cta-panel{% elif section.get('type') == 'hero' %}hero-panel{% else %}brochure-section{% endif %}" data-public-section="{{ section.get('type') }}">
+        <div>{{ render_content(section) }}</div>
+      </section>
+    {% endif %}
+  {% endfor %}
+{%- endmacro %}
+
+{% macro render_business_details(config, fallback={}) -%}
+  {% set coverage_text = config.get('coverage') or fallback.get('coverage') or service_area %}
+  {% set address_text = config.get('address') or fallback.get('address') or address %}
+  {% set hours_text = config.get('hours') or fallback.get('hours') or business_hours|default('', true) or hours|default('', true) %}
+  {% set directions_text = config.get('directions') or fallback.get('directions') or directions|default('', true) %}
+  <div class="contact-list">
+    {% if coverage_text %}<span class="subtle-text">Serving {{ coverage_text }}</span>{% endif %}
+    {% if address_text %}<span class="subtle-text">{{ address_text }}</span>{% endif %}
+    {% if hours_text %}
+      <strong>Hours</strong>
+      {% for paragraph in hours_text.splitlines() %}{% if paragraph.strip() %}<p class="subtle-text">{{ paragraph }}</p>{% endif %}{% endfor %}
+    {% endif %}
+    {% if directions_text %}
+      <strong>Directions</strong>
+      {% for paragraph in directions_text.splitlines() %}{% if paragraph.strip() %}<p class="subtle-text">{{ paragraph }}</p>{% endif %}{% endfor %}
+    {% endif %}
+  </div>
+{%- endmacro %}

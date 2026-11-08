@@ -1,0 +1,33 @@
+{% extends "site_base.html" %}
+{% from "main/_public_sections.html" import render_sections, render_business_details with context %}
+{% set page = standard_page|default(page_config|default(public_current_page|default({}, true), true), true) %}
+
+{% block title %}{{ page.get('title') or 'Service Area' }} | {{ business_name }}{% endblock %}
+
+{% block content %}
+<main id="main" class="shell brochure-shell">
+  <section class="section-intro">
+    <p class="eyebrow">Service area</p>
+    <h1>{{ page.get('title') or 'Service area and directions' }}</h1>
+    <p>{% if page.get('text') %}{{ page.get('text') }}{% else %}Local service from {{ business_name }} across {{ service_area }}.{% endif %}</p>
+  </section>
+  <section class="brochure-grid brochure-grid--two">
+    <article class="brochure-card brochure-card--accent">
+      <h2>Coverage and business details</h2>
+      {{ render_business_details(page) }}
+    </article>
+    <article class="brochure-card">
+      <h2>Discuss your location</h2>
+      <div class="contact-list">
+        <a class="text-link" href="tel:{{ phone }}">{{ phone }}</a>
+        <a class="text-link" href="mailto:{{ email }}">{{ email }}</a>
+      </div>
+      <div class="form-actions">
+        {% if public_page_enabled('quote_request') %}<a class="btn btn-primary" href="{{ url_for('main.quote_request') }}">Get a Quote</a>{% endif %}
+        {% if public_page_enabled('contact') %}<a class="btn btn-secondary" href="{{ url_for('main.contact_page') }}">Contact</a>{% endif %}
+      </div>
+    </article>
+  </section>
+  {{ render_sections(page) }}
+</main>
+{% endblock %}

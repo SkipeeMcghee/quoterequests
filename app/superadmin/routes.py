@@ -15,6 +15,7 @@ from itsdangerous import BadData, URLSafeTimedSerializer
 from app.admin import bp as admin_bp
 from app.extensions import db
 from app.models import User
+from app.services.public_pages import preset_names
 from app.superadmin import bp
 from app.superadmin import operations
 from app.tenancy import get_current_tenant, get_registry
@@ -177,6 +178,7 @@ def dashboard():
     path = Path(registry_path) if registry_path else None
     status = "present" if path and path.is_file() else "not created" if path else "not configured (read-only registry)"
     return render_template("superadmin/dashboard.html", authenticated=True, rows=rows,
+                           presets=preset_names(),
                            flags=operations.FEATURE_FLAGS, identities=operations.IDENTITY_FIELDS,
                            registry_path=registry_path or "—", registry_status=status,
                            enabled=sum(row["tenant"].enabled for row in rows),
