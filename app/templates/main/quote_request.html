@@ -13,7 +13,8 @@
   </section>
 
   <div class="hero-panel">
-    <form method="post" enctype="multipart/form-data" class="quote-form" {% if recaptcha_enabled %}data-recaptcha-site-key="{{ recaptcha_site_key }}" data-recaptcha-action="{{ recaptcha_action }}"{% endif %}>
+    {% if page.get('title') and page.get('title') != 'Tell us about your project' %}<h2 id="quote-form-heading">Tell us about your project</h2>{% endif %}
+    <form method="post" enctype="multipart/form-data" class="quote-form" {% if page.get('title') and page.get('title') != 'Tell us about your project' %}aria-labelledby="quote-form-heading"{% endif %} {% if recaptcha_enabled %}data-recaptcha-site-key="{{ recaptcha_site_key }}" data-recaptcha-action="{{ recaptcha_action }}"{% endif %}>
       {{ form.hidden_tag() }}
       <div class="form-grid">
         <label class="form-field field-span-2">

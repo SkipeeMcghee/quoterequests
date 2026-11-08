@@ -5,8 +5,9 @@ gates it, and the states that have to look deliberate before a customer sees it.
 
 How to use it: pick a page, walk its states at 390 / 768 / 1440, tick it off.
 `scripts/ui_sweep.py` covers the mechanical part (layout overflow, broken images,
-unlabeled controls, heading order, JS errors) for every route automatically —
-this file covers the part a script can't see.
+unlabeled controls, headings, JS errors) for resolvable GET routes and effective
+custom pages. Unresolved media paths are reported as skips. Platform control needs
+a separate operator fixture; this file covers interactions a snapshot can't see.
 
 Last updated: 2026-11-07 (public preset/manifest and fleet-control inventory).
 
@@ -50,6 +51,17 @@ Verify map deep-merges, list replacement, empty-list clearing, stable navigation
 ordering, master feature gates and disabled-page 404s. Copy must remain escaped plain
 text (no raw HTML/executable Markdown); CTA links accept only absolute local or HTTP(S)
 URLs. See [manifest schema](README.md#public-presets-and-manifest).
+
+Automated public baseline: run the sweep with `--site-matrix --public-only
+--widths 390,768,1440`. Add `--matrix` to cross all three kits with the five
+feature-flag presets. `--site-preset` chooses one kit; `--preset` still chooses a
+feature-flag preset. Each combination uses its own database, instance/theme state,
+and uploads without inheriting the operator registry or changing configuration
+classes. Specialty's `/p/our-process` and a hidden `/p/sweep-content` structured
+page are discovered even when absent from navigation. Disabled standard/custom
+pages are expected-status probes, not layout failures. Setup failures remain in
+the report and force a nonzero exit. Lazy images are decoded before measurement.
+Accessibility findings remain warnings requiring review, not a full WCAG audit.
 
 ## Admin pages (all require login)
 
@@ -111,6 +123,7 @@ demo data points every item at the white logo file, not because images fail.
   with a Jinja loop); every other page's JS now lives in `app/static/js/`.
 - 12 hidden/JS-generated controls are labelled now, but the availability editor is
   mouse-first: keyboard reordering of time windows has no equivalent.
-- Contrast has not been measured against WCAG AA; the sweep only checks structure.
+- The sweep includes a heuristic rendered contrast check, reported as warnings;
+  it does not replace a full WCAG AA audit or the 100-palette unit tests.
 - `/admin/content` only exists as a gallery wrapper — worth revisiting if a second
   content type lands.

@@ -10,6 +10,7 @@ Usage (from the repo root):
     .\.venv\Scripts\python.exe scripts\ui_sweep.py
     .\.venv\Scripts\python.exe scripts\ui_sweep.py --widths 390,1440 --preset all
     .\.venv\Scripts\python.exe scripts\ui_sweep.py --matrix
+    .\.venv\Scripts\python.exe scripts\ui_sweep.py --site-matrix --public-only --widths 390,768,1440
     .\.venv\Scripts\python.exe scripts\ui_sweep.py --headed --only /admin/calendar
 
 What it does:
@@ -34,6 +35,7 @@ Requires: pip install playwright  (browsers come from installed Chrome via
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import json
 import logging
 import re
@@ -132,6 +134,31 @@ PARAM_ALIASES = {
 }
 
 SITECONFIG_PLACEHOLDER = "Sweep Sweep Sweep"
+
+SITE_PRESETS = ("local_service_business", "specialty_contractor", "minimal_quote_funnel")
+PUBLIC_PAGE_ENDPOINTS = {
+    "main.index": "home", "main.services_page": "services", "main.gallery_page": "gallery",
+    "main.service_area_page": "service_area", "main.about_page": "about",
+    "main.contact_page": "contact", "main.faq_page": "faq",
+    "main.quote_request": "quote_request", "main.schedule_work": "schedule_work",
+}
+
+
+def sweep_manifest(site_preset: str) -> dict:
+    """Keep kit defaults, adding a hidden structured page to exercise custom discovery."""
+    presets = json.loads((REPO_ROOT / "app/data/site_presets.json").read_text(encoding="utf-8"))
+    return {"custom_pages": [*presets[site_preset].get("custom_pages", []), {
+        "slug": "sweep-content", "title": "Project planning guide", "show_in_nav": False,
+        "sections": [
+            {"type": "text", "title": "Plan your project", "paragraphs": ["Share the work, location, and timing."]},
+            {"type": "feature_cards", "title": "What to prepare", "items": [
+                {"title": "Project details", "text": "A clear description helps us plan."}]},
+            {"type": "checklist", "title": "Before you start", "checklist": ["Describe the scope.", "Gather photos."]},
+            {"type": "faq", "title": "Common questions", "items": [
+                {"question": "What happens next?", "answer": "We review your details and follow up."}]},
+            {"type": "quote_cta", "title": "Discuss your project"},
+        ],
+    }]}
 
 
 # ---------------------------------------------------------------------------
@@ -438,33 +465,37 @@ def seed_demo_data(ids_out: dict[str, int]) -> dict[str, int]:
 # ---------------------------------------------------------------------------
 
 
-def build_app(run_dir: Path, flags: dict[str, bool], db_path: Path):
-    """Create the app against the sweep database.
+def build_app(run_dir: Path, flags: dict[str, bool], db_path: Path,
+              site_preset: str = "local_service_business"):
+    """Override configuration before extension binding; never inherit operator state."""
+    from functools import partial
+    from unittest.mock import patch
+    from flask import Flask
+    import app as app_module
 
-    The database URL has to be in place *before* create_app runs: app.config calls
-    load_dotenv(override=True), so the environment loses to .env, and
-    Flask-SQLAlchemy binds engines inside init_app() so patching app.config
-    afterwards silently leaves the engine on TestingConfig's in-memory default.
-    Patching the config class itself is what the pytest fixtures do too.
-    """
-    import app.config as config_module
-    from app import create_app
+    instance = (run_dir / "instance").resolve()
+    instance.mkdir(parents=True, exist_ok=True)
+    overrides = {
+        "SECRET_KEY": "ui-sweep-secret-key", "WTF_CSRF_ENABLED": True,
+        "SQLALCHEMY_DATABASE_URI": f"sqlite+pysqlite:///{db_path.resolve().as_posix()}",
+        "UPLOAD_FOLDER": str((run_dir / "uploads").resolve()),
+        "TENANTS": None, "TENANTS_JSON": "", "TENANT_REGISTRY_FILE": "", "TENANT_ALLOW_DEFAULT": True,
+        "SUPERADMIN_PASSWORD": "", "SUPERADMIN_HOST": "", "SUPERADMIN_PATH": "/platform/control",
+        "SITE_THEME": "quite-clear", "SITE_PRESET": site_preset,
+        "PUBLIC_PAGES_CONFIG": sweep_manifest(site_preset),
+        "RECAPTCHA_ENABLED": False, "EMAIL_ENABLED": False, "RATE_LIMIT_ENABLED": False,
+        "ERROR_WEBHOOK_URL": "", "TRUST_PROXY": False, "CANONICAL_ORIGIN": "",
+        "BUSINESS_NAME": SITECONFIG_PLACEHOLDER, "TESTING": False, "DEBUG": False,
+        **flags,
+    }
+    # Scope the constructor override to creation, as the isolated pytest fixtures do.
+    with patch.object(app_module, "Flask", partial(Flask, instance_path=str(instance))):
+        app = app_module.create_app("testing", overrides)
 
-    config_module.TestingConfig.SQLALCHEMY_DATABASE_URI = (
-        f"sqlite+pysqlite:///{db_path.as_posix()}"
-    )
-    app = create_app("testing")
-    app.config.update(
-        SECRET_KEY="ui-sweep-secret-key",
-        WTF_CSRF_ENABLED=True,
-        UPLOAD_FOLDER=str(run_dir / "uploads"),
-        RECAPTCHA_ENABLED=False,
-        BUSINESS_NAME=SITECONFIG_PLACEHOLDER,
-        TESTING=False,
-        DEBUG=False,
-    )
-    app.config.update(flags)
-    (run_dir / "uploads").mkdir(parents=True, exist_ok=True)
+    @app.get("/favicon.ico")
+    def sweep_favicon():
+        return app.send_static_file("assets/images/Logowhite.png")
+
     return app
 
 
@@ -495,6 +526,7 @@ class RouteTarget:
     path: str
     endpoint: str
     is_admin: bool
+    expected_status: int = 200
 
 
 # Which feature flag owns a route, by substring of the endpoint name. A route whose
@@ -524,8 +556,14 @@ def route_flag(endpoint: str) -> str | None:
     return None
 
 
-def collect_routes(app, ids: dict[str, int], flags: dict[str, bool]) -> list[RouteTarget]:
+def collect_routes(app, ids: dict[str, int], flags: dict[str, bool],
+                   public_only: bool = False) -> list[RouteTarget]:
     """Turn the URL map into a concrete list of GET-able paths."""
+    from app.services.public_pages import get_public_manifest, page_enabled
+
+    with app.app_context():
+        manifest = get_public_manifest()
+        enabled = {endpoint: page_enabled(key) for endpoint, key in PUBLIC_PAGE_ENDPOINTS.items()}
 
     today = date.today()
     dynamic_fill = {
@@ -540,7 +578,21 @@ def collect_routes(app, ids: dict[str, int], flags: dict[str, bool]) -> list[Rou
     for rule in app.url_map.iter_rules():
         if "GET" not in rule.methods or rule.endpoint in SKIP_ENDPOINTS:
             continue
-        if not flags.get(route_flag(rule.endpoint) or "", True):
+        if rule.endpoint.startswith("superadmin."):
+            continue  # Fleet control requires a separate operator/host fixture.
+        if public_only and not rule.endpoint.startswith("main."):
+            continue
+        if rule.endpoint == "main.custom_page":
+            for page in manifest["custom_pages"]:
+                targets.append(RouteTarget(f"/p/{page['slug']}", rule.endpoint, False,
+                                           200 if page["enabled"] else 404))
+            continue
+        expected = 200
+        if rule.endpoint in enabled and not enabled[rule.endpoint]:
+            key = PUBLIC_PAGE_ENDPOINTS[rule.endpoint]
+            expected = (302 if key == "schedule_work" and manifest["pages"][key]["enabled"]
+                        and not flags.get("ENABLE_SCHEDULING", False) else 404)
+        elif not flags.get(route_flag(rule.endpoint) or "", True):
             continue
         path = str(rule)
         skip = False
@@ -563,6 +615,7 @@ def collect_routes(app, ids: dict[str, int], flags: dict[str, bool]) -> list[Rou
                 path=path,
                 endpoint=rule.endpoint,
                 is_admin=path.startswith("/admin"),
+                expected_status=expected,
             )
         )
     targets.sort(key=lambda item: (not item.is_admin, item.path))
@@ -573,7 +626,7 @@ def collect_routes(app, ids: dict[str, int], flags: dict[str, bool]) -> list[Rou
 # Measurement
 # ---------------------------------------------------------------------------
 
-MEASURE_JS = """
+MEASURE_JS = r"""
 () => {
   const vw = window.innerWidth;
   const doc = document.documentElement;
@@ -746,7 +799,13 @@ def unique_slug(base: str, used: dict[str, int]) -> str:
     return base if count == 1 else f"{base}-{count}"
 
 
-def sweep_preset(
+def sweep_preset(*args, **kwargs) -> dict:
+    """Release every acquired resource even if a matrix member fails during setup."""
+    with ExitStack() as cleanup:
+        return _sweep_preset(*args, cleanup=cleanup, **kwargs)
+
+
+def _sweep_preset(
     playwright,
     args,
     run_dir: Path,
@@ -754,11 +813,24 @@ def sweep_preset(
     flags: dict[str, bool],
     db_path: Path,
     seed_needed: bool,
+    site_preset: str = "local_service_business",
+    *, cleanup: ExitStack,
 ) -> dict:
     from app.extensions import db
 
     ids: dict[str, int] = {}
-    app = build_app(run_dir, flags, db_path)
+    app = build_app(run_dir, flags, db_path, site_preset)
+
+    def dispose_engines():
+        with app.app_context():
+            db.session.remove()
+            engines = set(db.engines.values()) | set(app.extensions["tenancy"].engines.values())
+            # Each disposal is independent; ExitStack still closes the rest if one fails.
+            with ExitStack() as engines_cleanup:
+                for engine in engines:
+                    engines_cleanup.callback(engine.dispose)
+
+    cleanup.callback(dispose_engines)
     assert_engine_matches(app, db_path)
 
     with app.app_context():
@@ -772,16 +844,21 @@ def sweep_preset(
             ids.update(json.loads(saved.read_text(encoding="utf-8")))
 
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
-    routes = collect_routes(app, ids, flags)
-    server, port = start_server(app)
-    base = f"http://127.0.0.1:{port}"
+    app.logger.setLevel(logging.WARNING)
+    routes = collect_routes(app, ids, flags, args.public_only)
 
     results: list[dict] = []
     browser = launch_browser(playwright, args)
+    cleanup.callback(browser.close)
     context = browser.new_context(
         viewport={"width": args.widths[0], "height": 900},
         device_scale_factor=1,
     )
+    cleanup.callback(context.close)
+    server, port = start_server(app)
+    cleanup.callback(server.server_close)
+    cleanup.callback(server.shutdown)
+    base = f"http://127.0.0.1:{port}"
 
     console_errors: list[str] = []
     page_errors: list[str] = []
@@ -799,7 +876,8 @@ def sweep_preset(
     page.on("pageerror", lambda err: page_errors.append(str(err)))
 
     try:
-        login(page, base)
+        if not args.public_only:
+            login(page, base)
         for width in args.widths:
             page.set_viewport_size({"width": width, "height": 900})
             row_dir = run_dir / "screenshots" / preset_name / str(width)
@@ -818,11 +896,37 @@ def sweep_preset(
                     "path": target.path,
                     "endpoint": target.endpoint,
                     "is_admin": target.is_admin,
+                    "expected_status": target.expected_status,
+                    "site_preset": site_preset,
                 }
                 try:
+                    if target.expected_status != 200:
+                        # Probe gates without following redirects or treating intentional 404s as asset errors.
+                        response = context.request.get(base + target.path, max_redirects=0)
+                        record["status"] = response.status
+                        if target.expected_status == 302:
+                            record["location"] = response.headers.get("location", "")
+                            record["expected_location"] = "/quote-request"
+                            from urllib.parse import urljoin
+                            record["redirect_valid"] = urljoin(base + target.path, record["location"]) == base + "/quote-request"
+                        response.dispose()
+                        record["gate_probe"] = True
+                        results.append(record)
+                        print(".", end="", flush=True)
+                        continue
                     response = page.goto(base + target.path, wait_until="networkidle", timeout=30000)
                     record["status"] = response.status if response else None
                     record["final_url"] = page.url.replace(base, "")
+                    # Full-page captures include below-the-fold lazy images. Request/decode
+                    # them before measuring, without hiding genuine download failures.
+                    page.evaluate("""async () => {
+                        await Promise.all([...document.images]
+                            .filter(img => img.hasAttribute('src') || img.hasAttribute('srcset'))
+                            .map(async img => {
+                                img.loading = 'eager';
+                                try { await img.decode(); } catch (_) { /* reported by metrics */ }
+                            }));
+                    }""")
                     record["metrics"] = page.evaluate(MEASURE_JS)
                     record["console"] = list(console_errors)
                     record["pageErrors"] = list(page_errors)
@@ -840,11 +944,9 @@ def sweep_preset(
                 print(".", end="", flush=True)
             print(f"  [{preset_name}] {width}px done")
     finally:
-        context.close()
-        browser.close()
-        server.shutdown()
+        pass  # The outer ExitStack covers setup failures as well as visit failures.
 
-    return {"preset": preset_name, "flags": flags, "base": base, "results": results}
+    return {"preset": preset_name, "site_preset": site_preset, "flags": flags, "base": base, "results": results}
 
 
 def launch_browser(playwright, args):
@@ -891,8 +993,13 @@ def classify(record: dict) -> list[tuple[str, str]]:
     status = record.get("status")
     metrics = record.get("metrics") or {}
 
-    if status is not None and status >= 400:
-        issues.append(("error", f"HTTP {status}"))
+    expected = record.get("expected_status", 200)
+    if status != expected:
+        issues.append(("error", f"HTTP {status}, expected {expected}"))
+    if record.get("redirect_valid") is False:
+        issues.append(("error", f"redirect {record.get('location')}, expected {record['expected_location']} on the sweep host"))
+    if record.get("gate_probe"):
+        return issues
     for err in record.get("pageErrors", []):
         issues.append(("error", f"JS exception: {err}"))
     if metrics.get("overflow"):
@@ -954,7 +1061,7 @@ def write_report(run_dir: Path, runs: list[dict]) -> tuple[int, int]:
 
     (run_dir / "report.json").write_text(
         json.dumps({"generated": date.today().isoformat(), "runs": [
-            {"preset": r["preset"], "flags": r["flags"], "results": [
+            {"preset": r["preset"], "site_preset": r.get("site_preset"), "flags": r["flags"], "results": [
                 {k: v for k, v in row.items() if k != "traceback"} for row in rows
                 if row["preset"] == r["preset"]
             ]} for r in runs
@@ -1005,6 +1112,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="feature-flag preset to sweep (default all)")
     parser.add_argument("--matrix", action="store_true",
                         help="sweep every preset instead of one")
+    parser.add_argument("--site-preset", default=SITE_PRESETS[0], choices=SITE_PRESETS,
+                        help="public blueprint (independent of the feature-flag preset)")
+    parser.add_argument("--site-matrix", action="store_true", help="sweep all three public blueprints")
+    parser.add_argument("--public-only", action="store_true", help="anonymous public routes only")
     parser.add_argument("--out", default="artifacts/ui-sweep", help="output root folder")
     parser.add_argument("--browser", default="chrome", choices=["chrome", "chromium"])
     parser.add_argument("--headed", action="store_true", help="show the browser window")
@@ -1032,25 +1143,33 @@ def main(argv: list[str] | None = None) -> int:
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     run_dir = (REPO_ROOT / args.out / stamp).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    db_path = run_dir / "sweep.db"
     print(f"run folder: {run_dir}")
 
     presets = sorted(PRESETS) if args.matrix else [args.preset]
+    sites = SITE_PRESETS if args.site_matrix else [args.site_preset]
     runs: list[dict] = []
-    seed_needed = True
 
-    with sync_playwright() as playwright:
+    for site in sites:
         for preset in presets:
-            print(f"preset {preset}: {PRESETS[preset]}")
+            name = f"{site}--{preset}"
+            fixture_dir = run_dir / name
+            fixture_dir.mkdir()
+            print(f"preset {name}: {PRESETS[preset]}")
             try:
-                runs.append(
-                    sweep_preset(
-                        playwright, args, run_dir, preset, PRESETS[preset], db_path, seed_needed
-                    )
-                )
-                seed_needed = False
-            except Exception as exc:  # noqa: BLE001
-                print(f"  preset {preset} failed: {type(exc).__name__}: {exc}")
+                # A crashed browser driver must not poison the remaining matrix members.
+                with sync_playwright() as playwright:
+                    runs.append(sweep_preset(playwright, args, fixture_dir, name,
+                                             PRESETS[preset], fixture_dir / "sweep.db", True, site))
+            except Exception as exc:  # noqa: BLE001 - keep failures in the report/exit status
+                print(f"  preset {name} failed: {type(exc).__name__}: {exc}")
+                runs.append({"preset": name, "site_preset": site, "flags": PRESETS[preset], "results": [
+                    {"preset": name, "path": "<setup>", "width": 0,
+                     "error": f"{type(exc).__name__}: {exc}"}]})
+
+    for run in runs:
+        for record in run["results"]:
+            if "screenshot" in record:
+                record["screenshot"] = f"{run['preset']}/{record['screenshot']}"
 
     if not runs:
         print("nothing was swept")
