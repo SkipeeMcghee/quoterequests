@@ -24,6 +24,8 @@ def test_brochure_pages_render_with_shared_layout(client, route: str, expected_t
     assert response.status_code == 200
 
     body = response.get_data(as_text=True)
+    assert 'class="page-shell public-site"' in body
+    assert '/static/css/public.css' in body
     assert "Home" in body
     assert 'href="/services"' not in body
     assert "About" in body
@@ -37,6 +39,16 @@ def test_brochure_pages_render_with_shared_layout(client, route: str, expected_t
     assert expected_text in body
     assert "template" not in body.lower()
     assert "placeholder" not in body.lower()
+
+
+def test_admin_login_does_not_load_public_styles(client):
+    response = client.get("/admin")
+
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert '/static/css/app.css' in body
+    assert '/static/css/public.css' not in body
+    assert 'class="page-shell public-site"' not in body
 
 
 def test_quote_request_page_uses_public_site_layout(client):

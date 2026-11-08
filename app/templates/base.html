@@ -14,6 +14,7 @@
         }
       </style>
     {% endif %}
+    {% block page_styles %}{% endblock %}
   </head>
   <body>
     {% if request.blueprint == 'admin' and current_user.is_authenticated and session.get('_superadmin_impersonating') == current_user.get_id().split(':')[0] %}
@@ -26,7 +27,7 @@
       </aside>
     {% endif %}
     <a class="skip-link" href="#main">Skip to main content</a>
-    <div class="page-shell">
+    <div class="page-shell{% block page_scope_class %}{% endblock %}">
       {% block site_header %}
         {% set is_admin_workspace = current_user.is_authenticated and request.blueprint == 'admin' %}
         <header class="site-header{% if is_admin_workspace %} site-header--admin{% endif %}">

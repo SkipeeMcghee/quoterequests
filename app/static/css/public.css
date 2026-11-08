@@ -1,0 +1,502 @@
+/* Public editorial layer. Keep every rule inside .public-site. */
+.public-site {
+  --public-paper: var(--bg);
+  --public-paper: color-mix(in srgb, var(--bg) 14%, #fff);
+  --public-surface: var(--card-solid);
+  --public-surface: color-mix(in srgb, var(--card-solid) 88%, #fff);
+  --public-hairline: rgba(var(--theme-neutral-rgb), 0.12);
+  --public-elevation: 0 4px 20px -2px rgba(0, 0, 0, 0.04),
+    0 18px 48px -28px rgba(var(--theme-neutral-rgb), 0.18);
+  --public-measure: 68ch;
+  width: 100%;
+  min-height: 100vh;
+  padding: 0 clamp(1.1rem, 5vw, 5.5rem) 4rem;
+  background: var(--public-paper);
+  color: var(--text);
+  font-family: "Aptos", "Segoe UI", sans-serif;
+  line-height: 1.65;
+}
+
+.public-site :where(h1, h2, h3, .brand--footer) {
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-weight: 500;
+  line-height: 1.08;
+}
+
+.public-site :where(p, li, .subtle-text) {
+  max-width: var(--public-measure);
+  line-height: 1.7;
+}
+
+.public-site .site-header--brochure {
+  width: min(100%, 1320px);
+  margin: 0 auto;
+  padding: 1.35rem 0 1.1rem;
+  border-bottom-color: var(--public-hairline);
+}
+
+.public-site .brand--logo {
+  min-height: 3rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--line-brand);
+  border-radius: 0.65rem;
+  background: var(--accent-strong);
+}
+
+.public-site .brand--logo:hover {
+  background: var(--accent-strong);
+  border-color: var(--line-brand);
+}
+
+.public-site .site-header__lead {
+  align-items: start;
+  gap: 0.25rem 1rem;
+}
+
+.public-site .site-header__copy strong {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.public-site .site-header__copy span,
+.public-site .site-utility-nav {
+  font-size: 0.9rem;
+}
+
+.public-site .site-nav--brochure {
+  gap: 0.25rem;
+}
+
+.public-site .site-nav--brochure a,
+.public-site .site-utility-nav a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.65rem;
+  color: var(--accent-strong);
+  text-decoration: none;
+  text-underline-offset: 0.22em;
+}
+
+.public-site .site-nav--brochure a[aria-current="page"] {
+  background: var(--surface-accent-soft);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
+
+.public-site .site-nav--brochure a:hover,
+.public-site .site-utility-nav a:hover,
+.public-site .site-footer__column a:hover {
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  transform: none;
+}
+
+.public-site :where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.public-site .brand--logo:focus-visible,
+.public-site .gallery-tile:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.public-site .site-header__actions {
+  gap: 0.65rem;
+}
+
+.public-site .btn,
+.public-site .btn-primary,
+.public-site .btn-secondary,
+.public-site .btn-danger,
+.public-site .button,
+.public-site .button-primary,
+.public-site .button-secondary,
+.public-site .button-danger {
+  min-height: 46px;
+  padding: 0.65rem 1.1rem;
+  border-radius: 0.8rem;
+  box-shadow: none;
+  transition: transform 160ms ease, background-color 160ms ease, border-color 160ms ease;
+}
+
+.public-site .btn-primary,
+.public-site .button-primary {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: var(--card-solid);
+}
+
+.public-site .btn-secondary,
+.public-site .button-secondary {
+  background: transparent;
+  border-color: var(--line-accent-strong);
+  color: var(--accent-strong);
+}
+
+.public-site :where(.btn, .button):hover {
+  transform: translateY(-1px);
+  box-shadow: var(--public-elevation);
+}
+
+.public-site .page-shell,
+.public-site .shell {
+  width: min(100%, 1120px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.public-site .shell {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.public-site .shell.brochure-shell {
+  margin-top: clamp(2.5rem, 6vw, 5.75rem);
+}
+
+.public-site .narrow-shell {
+  width: min(100%, 760px);
+}
+
+.public-site .brochure-shell {
+  gap: clamp(3.25rem, 8vw, 7rem);
+}
+
+.public-site .section-intro {
+  max-width: 760px;
+  margin-bottom: clamp(2rem, 4vw, 3.75rem);
+}
+
+.public-site .section-intro h1,
+.public-site .hero--brochure h1 {
+  max-width: 16ch;
+  margin: 0.6rem 0 1.1rem;
+  color: var(--accent-strong);
+  font-size: 5rem;
+  line-height: 0.99;
+}
+
+.public-site .section-intro > p:not(.eyebrow),
+.public-site .hero-copy > p:not(.eyebrow) {
+  max-width: var(--public-measure);
+  font-size: 1.125rem;
+}
+
+.public-site .eyebrow {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.public-site .hero--brochure {
+  position: relative;
+  min-height: 390px;
+  align-items: center;
+  padding: clamp(1.5rem, 5vw, 4.5rem) 0;
+  border-top: 1px solid var(--public-hairline);
+  border-bottom: 1px solid var(--public-hairline);
+}
+
+.public-site .hero-copy {
+  max-width: 780px;
+  gap: 1.1rem;
+}
+
+.public-site .hero-callout {
+  max-width: 48rem;
+  padding: 0.85rem 1.15rem;
+  border: 0;
+  border-left: 2px solid var(--accent);
+  border-radius: 0;
+  background: transparent;
+}
+
+.public-site .hero-callout strong {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.08rem;
+  font-weight: 500;
+}
+
+.public-site .brochure-section {
+  gap: 1.35rem;
+  padding-top: clamp(1.5rem, 3.5vw, 2.75rem);
+  border-top: 1px solid var(--public-hairline);
+}
+
+.public-site .section-bar {
+  align-items: end;
+  gap: 1rem 2rem;
+}
+
+.public-site .section-bar h2,
+.public-site .cta-panel h2,
+.public-site .brochure-section > h2,
+.public-site .brochure-section h2 {
+  margin: 0;
+  color: var(--accent-strong);
+  font-size: 2.55rem;
+}
+
+.public-site .brochure-grid,
+.public-site .gallery-grid,
+.public-site .brochure-list {
+  gap: 1rem;
+}
+
+.public-site .brochure-card,
+.public-site .brochure-list__item,
+.public-site .faq-item,
+.public-site .hero-panel,
+.public-site .legal-section {
+  padding: clamp(1.1rem, 2vw, 1.65rem);
+  border: 1px solid var(--public-hairline);
+  border-radius: 0.9rem;
+  background: var(--public-surface);
+  box-shadow: var(--public-elevation);
+}
+
+.public-site .brochure-card--accent {
+  border-top: 2px solid var(--accent);
+  background: var(--public-surface);
+}
+
+.public-site .brochure-card strong,
+.public-site .brochure-list__item strong {
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.24rem;
+  font-weight: 500;
+}
+
+.public-site .brochure-list__item {
+  grid-template-columns: minmax(12rem, 0.7fr) minmax(0, 1.3fr);
+  align-items: baseline;
+  gap: 1rem 2rem;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.public-site .gallery-tile__media {
+  border-color: var(--public-hairline);
+  border-radius: 0.75rem;
+  box-shadow: var(--public-elevation);
+}
+
+.public-site .gallery-tile:focus-visible {
+  outline-offset: 6px;
+}
+
+.public-site .cta-panel {
+  gap: 1.5rem 3rem;
+  padding: clamp(1.5rem, 4vw, 3.25rem);
+  border: 1px solid var(--public-hairline);
+  border-radius: 1rem;
+  background: var(--surface-accent-soft);
+  box-shadow: var(--public-elevation);
+}
+
+.public-site .cta-panel h2 {
+  max-width: 18ch;
+}
+
+.public-site .cta-panel .subtle-text,
+.public-site .brochure-section > .subtle-text {
+  max-width: var(--public-measure);
+}
+
+.public-site .faq-list {
+  gap: 0;
+  border-top: 1px solid var(--public-hairline);
+}
+
+.public-site .faq-item {
+  padding: 1.1rem 0;
+  border-width: 0 0 1px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.public-site .faq-item summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--accent-strong);
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.public-site .quote-form,
+.public-site .form-grid,
+.public-site .contact-grid {
+  gap: 1.15rem;
+}
+
+.public-site .hero-panel {
+  padding: clamp(1.1rem, 3vw, 2rem);
+}
+
+.public-site .hero-panel > h2 {
+  margin: 0 0 1.25rem;
+  color: var(--accent-strong);
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 2rem;
+  font-weight: 500;
+}
+
+.public-site .form-field > span,
+.public-site .form-field > label,
+.public-site .field-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.public-site :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea, .input, .textarea, .file-input) {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  background: var(--card-solid);
+  box-shadow: none;
+}
+
+.public-site :where(textarea, .textarea) {
+  min-height: 8rem;
+  padding: 0.8rem 0.9rem;
+}
+
+.public-site .site-footer {
+  width: min(100%, 1320px);
+  margin: clamp(4rem, 9vw, 8rem) auto 0;
+  padding: clamp(1.4rem, 4vw, 3rem) 0 0;
+  border: 0;
+  border-top: 1px solid var(--public-hairline);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.public-site .site-footer__grid {
+  grid-template-columns: minmax(14rem, 1.4fr) repeat(3, minmax(8rem, 1fr));
+  gap: 2rem;
+}
+
+.public-site .brand--footer {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.45rem;
+}
+
+.public-site .site-footer__column a {
+  width: fit-content;
+  min-height: 32px;
+  color: var(--accent-strong);
+  text-underline-offset: 0.2em;
+}
+
+.public-site .flash-stack {
+  width: min(100%, 1120px);
+  margin: 1rem auto 0;
+}
+
+@media (max-width: 900px) {
+  .public-site {
+    padding-right: clamp(1rem, 4vw, 2rem);
+    padding-left: clamp(1rem, 4vw, 2rem);
+  }
+
+  .public-site .site-header--brochure {
+    gap: 1rem;
+  }
+
+  .public-site .site-header__nav-group,
+  .public-site .site-header__actions {
+    justify-items: start;
+  }
+
+  .public-site .site-nav--brochure {
+    justify-content: flex-start;
+  }
+
+  .public-site .site-footer__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .public-site .section-intro h1,
+  .public-site .hero--brochure h1 {
+    font-size: 2.65rem;
+  }
+
+  .public-site .section-bar h2,
+  .public-site .cta-panel h2,
+  .public-site .brochure-section > h2,
+  .public-site .brochure-section h2 {
+    font-size: 1.8rem;
+  }
+
+  .public-site .hero-panel > h2 {
+    font-size: 1.6rem;
+  }
+
+  .public-site .site-header__lead {
+    min-width: 0;
+  }
+
+  .public-site .site-nav--brochure {
+    gap: 0.1rem;
+  }
+
+  .public-site .site-nav--brochure a {
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+    font-size: 0.92rem;
+  }
+
+  .public-site .brochure-list__item {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+
+  .public-site .site-footer__grid {
+    grid-template-columns: 1fr;
+    gap: 1.7rem;
+  }
+
+  .public-site .form-actions {
+    align-items: stretch;
+  }
+
+  .public-site .form-actions .btn,
+  .public-site .form-actions button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-site *,
+  .public-site *::before,
+  .public-site *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

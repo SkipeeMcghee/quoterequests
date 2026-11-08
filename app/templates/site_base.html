@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 
+{% block page_styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/public.css') }}">
+{% endblock %}
+
+{% block page_scope_class %} public-site{% endblock %}
+
 {% block meta_description %}
   {% set meta_page = custom_public_page|default(standard_page|default(page_config|default(public_current_page|default({}, true), true), true), true) %}
   {% if meta_page.get('meta_description') %}
